@@ -3,39 +3,40 @@
 #include "util.h"
 
 typedef enum {
-  WHITESPACE,
-  COMMENT,
+  tWHITESPACE,
+  tCOMMENT,
   // words
-  IDENT,
-  NUMBER,
-  STRING,
+  tIDENT,
+  tNUMBER,
+  tSTRING,
   // symbols
-  LPAREN,
-  RPAREN,
-  LBRACE,
-  RBRACE,
-  LBRACKET,
-  RBRACKET,
-  DOT,
-  PLUS,
-  MINUS,
-  STAR,
-  SLASH,
-  HASHTAG,
-  SEMI,
-  COMMA,
+  tLPAREN,
+  tRPAREN,
+  tLBRACE,
+  tRBRACE,
+  tLBRACKET,
+  tRBRACKET,
+  tDOT,
+  tPLUS,
+  tMINUS,
+  tSTAR,
+  tSLASH,
+  tHASHTAG,
+  tSEMI,
+  tCOMMA,
+  tEQ,
+  tCOLONEQ,
   // keywords
-  STRUCT,
-  FUNC,
-  UNION,
-  ENUM,
+  tSTRUCT,
+  tFUNC,
+  tUNION,
+  tENUM,
 } TokenKind;
 
 typedef struct {
-  size_t line;
-  size_t column;
+  size_t offset;
   const char *text;
-  size_t length;
+  size_t length;  
   TokenKind kind;
 } Token;
 

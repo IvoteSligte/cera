@@ -1,4 +1,2 @@
-ref/grammar.tab*
-ref/lex.yy.c
-ref/main.o
-ref/bison
+*.o
+main

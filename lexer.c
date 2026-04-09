@@ -9,32 +9,34 @@ typedef struct {
 } Matcher;
 
 const Matcher MATCHERS[] = {
-    {WHITESPACE, "WHITESPACE", "^[\n\t ]+"},
-    {COMMENT, "COMMENT", "^// .*\n"},
+    {tWHITESPACE, "WHITESPACE", "^[\n\t ]+"},
+    {tCOMMENT, "COMMENT", "^// .*\n"},
     // words
-    {IDENT, "IDENT", "^[a-zA-Z][a-zA-Z0-9]*"},
-    {NUMBER, "NUMBER", "^[0-9]+"},
-    {STRING, "STRING", "^\"[^\"]*\""},
+    {tIDENT, "IDENT", "^[a-zA-Z][a-zA-Z0-9]*"},
+    {tNUMBER, "NUMBER", "^[0-9]+"},
+    {tSTRING, "STRING", "^\"[^\"]*\""},
     // symbols
-    {LPAREN, "LPAREN", "^\\("},
-    {RPAREN, "RPAREN", "^\\)"},
-    {LBRACE, "LBRACE", "^\\{"},
-    {RBRACE, "RBRACE", "^\\}"},
-    {LBRACKET, "LBRACKET", "^\\["},
-    {RBRACKET, "RBRACKET", "^]"},
-    {DOT, "DOT", "^\\."},
-    {PLUS, "PLUS", "^\\+"},
-    {MINUS, "MINUS", "^\\-"},
-    {STAR, "STAR", "^\\*"},
-    {SLASH, "SLASH", "^/"},
-    {HASHTAG, "HASHTAG", "^#"},
-    {SEMI, "SEMI", "^;"},
-    {COMMA, "COMMA", "^,"},
+    {tLPAREN, "LPAREN", "^\\("},
+    {tRPAREN, "RPAREN", "^\\)"},
+    {tLBRACE, "LBRACE", "^\\{"},
+    {tRBRACE, "RBRACE", "^\\}"},
+    {tLBRACKET, "LBRACKET", "^\\["},
+    {tRBRACKET, "RBRACKET", "^]"},
+    {tDOT, "DOT", "^\\."},
+    {tPLUS, "PLUS", "^\\+"},
+    {tMINUS, "MINUS", "^\\-"},
+    {tSTAR, "STAR", "^\\*"},
+    {tSLASH, "SLASH", "^/"},
+    {tHASHTAG, "HASHTAG", "^#"},
+    {tSEMI, "SEMI", "^;"},
+    {tCOMMA, "COMMA", "^,"},
+    {tEQ, "EQ", "^="},
+    {tCOLONEQ, "COLONEQ", "^:="},    
     // keywords
-    {STRUCT, "STRUCT", "^struct"},
-    {FUNC, "FUNC", "^func"},
-    {UNION, "UNION", "^union"},
-    {ENUM, "ENUM", "^enum"},
+    {tSTRUCT, "STRUCT", "^struct"},
+    {tFUNC, "FUNC", "^func"},
+    {tUNION, "UNION", "^union"},
+    {tENUM, "ENUM", "^enum"},
 };
 #define NUM_MATCHERS (sizeof(MATCHERS) / sizeof(MATCHERS[0]))
 
@@ -65,14 +67,12 @@ bool lex(const char *source, size_t *offset, Token *out) {
 
   for (size_t i = 0; i < NUM_MATCHERS; i++) {
     regmatch_t match;
-    int result =
-        regexec(&regexes[i], &source[*offset], 1, &match, 0);
+    int result = regexec(&regexes[i], &source[*offset], 1, &match, 0);
     if (result == REG_NOERROR) {
       *out = (Token){
-          .line = 0,   // TODO
-          .column = 0, // TODO
-          .text = &source[*offset + match.rm_so],
+          .offset = *offset,
           .length = match.rm_eo - match.rm_so, // end - start
+          .text = &source[*offset],
           .kind = MATCHERS[i].kind,
       };
       longest_match = out->length;
@@ -89,3 +89,12 @@ bool lex(const char *source, size_t *offset, Token *out) {
   return longest_match != 0;
 }
 
+void lexer_print_tokens(const char *source) {
+  size_t offset = 0;
+  Token token;
+
+  while (lex(source, &offset, &token)) {
+    printf("%s `%.*s`\n", lexer_token_name(token.kind), (int)token.length,
+           token.text);
+  }
+}
