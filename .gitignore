@@ -1,4 +1,4 @@
-grammar.tab*
-lex.yy.c
-main.o
-bison
+ref/grammar.tab*
+ref/lex.yy.c
+ref/main.o
+ref/bison
