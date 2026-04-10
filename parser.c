@@ -9,6 +9,7 @@ typedef struct {
 } ASTNodeArray;
 
 void yield(ASTNodeArray *node_array, size_t *node_index, ASTNode node) {
+  assert(node.tree_size > 0);
   if (*node_index >= node_array->length) {
     node_array->data =
         realloc(node_array->data, sizeof(ASTNode) * (*node_index + 1));
@@ -33,7 +34,8 @@ void yield(ASTNodeArray *node_array, size_t *node_index, ASTNode node) {
   Token token;                                                                 \
   if (!peek_token(stream, *token_index, &token))                               \
     return false;                                                              \
-  Span span = (Span){.offset = token.offset, .length = 0};
+  Span span = (Span){.offset = token.offset, .length = 0};                     \
+  size_t tree_size = 1;
 
 #define OK return true;
 #define FAIL                                                                   \
@@ -62,7 +64,8 @@ void yield(ASTNodeArray *node_array, size_t *node_index, ASTNode node) {
 #define MUST_PARSE(name, out)                                                  \
   if (!PARSE(name))                                                            \
     FAIL;                                                                      \
-  size_t out = *node_index;
+  size_t out = *node_index;                                                    \
+  tree_size += GET(out).tree_size;
 
 #define TRY_PARSE(name)                                                        \
   if (PARSE(name))                                                             \
@@ -71,22 +74,27 @@ void yield(ASTNodeArray *node_array, size_t *node_index, ASTNode node) {
 #define ZERO_OR_MORE(element, nodes)                                           \
   size_t nodes = *node_index;                                                  \
   size_t num_##nodes = 0;                                                      \
-  while (PARSE(element))                                                       \
+  while (PARSE(element)) {                                                     \
     num_##nodes++;                                                             \
+    tree_size += GET(*node_index - 1).tree_size;                               \
+  }                                                                            \
   if (num_##nodes > 0)                                                         \
     EXTEND_SPAN(GET(*node_index - 1).span);
 
 PARSER(name) {
   BEGIN;
   EXPECT(tIDENT);
-  YIELD((ASTNode){
-      .span = span, .kind = NAME, .name = {token.text, token.length}});
+  YIELD((ASTNode){.span = span,
+                  .tree_size = tree_size,
+                  .kind = NAME,
+                  .name = {token.text, token.length}});
 }
 
 PARSER(integer) {
   BEGIN;
   EXPECT(tNUMBER);
-  YIELD((ASTNode){.span = token_span(token),
+  YIELD((ASTNode){.span = span,
+                  .tree_size = tree_size,
                   .kind = INTEGER,
                   .integer = {token.text, token.length}});
 }
@@ -94,7 +102,8 @@ PARSER(integer) {
 PARSER(string) {
   BEGIN;
   EXPECT(tSTRING);
-  YIELD((ASTNode){.span = token_span(token),
+  YIELD((ASTNode){.span = span,
+                  .tree_size = tree_size,
                   .kind = STRING,
                   .integer = {token.text + 1, token.length - 2}});
 }
@@ -107,7 +116,8 @@ PARSER(unary) {
   EXPECT_OP(tMINUS);
   MUST_PARSE(expr, expr);
   YIELD((ASTNode){
-      .span = token_span(token),
+      .span = span,
+      .tree_size = tree_size,
       .kind = UNARY,
       .unary = {.op = op, .expr = expr},
   });
@@ -118,7 +128,8 @@ PARSER(binary) {
   MUST_PARSE(expr, left);
   EXPECT_OP(tPLUS, tMINUS, tSTAR, tSLASH);
   MUST_PARSE(expr, right);
-  YIELD((ASTNode){.span = join_spans(GET(left).span, GET(right).span),
+  YIELD((ASTNode){.span = span,
+                  .tree_size = tree_size,
                   .kind = BINARY,
                   .binary = {.op = op, .left = left, .right = right}});
 }
@@ -141,7 +152,8 @@ PARSER(assign) {
   EXPECT_OP(tEQ);
   MUST_PARSE(expr, value);
   YIELD((ASTNode){
-      .span = JOIN_SPANS(name, value),
+      .span = span,
+      .tree_size = tree_size,
       .kind = ASSIGN,
       .assign = {.op = op, .name = name, .value = value},
   });
@@ -149,7 +161,7 @@ PARSER(assign) {
 
 bool parse_block(TokenStream stream, size_t *token_index,
                  ASTNodeArray *node_array, size_t *node_index, size_t *num_out,
-                 Span *out_span) {
+                 Span *out_span, size_t *out_tree_size) {
   BEGIN;
   EXPECT(tLBRACE);
 
@@ -158,6 +170,7 @@ bool parse_block(TokenStream stream, size_t *token_index,
 
   EXPECT(tRBRACE)
   *out_span = span;
+  *out_tree_size += tree_size;
   OK;
 }
 
@@ -166,18 +179,20 @@ bool parse_block(TokenStream stream, size_t *token_index,
   size_t num_stmts = 0;                                                        \
   Span block_span;                                                             \
   if (!parse_block(stream, token_index, node_array, node_index, &num_stmts,    \
-                   &block_span))                                               \
-    FAIL;
+                   &block_span, &tree_size))                                   \
+    FAIL;                                                                      \
+  EXTEND_SPAN(block_span)
 
 PARSER(for_loop) {
   BEGIN;
   MUST_PARSE(declaration, init);
   MUST_PARSE(expr, cond);
   MUST_PARSE(assign, step);
-  MUST_PARSE_BLOCK
+  MUST_PARSE_BLOCK;
 
   YIELD((ASTNode){
-      .span = join_spans(GET(init).span, block_span),
+      .span = span,
+      .tree_size = tree_size,
       .kind = FOR_LOOP,
       .for_loop = {.init = init,
                    .cond = cond,
@@ -194,7 +209,8 @@ PARSER(declaration) {
   MUST_PARSE(expr, value)
 
   YIELD((ASTNode){
-      .span = JOIN_SPANS(name, value),
+      .span = span,
+      .tree_size = tree_size,
       .kind = DECLARATION,
       .declaration = {.name = name, .value = value},
   });
@@ -216,7 +232,8 @@ PARSER(param) {
   MUST_PARSE(name, type)
 
   YIELD((ASTNode){
-      .span = JOIN_SPANS(name, type),
+      .span = span,
+      .tree_size = tree_size,
       .kind = PARAM,
       .param = {.name = name, .type = type},
   });
@@ -228,9 +245,11 @@ PARSER(function) {
   MUST_PARSE(name, name)
   ZERO_OR_MORE(param, params)
   MUST_PARSE(expr, returnType)
-  MUST_PARSE_BLOCK
+  MUST_PARSE_BLOCK;
 
-  YIELD((ASTNode){.span = join_spans(span, block_span),
+  YIELD((ASTNode){
+      .span = span,
+        .tree_size = tree_size,      
                   .kind = FUNCTION,
                   .function = {.name = name,
                                .params = params,
@@ -249,12 +268,14 @@ PARSER(def) {
 PARSER(module) {
   BEGIN;
   ZERO_OR_MORE(def, defs);
-  YIELD((ASTNode){.span = span, .kind = MODULE, .module = {defs, num_defs}});
+  YIELD((ASTNode){.span = span, .tree_size = tree_size, .kind = MODULE, .module = {defs, num_defs}});
 }
 
 bool parse(TokenStream stream, ASTNode **out) {
   size_t token_index = 0;
   ASTNodeArray node_array = {.data = NULL, .length = 0};
   size_t node_index = 0;
-  return parse_module(stream, &token_index, &node_array, &node_index);
+  bool result = parse_module(stream, &token_index, &node_array, &node_index);
+  *out = node_array.data;
+  return result;
 }

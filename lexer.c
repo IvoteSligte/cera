@@ -31,7 +31,7 @@ const Matcher MATCHERS[] = {
     {tSEMI, "SEMI", "^;"},
     {tCOMMA, "COMMA", "^,"},
     {tEQ, "EQ", "^="},
-    {tCOLONEQ, "COLONEQ", "^:="},    
+    {tCOLONEQ, "COLONEQ", "^:="},
     // keywords
     {tSTRUCT, "STRUCT", "^struct"},
     {tFUNC, "FUNC", "^func"},
@@ -62,9 +62,12 @@ void lexer_free(void) {
 
 const char *lexer_token_name(TokenKind kind) { return MATCHERS[kind].name; }
 
-bool lex(const char *source, size_t *offset, Token *out) {
+LexResult lex(const char *source, size_t *offset, Token *out) {
   size_t longest_match = 0;
 
+  if (*offset >= strlen(source)) {
+    return LEX_EOF;
+  }
   for (size_t i = 0; i < NUM_MATCHERS; i++) {
     regmatch_t match;
     int result = regexec(&regexes[i], &source[*offset], 1, &match, 0);
@@ -86,23 +89,53 @@ bool lex(const char *source, size_t *offset, Token *out) {
     panicf("Failed to run regex. Error: %s\n", errbuf);
   }
   *offset += longest_match;
-  return longest_match != 0;
+  return (longest_match == 0) ? LEX_NO_MATCH : LEX_OK;
+}
+
+static void print_error(const char *source, size_t offset) {
+  eprintf("Failed to match token in string: `%.*s`\n", 100, &source[offset]);  
+}
+
+bool fill_token_stream(const char *source, TokenStream* out) {
+  size_t offset = 0;
+  Token token;
+  LexResult result;
+  *out = (TokenStream) {0};
+
+  while ((result = lex(source, &offset, &token)) == LEX_OK) {
+    out->data = realloc(out->data, sizeof(Token) * (out->length + 1));
+    out->data[out->length] = token;
+    out->length++;
+  }
+  if (result != LEX_EOF) {
+    print_error(source, offset);
+    return false;    
+  }
+  return true;
+}
+
+void free_token_stream(TokenStream stream) {
+  free(stream.data);
 }
 
 void lexer_print_tokens(const char *source) {
   size_t offset = 0;
   Token token;
+  LexResult result;  
 
-  while (lex(source, &offset, &token)) {
+  while ((result = lex(source, &offset, &token)) == LEX_OK) {
     printf("%s `%.*s`\n", lexer_token_name(token.kind), (int)token.length,
            token.text);
+  }
+  if (result != LEX_EOF) {
+    print_error(source, offset);
   }
 }
 
 bool peek_token(TokenStream stream, size_t token_index, Token *out) {
-  if (token_index >= stream.end) {
+  if (token_index >= stream.length) {
     return false;
   }
   *out = stream.data[token_index];
-  return true;  
+  return true;
 }

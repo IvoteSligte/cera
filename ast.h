@@ -12,6 +12,8 @@ typedef struct ASTNode ASTNode;
 
 typedef struct ASTNode {
   Span span;
+  // The number of nodes in this AST. At least 1.
+  size_t tree_size;  
   enum {
     NAME,
     INTEGER,
@@ -84,3 +86,8 @@ typedef struct ASTNode {
 
 Span token_span(Token token);
 Span join_spans(Span left, Span right);
+
+void free_ast(ASTNode* node_array);
+
+void visit(ASTNode* node_array, void (callback)(ASTNode*));
+void ast_print_nodes(ASTNode *node_array);

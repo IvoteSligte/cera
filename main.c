@@ -1,18 +1,28 @@
 
-#include "lexer.h"
+#include "parser.h"
 
 int main() {
-  const char *source = "void lexerDoStuff(int a, int b) { printf(\"hi %s\", \"name\"); }";
-  size_t offset = 0;
-  Token token;
+  const char *source =
+      "void lexerDoStuff(int a, int b) { printf(\"hi %s\", \"name\"); }";
 
   lexer_init();
-
-  while (lex(source, &offset, &token)) {
-    printf("%s `%.*s`\n", lexer_token_name(token.kind), (int)token.length, token.text);
-  }
-  if (offset != strlen(source)) {
-    eprintf("Failed to match token in string: `%.*s`\n", 100, &source[offset]);
+  TokenStream stream;
+  if (!fill_token_stream(source, &stream)) {
+    lexer_free();
+    free_token_stream(stream);
+    return 1;
   }
   lexer_free();
+  free_token_stream(stream);
+
+  ASTNode *ast = NULL;
+  if (!parse(stream, &ast)) {
+    free_ast(ast);
+    panicf("Parse error.\n");
+  }
+  printf("Parse success.\n");
+  ast_print_nodes(ast);
+  
+  free_ast(ast);  
+  return 0;
 }
