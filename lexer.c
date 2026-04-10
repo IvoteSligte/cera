@@ -8,36 +8,40 @@ typedef struct {
   const char *regex;
 } Matcher;
 
+#define M(name, regex) {t##name, #name, "^" regex}
+
 const Matcher MATCHERS[] = {
-    {tWHITESPACE, "WHITESPACE", "^[\n\t ]+"},
-    {tCOMMENT, "COMMENT", "^// .*\n"},
+    M(WHITESPACE, "[\n\t ]+"),
+    M(COMMENT, "// .*\n"),
     // words
-    {tIDENT, "IDENT", "^[a-zA-Z][a-zA-Z0-9]*"},
-    {tNUMBER, "NUMBER", "^[0-9]+"},
-    {tSTRING, "STRING", "^\"[^\"]*\""},
+    M(IDENT, "[a-zA-Z][a-zA-Z0-9]*"),
+    M(NUMBER, "[0-9]+"),
+    M(STRING, "\"[^\"]*\""),
     // symbols
-    {tLPAREN, "LPAREN", "^\\("},
-    {tRPAREN, "RPAREN", "^\\)"},
-    {tLBRACE, "LBRACE", "^\\{"},
-    {tRBRACE, "RBRACE", "^\\}"},
-    {tLBRACKET, "LBRACKET", "^\\["},
-    {tRBRACKET, "RBRACKET", "^]"},
-    {tDOT, "DOT", "^\\."},
-    {tPLUS, "PLUS", "^\\+"},
-    {tMINUS, "MINUS", "^\\-"},
-    {tSTAR, "STAR", "^\\*"},
-    {tSLASH, "SLASH", "^/"},
-    {tHASHTAG, "HASHTAG", "^#"},
-    {tSEMI, "SEMI", "^;"},
-    {tCOMMA, "COMMA", "^,"},
-    {tEQ, "EQ", "^="},
-    {tCOLONEQ, "COLONEQ", "^:="},
+    M(LPAREN, "\\("),
+    M(RPAREN, "\\)"),
+    M(LBRACE, "\\{"),
+    M(RBRACE, "\\}"),
+    M(LBRACKET, "\\["),
+    M(RBRACKET, "]"),
+    M(DOT, "\\."),
+    M(PLUS, "\\+"),
+    M(MINUS, "\\-"),
+    M(STAR, "\\*"),
+    M(SLASH, "/"),
+    M(HASHTAG, "#"),
+    M(SEMI, ";"),
+    M(COMMA, ","),
+    M(EQ, "="),
+    M(COLONEQ, ":="),
     // keywords
-    {tSTRUCT, "STRUCT", "^struct"},
-    {tFUNC, "FUNC", "^func"},
-    {tUNION, "UNION", "^union"},
-    {tENUM, "ENUM", "^enum"},
+    M(STRUCT, "struct"),
+    M(FUNC, "func"),
+    M(UNION, "union"),
+    M(ENUM, "enum"),
 };
+#undef M
+
 #define NUM_MATCHERS (sizeof(MATCHERS) / sizeof(MATCHERS[0]))
 
 regex_t regexes[NUM_MATCHERS];
@@ -93,14 +97,14 @@ LexResult lex(const char *source, size_t *offset, Token *out) {
 }
 
 static void print_error(const char *source, size_t offset) {
-  eprintf("Failed to match token in string: `%.*s`\n", 100, &source[offset]);  
+  eprintf("Failed to match token in string: `%.*s`\n", 100, &source[offset]);
 }
 
-bool fill_token_stream(const char *source, TokenStream* out) {
+bool fill_token_stream(const char *source, TokenStream *out) {
   size_t offset = 0;
   Token token;
   LexResult result;
-  *out = (TokenStream) {0};
+  *out = (TokenStream){0};
 
   while ((result = lex(source, &offset, &token)) == LEX_OK) {
     out->data = realloc(out->data, sizeof(Token) * (out->length + 1));
@@ -109,19 +113,17 @@ bool fill_token_stream(const char *source, TokenStream* out) {
   }
   if (result != LEX_EOF) {
     print_error(source, offset);
-    return false;    
+    return false;
   }
   return true;
 }
 
-void free_token_stream(TokenStream stream) {
-  free(stream.data);
-}
+void free_token_stream(TokenStream stream) { free(stream.data); }
 
 void lexer_print_tokens(const char *source) {
   size_t offset = 0;
   Token token;
-  LexResult result;  
+  LexResult result;
 
   while ((result = lex(source, &offset, &token)) == LEX_OK) {
     printf("%s `%.*s`\n", lexer_token_name(token.kind), (int)token.length,
