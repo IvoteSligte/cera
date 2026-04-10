@@ -10,7 +10,7 @@
 #define eprintf(format, ...) fprintf(stderr, format __VA_OPT__(,) __VA_ARGS__)
 #define panicf(format, ...)                                                     \
   {                                                                            \
-eprintf(format __VA_OPT__(,) __VA_ARGS__);                                              \
+eprintf("Panic: " format __VA_OPT__(,) __VA_ARGS__);                                              \
     abort();                                                                   \
   }
 

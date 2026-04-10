@@ -5,40 +5,41 @@
 typedef struct {
   TokenKind kind;
   const char *name;
+  const char* display_name;  
   const char *regex;
 } Matcher;
 
-#define M(name, regex) {t##name, #name, "^" regex}
+#define M(name, display_name, regex) {t##name, #name, display_name, "^" regex}
 
 const Matcher MATCHERS[] = {
-    M(WHITESPACE, "[\n\t ]+"),
-    M(COMMENT, "// .*\n"),
+  M(WHITESPACE, "whitespace", "[\n\t ]+"),
+    M(COMMENT, "comment", "// .*\n"),
     // words
-    M(IDENT, "[a-zA-Z][a-zA-Z0-9]*"),
-    M(NUMBER, "[0-9]+"),
-    M(STRING, "\"[^\"]*\""),
+    M(IDENT, "identifier", "[a-zA-Z][a-zA-Z0-9]*"),
+    M(NUMBER, "number", "[0-9]+"),
+    M(STRING, "string", "\"[^\"]*\""),
     // symbols
-    M(LPAREN, "\\("),
-    M(RPAREN, "\\)"),
-    M(LBRACE, "\\{"),
-    M(RBRACE, "\\}"),
-    M(LBRACKET, "\\["),
-    M(RBRACKET, "]"),
-    M(DOT, "\\."),
-    M(PLUS, "\\+"),
-    M(MINUS, "\\-"),
-    M(STAR, "\\*"),
-    M(SLASH, "/"),
-    M(HASHTAG, "#"),
-    M(SEMI, ";"),
-    M(COMMA, ","),
-    M(EQ, "="),
-    M(COLONEQ, ":="),
+    M(LPAREN, "(", "\\("),
+    M(RPAREN, ")", "\\)"),
+    M(LBRACE, "{", "\\{"),
+    M(RBRACE, "}", "\\}"),
+    M(LBRACKET, "[", "\\["),
+    M(RBRACKET, "]", "]"),
+    M(DOT, ".", "\\."),
+    M(PLUS, "+", "\\+"),
+    M(MINUS, "-", "\\-"),
+    M(STAR, "*",  "\\*"),
+    M(SLASH,"/",  "/"),
+    M(HASHTAG,"#","#"),
+    M(SEMI, ";", ";"),
+    M(COMMA, ",", ","),
+    M(EQ, "=", "="),
+    M(COLONEQ, ":=", ":="),
     // keywords
-    M(STRUCT, "struct"),
-    M(FUNC, "func"),
-    M(UNION, "union"),
-    M(ENUM, "enum"),
+    M(STRUCT, "struct", "struct"),
+    M(FUNC, "func", "func"),
+    M(UNION, "union", "union"),
+    M(ENUM,"enum", "enum"),
 };
 #undef M
 
@@ -65,6 +66,7 @@ void lexer_free(void) {
 }
 
 const char *lexer_token_name(TokenKind kind) { return MATCHERS[kind].name; }
+const char *lexer_token_display_name(TokenKind kind) { return MATCHERS[kind].display_name; }
 
 LexResult lex(const char *source, size_t *offset, Token *out) {
   size_t longest_match = 0;
@@ -126,7 +128,7 @@ void lexer_print_tokens(const char *source) {
   LexResult result;
 
   while ((result = lex(source, &offset, &token)) == LEX_OK) {
-    printf("%s `%.*s`\n", lexer_token_name(token.kind), (int)token.length,
+    printf("%-3zu %-10s `%.*s`\n", token.offset, lexer_token_name(token.kind), (int)token.length,
            token.text);
   }
   if (result != LEX_EOF) {

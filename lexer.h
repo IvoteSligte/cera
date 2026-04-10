@@ -49,7 +49,10 @@ typedef enum {
 void lexer_init(void);
 void lexer_free(void);
 const char *lexer_token_name(TokenKind kind);
+const char *lexer_token_display_name(TokenKind kind);
 LexResult lex(const char *source, size_t *offset, Token *out);
+
+void lexer_print_tokens(const char *source);
 
 typedef struct {
   Token *data;

@@ -1,4 +1,5 @@
 
+#include "lexer.h"
 #include "parser.h"
 
 int main() {
@@ -6,6 +7,7 @@ int main() {
       "void lexerDoStuff(int a, int b) { printf(\"hi %s\", \"name\"); }";
 
   lexer_init();
+  lexer_print_tokens(source);
   TokenStream stream;
   if (!fill_token_stream(source, &stream)) {
     lexer_free();
