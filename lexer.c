@@ -98,3 +98,11 @@ void lexer_print_tokens(const char *source) {
            token.text);
   }
 }
+
+bool peek_token(TokenStream stream, size_t token_index, Token *out) {
+  if (token_index >= stream.end) {
+    return false;
+  }
+  *out = stream.data[token_index];
+  return true;  
+}

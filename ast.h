@@ -7,6 +7,7 @@ typedef struct {
   size_t length;
 } Span;
 
+
 typedef struct ASTNode ASTNode;
 
 typedef struct ASTNode {
@@ -39,43 +40,43 @@ typedef struct ASTNode {
     } string;
     struct {
       TokenKind op;
-      ASTNode *expr;
+      size_t expr;
     } unary;
     struct {
       TokenKind op;
-      ASTNode *left;
-      ASTNode* right;            
+      size_t left;
+      size_t right;
     } binary;
     struct {
-      ASTNode *name;
-      ASTNode *type;
+      size_t name;
+      size_t type;      
     } param;
     struct {
-      ASTNode *name;
-      ASTNode *params;
+      size_t name;
+      size_t params;
       size_t num_params;
-      ASTNode* returnType;
-      ASTNode *stmts;
+      size_t returnType;
+      size_t stmts;
       size_t num_stmts;
     } function;
     struct {
-      ASTNode *init;
-      ASTNode *cond;
-      ASTNode *step;
-      ASTNode *stmts;
+      size_t init;
+      size_t cond;
+      size_t step;
+      size_t stmts;
       size_t num_stmts;
     } for_loop;
     struct {
       TokenKind op;      
-      ASTNode *name;
-      ASTNode *value;
+      size_t name;
+      size_t value;
     } assign;
     struct {
-      ASTNode *name;
-      ASTNode *value;
+      size_t name;
+      size_t value;
     } declaration;
     struct {
-      ASTNode *definitions;
+      size_t definitions;
       size_t num_definitions;
     } module;
   };

@@ -44,3 +44,10 @@ void lexer_init(void);
 void lexer_free(void);
 const char *lexer_token_name(TokenKind kind);
 bool lex(const char *source, size_t *offset, Token *out);
+
+typedef struct {
+  Token *data;
+  size_t end;
+} TokenStream;
+
+bool peek_token(TokenStream stream, size_t token_index, Token *out);
