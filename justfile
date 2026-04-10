@@ -1,9 +1,10 @@
 
 build:
-    cc -c lexer.c
-    cc -c parser.c
-    cc -c ast.c
-    cc main.c lexer.o parser.o ast.o -o main
+    mkdir -p build/
+    cc -c lexer.c -o build/lexer.o
+    cc -c parser.c -o build/parser.o
+    cc -c ast.c -o build/ast.o
+    cc main.c build/*.o -o build/main
 
 run: build
-    ./main
+    ./build/main
