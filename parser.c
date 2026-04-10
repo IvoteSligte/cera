@@ -20,8 +20,12 @@ void yield(ASTNodeArray *node_array, size_t *node_index, ASTNode node) {
 
 #define GET(index) node_array->data[index]
 
-#define YIELD(...)                                                             \
-  yield(node_array, node_index, __VA_ARGS__);                                  \
+#define YIELD(KIND, $kind, ...)                                                \
+  yield(node_array, node_index,                                                \
+        (ASTNode){.span = span,                                                \
+                  .tree_size = tree_size,                                      \
+                  .kind = KIND,                                                \
+                  .$kind = __VA_ARGS__});                                      \
   return true;
 
 #define PARSER(name)                                                           \
@@ -84,28 +88,19 @@ void yield(ASTNodeArray *node_array, size_t *node_index, ASTNode node) {
 PARSER(name) {
   BEGIN;
   EXPECT(tIDENT);
-  YIELD((ASTNode){.span = span,
-                  .tree_size = tree_size,
-                  .kind = NAME,
-                  .name = {token.text, token.length}});
+  YIELD(NAME, name, {token.text, token.length});
 }
 
 PARSER(integer) {
   BEGIN;
   EXPECT(tNUMBER);
-  YIELD((ASTNode){.span = span,
-                  .tree_size = tree_size,
-                  .kind = INTEGER,
-                  .integer = {token.text, token.length}});
+  YIELD(INTEGER, integer, {token.text, token.length});
 }
 
 PARSER(string) {
   BEGIN;
   EXPECT(tSTRING);
-  YIELD((ASTNode){.span = span,
-                  .tree_size = tree_size,
-                  .kind = STRING,
-                  .integer = {token.text + 1, token.length - 2}});
+  YIELD(STRING, string, {token.text + 1, token.length - 2});
 }
 
 PARSER(expr);
@@ -115,12 +110,7 @@ PARSER(unary) {
   BEGIN;
   EXPECT_OP(tMINUS);
   MUST_PARSE(expr, expr);
-  YIELD((ASTNode){
-      .span = span,
-      .tree_size = tree_size,
-      .kind = UNARY,
-      .unary = {.op = op, .expr = expr},
-  });
+  YIELD(UNARY, unary, {.op = op, .expr = expr});
 }
 
 PARSER(binary) {
@@ -128,10 +118,7 @@ PARSER(binary) {
   MUST_PARSE(expr, left);
   EXPECT_OP(tPLUS, tMINUS, tSTAR, tSLASH);
   MUST_PARSE(expr, right);
-  YIELD((ASTNode){.span = span,
-                  .tree_size = tree_size,
-                  .kind = BINARY,
-                  .binary = {.op = op, .left = left, .right = right}});
+  YIELD(BINARY, binary, {.op = op, .left = left, .right = right});
 }
 
 PARSER(expr) {
@@ -151,12 +138,7 @@ PARSER(assign) {
   MUST_PARSE(name, name);
   EXPECT_OP(tEQ);
   MUST_PARSE(expr, value);
-  YIELD((ASTNode){
-      .span = span,
-      .tree_size = tree_size,
-      .kind = ASSIGN,
-      .assign = {.op = op, .name = name, .value = value},
-  });
+  YIELD(ASSIGN, assign, {.op = op, .name = name, .value = value});
 }
 
 bool parse_block(TokenStream stream, size_t *token_index,
@@ -190,16 +172,12 @@ PARSER(for_loop) {
   MUST_PARSE(assign, step);
   MUST_PARSE_BLOCK;
 
-  YIELD((ASTNode){
-      .span = span,
-      .tree_size = tree_size,
-      .kind = FOR_LOOP,
-      .for_loop = {.init = init,
-                   .cond = cond,
-                   .step = step,
-                   .stmts = stmts,
-                   .num_stmts = num_stmts},
-  });
+  YIELD(FOR_LOOP, for_loop,
+        {.init = init,
+         .cond = cond,
+         .step = step,
+         .stmts = stmts,
+         .num_stmts = num_stmts});
 }
 
 PARSER(declaration) {
@@ -208,12 +186,7 @@ PARSER(declaration) {
   EXPECT(tCOLONEQ)
   MUST_PARSE(expr, value)
 
-  YIELD((ASTNode){
-      .span = span,
-      .tree_size = tree_size,
-      .kind = DECLARATION,
-      .declaration = {.name = name, .value = value},
-  });
+  YIELD(DECLARATION, declaration, {.name = name, .value = value});
 }
 
 PARSER(stmt) {
@@ -231,12 +204,7 @@ PARSER(param) {
   MUST_PARSE(name, name)
   MUST_PARSE(name, type)
 
-  YIELD((ASTNode){
-      .span = span,
-      .tree_size = tree_size,
-      .kind = PARAM,
-      .param = {.name = name, .type = type},
-  });
+  YIELD(PARAM, param, {.name = name, .type = type});
 }
 
 PARSER(function) {
@@ -247,15 +215,12 @@ PARSER(function) {
   MUST_PARSE(expr, returnType)
   MUST_PARSE_BLOCK;
 
-  YIELD((ASTNode){
-      .span = span,
-        .tree_size = tree_size,      
-                  .kind = FUNCTION,
-                  .function = {.name = name,
-                               .params = params,
-                               .num_params = num_params,
-                               .stmts = stmts,
-                               .num_stmts = num_stmts}});
+  YIELD(FUNCTION, function,
+        {.name = name,
+         .params = params,
+         .num_params = num_params,
+         .stmts = stmts,
+         .num_stmts = num_stmts});
 }
 
 PARSER(def) {
@@ -268,7 +233,7 @@ PARSER(def) {
 PARSER(module) {
   BEGIN;
   ZERO_OR_MORE(def, defs);
-  YIELD((ASTNode){.span = span, .tree_size = tree_size, .kind = MODULE, .module = {defs, num_defs}});
+  YIELD(MODULE, module, {defs, num_defs});
 }
 
 bool parse(TokenStream stream, ASTNode **out) {
