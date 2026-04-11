@@ -23,18 +23,21 @@ typedef enum {
   MODULE,
 } ASTNodeKind;
 
-typedef struct ASTNode ASTNode;
+typedef struct {
+  const char *text;
+  size_t length;
+} Name;
 
+bool name_eq(Name left, Name right);
+
+typedef struct ASTNode ASTNode;
 typedef struct ASTNode {
   Span span;
   // The number of nodes in this AST. At least 1.
   size_t tree_size;
   ASTNodeKind kind;
   union {
-    struct {
-      const char *text;
-      size_t length;
-    } name;
+    Name name;
     struct {
       const char *text;
       size_t length;
@@ -102,4 +105,4 @@ void free_ast(ASTNode *node_array);
 void ast_visit(ASTNode *node_array, size_t index, size_t depth,
                void(callback)(ASTNode *node_array, size_t index, size_t depth));
 void ast_print_nodes(ASTNode *node_array, size_t index);
-const char* ast_node_name(ASTNodeKind kind);
+const char *ast_node_name(ASTNodeKind kind);

@@ -37,3 +37,7 @@
     *a = *b;                                                                   \
     *b = *a;                                                                   \
   }
+
+#define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
+
+#define MIN(a, b) ((a) < (b) ? (a) : (b))

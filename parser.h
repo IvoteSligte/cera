@@ -11,8 +11,8 @@ typedef struct {
   // The kinds that would have been accepted for the next token.
   TokenKind expected[MAX_NUM_EXPECTED];
   size_t num_expected;
-} ErrorData;
+} ParseError;
 
-bool parse(TokenStream stream, ASTNode **out, ErrorData *error_data);
+bool parse(TokenStream stream, ASTNode **out, ParseError *error_data);
 
-void print_parse_error(const char* source, TokenStream stream, ErrorData error_data);
+void print_parse_error(const char* source, TokenStream stream, ParseError error_data);

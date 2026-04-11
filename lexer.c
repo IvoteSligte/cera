@@ -25,7 +25,6 @@ const Matcher MATCHERS[] = {
     M(RBRACE, "}", "\\}"),
     M(LBRACKET, "[", "\\["),
     M(RBRACKET, "]", "]"),
-    M(DOT, ".", "\\."),
     M(PLUS, "+", "\\+"),
     M(MINUS, "-", "\\-"),
     M(STAR, "*", "\\*"),
@@ -33,6 +32,7 @@ const Matcher MATCHERS[] = {
     M(HASHTAG, "#", "#"),
     M(SEMI, ";", ";"),
     M(COMMA, ",", ","),
+    M(DOT, ".", "\\."),
     M(EQ, "=", "="),
     M(COL, ":", ":"),
     M(COLEQ, ":=", ":="),
@@ -121,6 +121,7 @@ LexResult lex(const char *source, size_t *offset, Token *out) {
 }
 
 static void print_error(const char *source, size_t offset) {
+  // TODO: better error message like in parser.c  
   eprintf("Failed to match token in string: `%.*s`\n", 20, &source[offset]);
 }
 

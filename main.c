@@ -52,7 +52,7 @@ int main() {
   lexer_print_token_stream(stream);
 
   ASTNode *ast = NULL;
-  ErrorData error_data;
+  ParseError error_data;
   if (!parse(stream, &ast, &error_data)) {
     print_parse_error(source, stream, error_data);
     free_token_stream(stream);

@@ -29,7 +29,7 @@ void yield(ASTNodeArray *node_array, size_t node_index, ASTNode node) {
   node_array->data[node_index] = node;
 }
 
-void error_data_add(ErrorData *data, size_t token_index,
+void error_data_add(ParseError *data, size_t token_index,
                     TokenKind expected_kind) {
   if (data->first_unparsed_token > token_index)
     return;
@@ -111,7 +111,7 @@ int log_indent = 0;
 #define PARSER_PROTOTYPE(name)                                                 \
   bool parse_##name(TokenStream stream, size_t *token_index,                   \
                     ASTNodeArray *node_array, size_t *node_index,              \
-                    ErrorData *error_data)
+                    ParseError *error_data)
 
 #define RESERVE                                                                \
   *node_index += 1;                                                            \
@@ -243,6 +243,13 @@ PARSER(function_call, {
          {.name = name, .args = args, .num_args = num_args});
 });
 
+PARSER(paren_expr, {
+  EXPECT(tLPAREN);
+  MUST_PARSE(expr, expr);
+  EXPECT(tRPAREN);
+  OK;
+});
+
 PARSER(primary, {
   // function_call must be tried before name because name is a prefix of
   // function_call
@@ -323,7 +330,7 @@ PARSER(assign, {
 
 bool parse_block(TokenStream stream, size_t *token_index,
                  ASTNodeArray *node_array, size_t *node_index,
-                 ErrorData *error_data, size_t *num_out, Span *out_span,
+                 ParseError *error_data, size_t *num_out, Span *out_span,
                  size_t *out_tree_size) {
   BEGIN(block);
   EXPECT(tLBRACE);
@@ -445,7 +452,7 @@ OffsetInfo get_offset_info(const char *source, size_t offset) {
 }
 
 void print_parse_error(const char *source, TokenStream stream,
-                       ErrorData error_data) {
+                       ParseError error_data) {
   Token token = stream.data[error_data.first_unparsed_token];
   eprintf("Parse error: unexpected token `%.*s` at offset %zu. "
           "Expected one of [",
@@ -466,11 +473,11 @@ void print_parse_error(const char *source, TokenStream stream,
   eprintf("\n");
 }
 
-bool parse(TokenStream stream, ASTNode **out, ErrorData *error_data) {
+bool parse(TokenStream stream, ASTNode **out, ParseError *error_data) {
   size_t token_index = 0;
   ASTNodeArray node_array = {.data = NULL, .length = 0};
   size_t node_index = 0;
-  *error_data = (ErrorData){0};
+  *error_data = (ParseError){0};
   bool result =
       parse_module(stream, &token_index, &node_array, &node_index, error_data);
   if (token_index < stream.length) {

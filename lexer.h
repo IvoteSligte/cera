@@ -9,21 +9,23 @@ typedef enum {
   tIDENT,
   tNUMBER,
   tSTRING,
-  // symbols
+  // delimiters
   tLPAREN,
   tRPAREN,
   tLBRACE,
   tRBRACE,
   tLBRACKET,
   tRBRACKET,
-  tDOT,
+  // operators
   tPLUS,
   tMINUS,
   tSTAR,
   tSLASH,
+  // misc symbols
   tHASHTAG,
   tSEMI,
   tCOMMA,
+  tDOT,
   tEQ,
   tCOL,
   tCOLEQ,

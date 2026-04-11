@@ -12,6 +12,11 @@ Span join_spans(Span left, Span right) {
   };
 }
 
+
+bool name_eq(Name left, Name right) {
+  return strncmp(left.text, right.text, MIN(left.length, right.length));
+}
+
 void free_ast(ASTNode *node_array) { free(node_array); }
 
 #define VISIT(index) ast_visit(node_array, index, depth + 1, callback)
