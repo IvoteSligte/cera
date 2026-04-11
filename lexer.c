@@ -121,7 +121,7 @@ LexResult lex(const char *source, size_t *offset, Token *out) {
 }
 
 static void print_error(const char *source, size_t offset) {
-  eprintf("Failed to match token in string: `%.*s`\n", 100, &source[offset]);
+  eprintf("Failed to match token in string: `%.*s`\n", 20, &source[offset]);
 }
 
 bool fill_token_stream(const char *source, TokenStream *out) {
