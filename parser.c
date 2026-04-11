@@ -38,7 +38,7 @@ void error_data_add(ErrorData *data, size_t token_index,
   if (data->first_unparsed_token < token_index) {
     data->num_expected = 0;
     data->first_unparsed_token = token_index;
-  }    
+  }
   for (size_t j = 0; j < data->num_expected; j++) {
     if (expected_kind == data->expected[j]) {
       return;
@@ -79,8 +79,8 @@ void error_data_add(ErrorData *data, size_t token_index,
 int log_indent = 0;
 
 #define LOG(format, ...)                                                       \
-  eprintf("%*.*s" format "\n", log_indent, log_indent,                         \
-          " " __VA_OPT__(, ) __VA_ARGS__)
+  /* eprintf("%*.*s" format "\n", log_indent, log_indent,                         \ */
+  /*         " " __VA_OPT__(, ) __VA_ARGS__) */
 
 #define LOG_ENTER                                                              \
   {                                                                            \
@@ -209,12 +209,19 @@ PARSER(expr, {
   FAIL;
 });
 
+PARSER(expr_stmt, {
+  MUST_PARSE(expr, expr);
+  EXPECT(tSEMI);
+  OK;
+});
+
 PARSER_PROTOTYPE(declaration);
 
 PARSER(assign, {
   MUST_PARSE(name, name);
   EXPECT_OP(tEQ);
   MUST_PARSE(expr, value);
+  EXPECT(tSEMI);
   YIELD(ASSIGN, assign, {.op = op, .name = name, .value = value});
 });
 
@@ -258,16 +265,16 @@ PARSER(for_loop, {
 });
 
 PARSER(declaration, {
-  MUST_PARSE(name, name)
-  EXPECT(tCOLONEQ)
-  MUST_PARSE(expr, value)
+  MUST_PARSE(name, name);
+  EXPECT(tCOLCOL);
+  MUST_PARSE(expr, value);
+  EXPECT(tSEMI);
 
   YIELD(DECLARATION, declaration, {.name = name, .value = value});
 });
 
 PARSER(stmt, {
-  // FIXME: no semicolons
-  TRY_PARSE(expr);
+  TRY_PARSE(expr_stmt);
   TRY_PARSE(for_loop);
   TRY_PARSE(assign);
   TRY_PARSE(declaration);
@@ -275,17 +282,18 @@ PARSER(stmt, {
 });
 
 PARSER(param, {
-  MUST_PARSE(name, name)
-  MUST_PARSE(name, type)
+  MUST_PARSE(name, name);
+  EXPECT(tCOL);
+  MUST_PARSE(name, type);
 
   YIELD(PARAM, param, {.name = name, .type = type});
 });
 
 PARSER(function, {
-  EXPECT(tFUNC)
-  MUST_PARSE(name, name)
-  ZERO_OR_MORE(param, params)
-  MUST_PARSE(expr, returnType)
+  MUST_PARSE(name, name);
+  EXPECT(tCOLCOL);
+  ZERO_OR_MORE(param, params);
+  MUST_PARSE(expr, returnType);
   MUST_PARSE_BLOCK;
 
   YIELD(FUNCTION, function,
@@ -309,9 +317,9 @@ PARSER(module, {
 
 void print_parse_error(TokenStream stream, ErrorData error_data) {
   Token token = stream.data[error_data.first_unparsed_token];
-  eprintf(
-      "Parse error: unexpected token `%.*s` at offset %zu. Expected one of [",
-      (int)token.length, token.text, token.offset);
+  eprintf("Parse error: unexpected token `%.*s` at offset %zu. "
+          "Expected one of [",
+          (int)token.length, token.text, token.offset);
   for (size_t i = 0; i < error_data.num_expected; i++) {
     TokenKind expected = error_data.expected[i];
     if (i > 0)

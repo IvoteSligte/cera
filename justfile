@@ -8,4 +8,4 @@ build:
 
 run: build
     ./build/main
-    
+

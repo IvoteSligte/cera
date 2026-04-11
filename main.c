@@ -4,7 +4,7 @@
 
 int main() {
   const char *source =
-      "void lexerDoStuff(int a, int b) { printf(\"hi %s\", \"name\"); }";
+    "lexerDoStuff :: (a: int, b: int) { printf(\"hi %s\", \"name\"); }";
 
   lexer_init();
   /* lexer_print_tokens(source); */

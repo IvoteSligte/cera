@@ -34,10 +34,11 @@ const Matcher MATCHERS[] = {
     M(SEMI, ";", ";"),
     M(COMMA, ",", ","),
     M(EQ, "=", "="),
-    M(COLONEQ, ":=", ":="),
+    M(COL, ":", ":"),
+    M(COLEQ, ":=", ":="),
+    M(COLCOL, "::", "::"),
     // keywords
     M(STRUCT, "struct", "struct"),
-    M(FUNC, "func", "func"),
     M(UNION, "union", "union"),
     M(ENUM, "enum", "enum"),
 };

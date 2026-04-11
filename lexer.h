@@ -25,10 +25,11 @@ typedef enum {
   tSEMI,
   tCOMMA,
   tEQ,
-  tCOLONEQ,
+  tCOL,
+  tCOLEQ,
+  tCOLCOL,  
   // keywords
   tSTRUCT,
-  tFUNC,
   tUNION,
   tENUM,
 } TokenKind;
