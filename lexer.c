@@ -66,9 +66,22 @@ void lexer_free(void) {
   }
 }
 
-const char *lexer_token_name(TokenKind kind) { return MATCHERS[kind].name; }
-const char *lexer_token_display_name(TokenKind kind) {
+const char *token_name(TokenKind kind) { return MATCHERS[kind].name; }
+const char *token_display_name(TokenKind kind) {
   return MATCHERS[kind].display_name;
+}
+int token_precedence(TokenKind kind) {
+  switch (kind) {
+  case tPLUS:
+  case tMINUS:    
+    return 0;    
+  case tSTAR:
+  case tSLASH:
+    return 1;
+  default:
+    panicf("Tried to retrieve precedence of non-operator: `%s`\n", token_display_name(kind));
+    break;
+  }
 }
 
 LexResult lex(const char *source, size_t *offset, Token *out) {
@@ -137,7 +150,7 @@ void lexer_print_tokens(const char *source) {
   LexResult result;
 
   while ((result = lex(source, &offset, &token)) == LEX_OK) {
-    printf("%-3zu %-10s `%.*s`\n", token.offset, lexer_token_name(token.kind),
+    printf("%-3zu %-10s `%.*s`\n", token.offset, token_name(token.kind),
            (int)token.length, token.text);
   }
   if (result != LEX_EOF) {
@@ -148,7 +161,7 @@ void lexer_print_tokens(const char *source) {
 void lexer_print_token_stream(TokenStream stream) {
   for (size_t i = 0; i < stream.length; i++) {
     Token token = stream.data[i];
-    printf("%-3zu %-10s `%.*s`\n", token.offset, lexer_token_name(token.kind),
+    printf("%-3zu %-10s `%.*s`\n", token.offset, token_name(token.kind),
            (int)token.length, token.text);
   }
 }

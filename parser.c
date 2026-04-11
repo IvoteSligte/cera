@@ -4,32 +4,30 @@
 
 #include <stdarg.h>
 
-// FIXME: spaces not being skipped
-
 typedef struct {
   ASTNode *data;
   size_t length;
 } ASTNodeArray;
 
-void yield(ASTNodeArray *node_array, size_t *node_index, ASTNode node) {
-  assert(node.tree_size > 0);
-  if (*node_index >= node_array->length) {
-    node_array->data =
-        realloc(node_array->data, sizeof(ASTNode) * (*node_index + 1));
-  }
-  node_array->data[*node_index] = node;
-  *node_index += 1;
+void *zeroed_realloc(void *data, size_t current_nmemb, size_t new_nmemb,
+                     size_t element_size) {
+  assert(current_nmemb <= new_nmemb);
+  data = realloc(data, new_nmemb * element_size);
+  memset(data + (current_nmemb * element_size), 0,
+         (new_nmemb - current_nmemb) * element_size);
+  return data;
 }
 
-#define MAX_NUM_EXPECTED 20
-
-typedef struct {
-  // Index of the first unparsed token.
-  size_t first_unparsed_token;
-  // The kinds that would have been accepted for the next token.
-  TokenKind expected[MAX_NUM_EXPECTED];
-  size_t num_expected;
-} ErrorData;
+void yield(ASTNodeArray *node_array, size_t node_index, ASTNode node) {
+  assert(node.tree_size > 0);
+  if (node_index >= node_array->length) {
+    size_t new_length = node_index + 1;
+    node_array->data = zeroed_realloc(node_array->data, node_array->length,
+                                      new_length, sizeof(ASTNode));
+    node_array->length = new_length;
+  }
+  node_array->data[node_index] = node;
+}
 
 void error_data_add(ErrorData *data, size_t token_index,
                     TokenKind expected_kind) {
@@ -69,18 +67,22 @@ void error_data_add(ErrorData *data, size_t token_index,
 #define GET(index) node_array->data[index]
 
 #define YIELD(KIND, $kind, ...)                                                \
-  yield(node_array, node_index,                                                \
+  __RESERVED__ = true; /* checks that RESERVE has been used before YIELD */    \
+  yield(node_array, start_node_index,                                          \
         (ASTNode){.span = span,                                                \
                   .tree_size = tree_size,                                      \
                   .kind = KIND,                                                \
-                  .$kind = __VA_ARGS__});                                      \
+                  .$kind = __VA_ARGS__})
+
+#define RETURN(KIND, $kind, ...)                                               \
+  YIELD(KIND, $kind, __VA_ARGS__);                                             \
   OK;
 
 int log_indent = 0;
 
 #define LOG(format, ...)                                                       \
-  /* eprintf("%*.*s" format "\n", log_indent, log_indent,                         \ */
-  /*         " " __VA_OPT__(, ) __VA_ARGS__) */
+  eprintf("%-4zu %-3zu %*.*s" format "\n", *token_index, *node_index,          \
+          log_indent, log_indent, " " __VA_OPT__(, ) __VA_ARGS__)
 
 #define LOG_ENTER                                                              \
   {                                                                            \
@@ -111,12 +113,16 @@ int log_indent = 0;
                     ASTNodeArray *node_array, size_t *node_index,              \
                     ErrorData *error_data)
 
+#define RESERVE                                                                \
+  *node_index += 1;                                                            \
+  bool __RESERVED__;
+
 #define BEGIN(name)                                                            \
+  const char *parser_name = #name;                                             \
+  LOG_ENTER;                                                                   \
   size_t start_token_index = *token_index;                                     \
   size_t start_node_index = *node_index;                                       \
   Token token;                                                                 \
-  const char *parser_name = #name;                                             \
-  LOG_ENTER;                                                                   \
   if (!peek_token(stream, *token_index, &token))                               \
     FAIL;                                                                      \
   Span span = (Span){.offset = token.offset, .length = 0};                     \
@@ -133,28 +139,49 @@ int log_indent = 0;
 
 #define JOIN_SPANS(left, right) join_spans(GET(left).span, GET(right).span)
 
-#define EXPECT(...)                                                            \
-  if (!peek_token(stream, *token_index, &token))                               \
-    FAIL;                                                                      \
-  if (!IS_ONE_OF(token.kind, __VA_ARGS__)) {                                   \
-    LOG("Expected: " #__VA_ARGS__ " found %s", lexer_token_name(token.kind));  \
-    ERROR_DATA_ADD(__VA_ARGS__);                                               \
-    FAIL;                                                                      \
-  }                                                                            \
-  *token_index += 1;                                                           \
-  EXTEND_SPAN(token);
+#define CONSUME                                                                \
+  {                                                                            \
+    LOG("Consume: `%s`", token_display_name(token.kind));                      \
+    *token_index += 1;                                                         \
+    EXTEND_SPAN(token);                                                        \
+  }
 
-#define EXPECT_OP(...) EXPECT(__VA_ARGS__) TokenKind op = token.kind;
+#define EXPECT(...)                                                            \
+  {                                                                            \
+    if (!peek_token(stream, *token_index, &token)) {                           \
+      LOG("Expected: " #__VA_ARGS__ " found EOF");                             \
+      ERROR_DATA_ADD(__VA_ARGS__);                                             \
+      FAIL;                                                                    \
+    }                                                                          \
+    if (!IS_ONE_OF(token.kind, __VA_ARGS__)) {                                 \
+      LOG("Expected: " #__VA_ARGS__ " found %s", token_name(token.kind));      \
+      ERROR_DATA_ADD(__VA_ARGS__);                                             \
+      FAIL;                                                                    \
+    }                                                                          \
+    CONSUME;                                                                   \
+  }
+
+#define EXPECT_OP(...)                                                         \
+  EXPECT(__VA_ARGS__);                                                         \
+  TokenKind op = token.kind;
 
 #define PARSE(name)                                                            \
   parse_##name(stream, token_index, node_array, node_index, error_data)
 
+// Try to parse and return on failure.
 #define MUST_PARSE(name, out)                                                  \
+  size_t out = *node_index;                                                    \
   if (!PARSE(name))                                                            \
     FAIL;                                                                      \
-  size_t out = *node_index;                                                    \
   tree_size += GET(out).tree_size;
 
+// Try to parse and continue on success.
+// Declares has_##out indicating whether it succeeded.
+#define MAY_PARSE(name, out)                                                   \
+  size_t out = *node_index;                                                    \
+  bool has_##out = PARSE(name);
+
+// Try to parse and return on success.
 #define TRY_PARSE(name)                                                        \
   if (PARSE(name))                                                             \
     OK;
@@ -169,42 +196,110 @@ int log_indent = 0;
   if (num_##nodes > 0)                                                         \
     EXTEND_SPAN(GET(*node_index - 1).span);
 
-PARSER(name, {
-  EXPECT(tIDENT);
-  YIELD(NAME, name, {token.text, token.length});
-});
-
-PARSER(integer, {
-  EXPECT(tNUMBER);
-  YIELD(INTEGER, integer, {token.text, token.length});
-});
-
-PARSER(string, {
-  EXPECT(tSTRING);
-  YIELD(STRING, string, {token.text + 1, token.length - 2});
-});
+#define ZERO_OR_MORE_SEPARATED(element, nodes, ...)                            \
+  size_t nodes = *node_index;                                                  \
+  size_t num_##nodes = 0;                                                      \
+  while (PARSE(element)) {                                                     \
+    num_##nodes++;                                                             \
+    tree_size += GET(*node_index - 1).tree_size;                               \
+    if (!peek_token(stream, *token_index, &token) ||                           \
+        !IS_ONE_OF(token.kind, __VA_ARGS__)) {                                 \
+      break;                                                                   \
+    }                                                                          \
+    *token_index += 1;                                                         \
+    EXTEND_SPAN(token);                                                        \
+  }                                                                            \
+  if (num_##nodes > 0)                                                         \
+    EXTEND_SPAN(GET(*node_index - 1).span);
 
 PARSER_PROTOTYPE(expr);
 PARSER_PROTOTYPE(stmt);
 
-PARSER(unary, {
-  EXPECT_OP(tMINUS);
-  MUST_PARSE(expr, expr);
-  YIELD(UNARY, unary, {.op = op, .expr = expr});
+PARSER(name, {
+  RESERVE;
+  EXPECT(tIDENT);
+  RETURN(NAME, name, {token.text, token.length});
 });
 
-PARSER(binary, {
-  MUST_PARSE(expr, left);
-  EXPECT_OP(tPLUS, tMINUS, tSTAR, tSLASH);
-  MUST_PARSE(expr, right);
-  YIELD(BINARY, binary, {.op = op, .left = left, .right = right});
+PARSER(integer, {
+  RESERVE;
+  EXPECT(tNUMBER);
+  RETURN(INTEGER, integer, {token.text, token.length});
 });
 
-PARSER(expr, {
+PARSER(string, {
+  RESERVE;
+  EXPECT(tSTRING);
+  RETURN(STRING, string, {token.text + 1, token.length - 2});
+});
+
+PARSER(function_call, {
+  RESERVE;
+  MUST_PARSE(name, name);
+  EXPECT(tLPAREN);
+  ZERO_OR_MORE_SEPARATED(expr, args, tCOMMA);
+  EXPECT(tRPAREN);
+  RETURN(FUNCTION_CALL, function_call,
+         {.name = name, .args = args, .num_args = num_args});
+});
+
+PARSER(primary, {
+  // function_call must be tried before name because name is a prefix of
+  // function_call
+  TRY_PARSE(function_call);
   TRY_PARSE(name);
   TRY_PARSE(integer);
   TRY_PARSE(string);
+  FAIL;
+})
+
+PARSER(unary, {
+  TRY_PARSE(primary);
+
+  RESERVE;
+  EXPECT_OP(tMINUS);
+  MUST_PARSE(primary, expr);
+  RETURN(UNARY, unary, {.op = op, .expr = expr});
+});
+
+void fix_precedence(ASTNode *node_array, size_t index) {
+  ASTNode *node = &node_array[index];
+  assert(node->kind == BINARY);
+  __auto_type binary = &node->binary;
+  ASTNode *left_node = &node_array[binary->left];
+  assert(left_node->kind != BINARY);
+  ASTNode *right_node = &node_array[binary->right];
+
+  if (right_node->kind == BINARY) {
+    __auto_type right = &right_node->binary;
+
+    if (!right->has_parens &&
+        token_precedence(right->op) < token_precedence(binary->op)) {
+      // performs a left-rotation on the tree
+      // NOTE: this does not preserve order of nodes
+      binary->right = right->left;
+      right->left = index;
+      SWAP(node, right_node);
+    }
+  }
+}
+
+PARSER(binary, {
   TRY_PARSE(unary);
+
+  RESERVE;
+  MUST_PARSE(unary, left);
+  EXPECT_OP(tPLUS, tMINUS, tSTAR, tSLASH);
+  MUST_PARSE(expr, right);
+
+  // TODO: expr with parens
+  YIELD(BINARY, binary,
+        {.op = op, .has_parens = false, .left = left, .right = right});
+  fix_precedence(node_array->data, *node_index - 1);
+  OK;
+});
+
+PARSER(expr, {
   TRY_PARSE(binary);
   FAIL;
 });
@@ -218,11 +313,12 @@ PARSER(expr_stmt, {
 PARSER_PROTOTYPE(declaration);
 
 PARSER(assign, {
+  RESERVE;
   MUST_PARSE(name, name);
   EXPECT_OP(tEQ);
   MUST_PARSE(expr, value);
   EXPECT(tSEMI);
-  YIELD(ASSIGN, assign, {.op = op, .name = name, .value = value});
+  RETURN(ASSIGN, assign, {.op = op, .name = name, .value = value});
 });
 
 bool parse_block(TokenStream stream, size_t *token_index,
@@ -251,26 +347,28 @@ bool parse_block(TokenStream stream, size_t *token_index,
   EXTEND_SPAN(block_span)
 
 PARSER(for_loop, {
+  RESERVE;
   MUST_PARSE(declaration, init);
   MUST_PARSE(expr, cond);
   MUST_PARSE(assign, step);
   MUST_PARSE_BLOCK;
 
-  YIELD(FOR_LOOP, for_loop,
-        {.init = init,
-         .cond = cond,
-         .step = step,
-         .stmts = stmts,
-         .num_stmts = num_stmts});
+  RETURN(FOR_LOOP, for_loop,
+         {.init = init,
+          .cond = cond,
+          .step = step,
+          .stmts = stmts,
+          .num_stmts = num_stmts});
 });
 
 PARSER(declaration, {
+  RESERVE;
   MUST_PARSE(name, name);
   EXPECT(tCOLCOL);
   MUST_PARSE(expr, value);
   EXPECT(tSEMI);
 
-  YIELD(DECLARATION, declaration, {.name = name, .value = value});
+  RETURN(DECLARATION, declaration, {.name = name, .value = value});
 });
 
 PARSER(stmt, {
@@ -282,26 +380,30 @@ PARSER(stmt, {
 });
 
 PARSER(param, {
+  RESERVE;
   MUST_PARSE(name, name);
   EXPECT(tCOL);
   MUST_PARSE(name, type);
-
-  YIELD(PARAM, param, {.name = name, .type = type});
+  RETURN(PARAM, param, {.name = name, .type = type});
 });
 
 PARSER(function, {
+  RESERVE;
   MUST_PARSE(name, name);
   EXPECT(tCOLCOL);
-  ZERO_OR_MORE(param, params);
-  MUST_PARSE(expr, returnType);
+  EXPECT(tLPAREN);
+  ZERO_OR_MORE_SEPARATED(param, params, tCOMMA);
+  EXPECT(tRPAREN);
+  MAY_PARSE(name, return_type);
   MUST_PARSE_BLOCK;
-
-  YIELD(FUNCTION, function,
-        {.name = name,
-         .params = params,
-         .num_params = num_params,
-         .stmts = stmts,
-         .num_stmts = num_stmts});
+  RETURN(FUNCTION, function,
+         {.name = name,
+          .params = params,
+          .num_params = num_params,
+          .return_type = return_type,
+          .has_return_type = has_return_type,
+          .stmts = stmts,
+          .num_stmts = num_stmts});
 });
 
 PARSER(def, {
@@ -311,11 +413,39 @@ PARSER(def, {
 });
 
 PARSER(module, {
+  RESERVE;
   ZERO_OR_MORE(def, defs);
-  YIELD(MODULE, module, {defs, num_defs});
+  RETURN(MODULE, module, {defs, num_defs});
 });
 
-void print_parse_error(TokenStream stream, ErrorData error_data) {
+typedef struct {
+  const char *line;
+  int line_length;
+  int column_number;
+  size_t line_number;
+} OffsetInfo;
+
+OffsetInfo get_offset_info(const char *source, size_t offset) {
+  OffsetInfo info = {0};
+  info.line = source;
+
+  for (size_t i = 0; i < offset; i++) {
+    if (source[i] == '\n') {
+      info.line = &source[i];
+      info.line_number++;
+    } else {
+      info.column_number++;
+    }
+  }
+  info.line_length = info.column_number;
+  for (size_t i = offset; source[i] != '\n' && source[i] != '\0'; i++) {
+    info.line_length++;
+  }
+  return info;
+}
+
+void print_parse_error(const char *source, TokenStream stream,
+                       ErrorData error_data) {
   Token token = stream.data[error_data.first_unparsed_token];
   eprintf("Parse error: unexpected token `%.*s` at offset %zu. "
           "Expected one of [",
@@ -324,20 +454,26 @@ void print_parse_error(TokenStream stream, ErrorData error_data) {
     TokenKind expected = error_data.expected[i];
     if (i > 0)
       eprintf(", ");
-    eprintf("`%s`", lexer_token_display_name(expected));
+    eprintf("`%s`", token_display_name(expected));
   }
   eprintf("].\n");
+  OffsetInfo oi = get_offset_info(source, token.offset);
+  eprintf(">>> line %zu, column %d\n", oi.line_number, oi.column_number);
+  eprintf(" | %.*s\n", oi.line_length, oi.line);
+  eprintf(" | %*s", oi.column_number, " ");
+  for (size_t i = 0; i < token.length; i++)
+    eprintf("~");
+  eprintf("\n");
 }
 
-bool parse(TokenStream stream, ASTNode **out) {
+bool parse(TokenStream stream, ASTNode **out, ErrorData *error_data) {
   size_t token_index = 0;
   ASTNodeArray node_array = {.data = NULL, .length = 0};
   size_t node_index = 0;
-  ErrorData error_data = {0};
+  *error_data = (ErrorData){0};
   bool result =
-      parse_module(stream, &token_index, &node_array, &node_index, &error_data);
+      parse_module(stream, &token_index, &node_array, &node_index, error_data);
   if (token_index < stream.length) {
-    print_parse_error(stream, error_data);
     return false;
   }
   *out = node_array.data;

@@ -18,7 +18,9 @@ int main() {
   lexer_print_token_stream(stream);
 
   ASTNode *ast = NULL;
-  if (!parse(stream, &ast)) {
+  ErrorData error_data;
+  if (!parse(stream, &ast, &error_data)) {
+    print_parse_error(source, stream, error_data);
     free_token_stream(stream);
     free_ast(ast);
     panicf("Parse error.\n");
@@ -26,7 +28,7 @@ int main() {
   free_token_stream(stream);
 
   printf("Parse success.\n");
-  ast_print_nodes(ast);
+  ast_print_nodes(ast, 0);
   
   free_ast(ast);
   return 0;

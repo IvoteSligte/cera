@@ -1,7 +1,18 @@
 #pragma once
 
-#include "lexer.h"
 #include "ast.h"
+#include "lexer.h"
 
-bool parse(TokenStream stream, ASTNode** out);
+#define MAX_NUM_EXPECTED 20
 
+typedef struct {
+  // Index of the first unparsed token.
+  size_t first_unparsed_token;
+  // The kinds that would have been accepted for the next token.
+  TokenKind expected[MAX_NUM_EXPECTED];
+  size_t num_expected;
+} ErrorData;
+
+bool parse(TokenStream stream, ASTNode **out, ErrorData *error_data);
+
+void print_parse_error(const char* source, TokenStream stream, ErrorData error_data);

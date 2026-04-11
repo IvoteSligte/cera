@@ -14,7 +14,7 @@ Span join_spans(Span left, Span right) {
 
 void free_ast(ASTNode *node_array) { free(node_array); }
 
-#define VISIT(index) visit_inner(node_array, index, callback)
+#define VISIT(index) ast_visit(node_array, index, depth + 1, callback)
 
 #define VISIT_ARRAY($start, $length)                                           \
   {                                                                            \
@@ -25,19 +25,17 @@ void free_ast(ASTNode *node_array) { free(node_array); }
     }                                                                          \
   }
 
-#define CASE(name, ...)                                                        \
-  case UPPER_##name: {                                                         \
-    __auto_type name = ast->name;                                              \
-    __VA_ARGS__                                                                \
-    break;                                                                     \
-  }
+void ast_visit(ASTNode *node_array, size_t index, size_t depth,
+               void(callback)(ASTNode *node_array, size_t index,
+                              size_t depth)) {
+  ASTNode *node = &node_array[index];
+  callback(node_array, index, depth);
 
-static void visit_inner(ASTNode *node_array, size_t index,
-                        void(callback)(ASTNode *)) {
-  ASTNode *ast = &node_array[index];
-  callback(ast);
+  switch (node->kind) {
+  case INVALID:
+    panicf("Tried to visit invalid AST node.\n");
+    break;
 
-  switch (ast->kind) {
     CASE(name, {});
     CASE(integer, {});
     CASE(string, {});
@@ -46,10 +44,15 @@ static void visit_inner(ASTNode *node_array, size_t index,
       VISIT(binary.left);
       VISIT(binary.right);
     });
+    CASE(function_call, {
+      VISIT(function_call.name);
+      VISIT_ARRAY(function_call.args, function_call.num_args);
+    });
     CASE(function, {
       VISIT(function.name);
       VISIT_ARRAY(function.params, function.num_params);
-      VISIT(function.returnType);
+      if (function.has_return_type)
+        VISIT(function.return_type);
       VISIT_ARRAY(function.stmts, function.num_stmts);
     });
     CASE(param, {
@@ -74,46 +77,59 @@ static void visit_inner(ASTNode *node_array, size_t index,
   }
 }
 
-void visit(ASTNode *node_array, void(callback)(ASTNode *)) {
-  visit_inner(node_array, 0, callback);
-}
-
-static void print_node(ASTNode *node) {
+static void print_node(ASTNode *node_array, size_t index, size_t depth) {
+  ASTNode *node = &node_array[index];
+  printf("%*.*s", (int)depth, (int)depth, " ");
   switch (node->kind) {
-  case NAME:
-    printf("name: `%.*s`\n", (int)node->name.length, node->name.text);
+  case INVALID:
+    panicf("Tried to print invalid AST node.\n");
     break;
-  case INTEGER:
-    printf("integer: `%.*s`\n", (int)node->integer.length, node->integer.text);
-    break;
-  case STRING:
-    printf("string: `%.*s`\n", (int)node->string.length, node->string.text);
-    break;
-  case UNARY:
-    printf("unary: `%s`\n", lexer_token_name(node->unary.op));
-    break;
-  case BINARY:
-    printf("binary: `%s`\n", lexer_token_name(node->binary.op));
-    break;
-  case FUNCTION:
-    printf("function:\n");
-    break;
-  case PARAM:
-    printf("param:\n");
-    break;
-  case FOR_LOOP:
-    printf("for_loop:\n");
-    break;
-  case ASSIGN:
-    printf("assign: `%s`\n", lexer_token_name(node->assign.op));
-    break;
-  case DECLARATION:
-    printf("declaration:\n");
-    break;
-  case MODULE:
-    printf("module:\n");
-    break;
+
+    CASE(name, {
+      printf("name: `%.*s`\n", (int)node->name.length, node->name.text);
+    });
+    CASE(integer, {
+      printf("integer: `%.*s`\n", (int)node->integer.length,
+             node->integer.text);
+    });
+    CASE(string, {
+      printf("string: `%.*s`\n", (int)node->string.length, node->string.text);
+    });
+    CASE(unary, { printf("unary: `%s`\n", token_name(node->unary.op)); });
+    CASE(binary, { printf("binary: `%s`\n", token_name(node->binary.op)); });
+    CASE(function_call, { printf("function_call:\n"); })
+    CASE(function, { printf("function:\n"); });
+    CASE(param, { printf("param:\n"); });
+    CASE(for_loop, { printf("for_loop:\n"); });
+    CASE(assign, { printf("assign: `%s`\n", token_name(node->assign.op)); });
+    CASE(declaration, { printf("declaration:\n"); });
+    CASE(module, { printf("module:\n"); });
   }
 }
 
-void ast_print_nodes(ASTNode *node_array) { visit(node_array, print_node); }
+void ast_print_nodes(ASTNode *node_array, size_t index) {
+  ast_visit(node_array, index, 0, print_node);
+}
+
+#define N(name)                                                                \
+  case (name):                                                                 \
+    return #name;
+
+const char *ast_node_name(ASTNodeKind kind) {
+  switch (kind) {
+    N(INVALID);
+    N(NAME);
+    N(INTEGER);
+    N(STRING);
+    N(UNARY);
+    N(BINARY);
+    N(FUNCTION_CALL);
+    N(FUNCTION);
+    N(PARAM);
+    N(FOR_LOOP);
+    N(ASSIGN);
+    N(DECLARATION);
+    N(MODULE);
+  }
+  panicf("Unknown node kind: %d\n", kind)
+}
