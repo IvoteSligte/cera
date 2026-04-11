@@ -35,9 +35,10 @@ void error_data_add(ErrorData *data, size_t token_index,
                     TokenKind expected_kind) {
   if (data->first_unparsed_token > token_index)
     return;
-  if (data->first_unparsed_token < token_index)
+  if (data->first_unparsed_token < token_index) {
     data->num_expected = 0;
-
+    data->first_unparsed_token = token_index;
+  }    
   for (size_t j = 0; j < data->num_expected; j++) {
     if (expected_kind == data->expected[j]) {
       return;
@@ -73,20 +74,35 @@ void error_data_add(ErrorData *data, size_t token_index,
                   .tree_size = tree_size,                                      \
                   .kind = KIND,                                                \
                   .$kind = __VA_ARGS__});                                      \
-  return true;
+  OK;
 
-#define LOG(message, name) eprintf("%s %s\n", message, name)
+int log_indent = 0;
+
+#define LOG(format, ...)                                                       \
+  eprintf("%*.*s" format "\n", log_indent, log_indent,                         \
+          " " __VA_OPT__(, ) __VA_ARGS__)
+
+#define LOG_ENTER                                                              \
+  {                                                                            \
+    LOG("Enter: %s", parser_name);                                             \
+    log_indent++;                                                              \
+  }
+#define LOG_EXIT(status)                                                       \
+  {                                                                            \
+    log_indent--;                                                              \
+    LOG("Exit " status ": %s", parser_name);                                   \
+  }
 
 #define OK                                                                     \
   {                                                                            \
-    LOG("Exit OK:", parser_name);                                              \
+    LOG_EXIT("OK");                                                            \
     return true;                                                               \
   }
 #define FAIL                                                                   \
   {                                                                            \
     *token_index = start_token_index;                                          \
     *node_index = start_node_index;                                            \
-    LOG("Exit FAIL:", parser_name);                                            \
+    LOG_EXIT("FAIL");                                                          \
     return false;                                                              \
   }
 
@@ -100,7 +116,7 @@ void error_data_add(ErrorData *data, size_t token_index,
   size_t start_node_index = *node_index;                                       \
   Token token;                                                                 \
   const char *parser_name = #name;                                             \
-  LOG("Enter:", parser_name);                                                  \
+  LOG_ENTER;                                                                   \
   if (!peek_token(stream, *token_index, &token))                               \
     FAIL;                                                                      \
   Span span = (Span){.offset = token.offset, .length = 0};                     \
@@ -121,6 +137,7 @@ void error_data_add(ErrorData *data, size_t token_index,
   if (!peek_token(stream, *token_index, &token))                               \
     FAIL;                                                                      \
   if (!IS_ONE_OF(token.kind, __VA_ARGS__)) {                                   \
+    LOG("Expected: " #__VA_ARGS__ " found %s", lexer_token_name(token.kind));  \
     ERROR_DATA_ADD(__VA_ARGS__);                                               \
     FAIL;                                                                      \
   }                                                                            \

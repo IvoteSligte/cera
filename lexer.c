@@ -5,14 +5,14 @@
 typedef struct {
   TokenKind kind;
   const char *name;
-  const char* display_name;  
+  const char *display_name;
   const char *regex;
 } Matcher;
 
 #define M(name, display_name, regex) {t##name, #name, display_name, "^" regex}
 
 const Matcher MATCHERS[] = {
-  M(WHITESPACE, "whitespace", "[\n\t ]+"),
+    M(WHITESPACE, "whitespace", "[\n\t ]+"),
     M(COMMENT, "comment", "// .*\n"),
     // words
     M(IDENT, "identifier", "[a-zA-Z][a-zA-Z0-9]*"),
@@ -28,9 +28,9 @@ const Matcher MATCHERS[] = {
     M(DOT, ".", "\\."),
     M(PLUS, "+", "\\+"),
     M(MINUS, "-", "\\-"),
-    M(STAR, "*",  "\\*"),
-    M(SLASH,"/",  "/"),
-    M(HASHTAG,"#","#"),
+    M(STAR, "*", "\\*"),
+    M(SLASH, "/", "/"),
+    M(HASHTAG, "#", "#"),
     M(SEMI, ";", ";"),
     M(COMMA, ",", ","),
     M(EQ, "=", "="),
@@ -39,7 +39,7 @@ const Matcher MATCHERS[] = {
     M(STRUCT, "struct", "struct"),
     M(FUNC, "func", "func"),
     M(UNION, "union", "union"),
-    M(ENUM,"enum", "enum"),
+    M(ENUM, "enum", "enum"),
 };
 #undef M
 
@@ -66,7 +66,9 @@ void lexer_free(void) {
 }
 
 const char *lexer_token_name(TokenKind kind) { return MATCHERS[kind].name; }
-const char *lexer_token_display_name(TokenKind kind) { return MATCHERS[kind].display_name; }
+const char *lexer_token_display_name(TokenKind kind) {
+  return MATCHERS[kind].display_name;
+}
 
 LexResult lex(const char *source, size_t *offset, Token *out) {
   size_t longest_match = 0;
@@ -95,7 +97,13 @@ LexResult lex(const char *source, size_t *offset, Token *out) {
     panicf("Failed to run regex. Error: %s\n", errbuf);
   }
   *offset += longest_match;
-  return (longest_match == 0) ? LEX_NO_MATCH : LEX_OK;
+  if (longest_match == 0) {
+    return LEX_NO_MATCH;
+  } else if (out->kind == tWHITESPACE || out->kind == tCOMMENT) {
+    return lex(source, offset, out); // skip whitespace and comments
+  } else {
+    return LEX_OK;
+  }
 }
 
 static void print_error(const char *source, size_t offset) {
@@ -128,8 +136,8 @@ void lexer_print_tokens(const char *source) {
   LexResult result;
 
   while ((result = lex(source, &offset, &token)) == LEX_OK) {
-    printf("%-3zu %-10s `%.*s`\n", token.offset, lexer_token_name(token.kind), (int)token.length,
-           token.text);
+    printf("%-3zu %-10s `%.*s`\n", token.offset, lexer_token_name(token.kind),
+           (int)token.length, token.text);
   }
   if (result != LEX_EOF) {
     print_error(source, offset);
@@ -139,8 +147,8 @@ void lexer_print_tokens(const char *source) {
 void lexer_print_token_stream(TokenStream stream) {
   for (size_t i = 0; i < stream.length; i++) {
     Token token = stream.data[i];
-    printf("%-3zu %-10s `%.*s`\n", token.offset, lexer_token_name(token.kind), (int)token.length,
-           token.text);
+    printf("%-3zu %-10s `%.*s`\n", token.offset, lexer_token_name(token.kind),
+           (int)token.length, token.text);
   }
 }
 
