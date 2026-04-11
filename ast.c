@@ -1,4 +1,5 @@
 #include "ast.h"
+#include "ast_macro.h"
 
 Span token_span(Token token) {
   return (Span){.offset = token.offset, .length = token.length};
@@ -24,52 +25,52 @@ void free_ast(ASTNode *node_array) { free(node_array); }
     }                                                                          \
   }
 
+#define CASE(name, ...)                                                        \
+  case UPPER_##name: {                                                         \
+    __auto_type name = ast->name;                                              \
+    __VA_ARGS__                                                                \
+    break;                                                                     \
+  }
+
 static void visit_inner(ASTNode *node_array, size_t index,
                         void(callback)(ASTNode *)) {
   ASTNode *ast = &node_array[index];
   callback(ast);
 
   switch (ast->kind) {
-  case NAME:
-    return;
-  case INTEGER:
-    return;
-  case STRING:
-    return;
-  case UNARY:
-    VISIT(ast->unary.expr);
-    return;
-  case BINARY:
-    VISIT(ast->binary.left);
-    VISIT(ast->binary.right);
-    return;
-  case FUNCTION:
-    VISIT(ast->function.name);
-    VISIT_ARRAY(ast->function.params, ast->function.num_params);
-    VISIT(ast->function.returnType);
-    VISIT_ARRAY(ast->function.stmts, ast->function.num_stmts);
-    return;
-  case PARAM:
-    VISIT(ast->param.name);
-    VISIT(ast->param.type);
-    return;
-  case FOR_LOOP:
-    VISIT(ast->for_loop.init);
-    VISIT(ast->for_loop.cond);
-    VISIT(ast->for_loop.step);
-    VISIT_ARRAY(ast->for_loop.stmts, ast->for_loop.num_stmts);
-    return;
-  case ASSIGN:
-    VISIT(ast->assign.name);
-    VISIT(ast->assign.value);
-    return;
-  case DECLARATION:
-    VISIT(ast->declaration.name);
-    VISIT(ast->declaration.value);
-    return;
-  case MODULE:
-    VISIT_ARRAY(ast->module.definitions, ast->module.num_definitions);
-    return;
+    CASE(name, {});
+    CASE(integer, {});
+    CASE(string, {});
+    CASE(unary, { VISIT(unary.expr); });
+    CASE(binary, {
+      VISIT(binary.left);
+      VISIT(binary.right);
+    });
+    CASE(function, {
+      VISIT(function.name);
+      VISIT_ARRAY(function.params, function.num_params);
+      VISIT(function.returnType);
+      VISIT_ARRAY(function.stmts, function.num_stmts);
+    });
+    CASE(param, {
+      VISIT(param.name);
+      VISIT(param.type);
+    });
+    CASE(for_loop, {
+      VISIT(for_loop.init);
+      VISIT(for_loop.cond);
+      VISIT(for_loop.step);
+      VISIT_ARRAY(for_loop.stmts, for_loop.num_stmts);
+    });
+    CASE(assign, {
+      VISIT(assign.name);
+      VISIT(assign.value);
+    });
+    CASE(declaration, {
+      VISIT(declaration.name);
+      VISIT(declaration.value);
+    })
+    CASE(module, { VISIT_ARRAY(module.definitions, module.num_definitions); });
   }
 }
 
@@ -83,7 +84,7 @@ static void print_node(ASTNode *node) {
     printf("name: `%.*s`\n", (int)node->name.length, node->name.text);
     break;
   case INTEGER:
-    printf("integer: `%.*s`\n", (int)node->integer.length, node->integer.text);    
+    printf("integer: `%.*s`\n", (int)node->integer.length, node->integer.text);
     break;
   case STRING:
     printf("string: `%.*s`\n", (int)node->string.length, node->string.text);
@@ -110,7 +111,7 @@ static void print_node(ASTNode *node) {
     printf("declaration:\n");
     break;
   case MODULE:
-    printf("module:\n");    
+    printf("module:\n");
     break;
   }
 }

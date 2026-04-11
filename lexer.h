@@ -58,7 +58,8 @@ typedef struct {
   Token *data;
   size_t length;
 } TokenStream;
-
+    
+void lexer_print_token_stream(TokenStream stream);
 bool fill_token_stream(const char *source, TokenStream *out);
 void free_token_stream(TokenStream stream);
 bool peek_token(TokenStream stream, size_t token_index, Token *out);

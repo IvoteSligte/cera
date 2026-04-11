@@ -136,6 +136,14 @@ void lexer_print_tokens(const char *source) {
   }
 }
 
+void lexer_print_token_stream(TokenStream stream) {
+  for (size_t i = 0; i < stream.length; i++) {
+    Token token = stream.data[i];
+    printf("%-3zu %-10s `%.*s`\n", token.offset, lexer_token_name(token.kind), (int)token.length,
+           token.text);
+  }
+}
+
 bool peek_token(TokenStream stream, size_t token_index, Token *out) {
   if (token_index >= stream.length) {
     return false;

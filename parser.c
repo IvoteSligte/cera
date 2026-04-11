@@ -1,5 +1,6 @@
 #include "parser.h"
 #include "ast.h"
+#include "ast_macro.h"
 
 #include <stdarg.h>
 
@@ -74,26 +75,41 @@ void error_data_add(ErrorData *data, size_t token_index,
                   .$kind = __VA_ARGS__});                                      \
   return true;
 
-#define PARSER(name)                                                           \
-  bool parse_##name(TokenStream stream, size_t *token_index,                   \
-                    ASTNodeArray *node_array, size_t *node_index,              \
-                    ErrorData *error_data)
+#define LOG(message, name) eprintf("%s %s\n", message, name)
 
-#define BEGIN                                                                  \
-  size_t start_token_index = *token_index;                                     \
-  size_t start_node_index = *node_index;                                       \
-  Token token;                                                                 \
-  if (!peek_token(stream, *token_index, &token))                               \
-    return false;                                                              \
-  Span span = (Span){.offset = token.offset, .length = 0};                     \
-  size_t tree_size = 1;
-
-#define OK return true;
+#define OK                                                                     \
+  {                                                                            \
+    LOG("Exit OK:", parser_name);                                              \
+    return true;                                                               \
+  }
 #define FAIL                                                                   \
   {                                                                            \
     *token_index = start_token_index;                                          \
     *node_index = start_node_index;                                            \
+    LOG("Exit FAIL:", parser_name);                                            \
     return false;                                                              \
+  }
+
+#define PARSER_PROTOTYPE(name)                                                 \
+  bool parse_##name(TokenStream stream, size_t *token_index,                   \
+                    ASTNodeArray *node_array, size_t *node_index,              \
+                    ErrorData *error_data)
+
+#define BEGIN(name)                                                            \
+  size_t start_token_index = *token_index;                                     \
+  size_t start_node_index = *node_index;                                       \
+  Token token;                                                                 \
+  const char *parser_name = #name;                                             \
+  LOG("Enter:", parser_name);                                                  \
+  if (!peek_token(stream, *token_index, &token))                               \
+    FAIL;                                                                      \
+  Span span = (Span){.offset = token.offset, .length = 0};                     \
+  size_t tree_size = 1;
+
+#define PARSER(name, ...)                                                      \
+  PARSER_PROTOTYPE(name) {                                                     \
+    BEGIN(name);                                                               \
+    __VA_ARGS__;                                                               \
   }
 
 #define EXTEND_SPAN($span)                                                     \
@@ -136,67 +152,60 @@ void error_data_add(ErrorData *data, size_t token_index,
   if (num_##nodes > 0)                                                         \
     EXTEND_SPAN(GET(*node_index - 1).span);
 
-PARSER(name) {
-  BEGIN;
+PARSER(name, {
   EXPECT(tIDENT);
   YIELD(NAME, name, {token.text, token.length});
-}
+});
 
-PARSER(integer) {
-  BEGIN;
+PARSER(integer, {
   EXPECT(tNUMBER);
   YIELD(INTEGER, integer, {token.text, token.length});
-}
+});
 
-PARSER(string) {
-  BEGIN;
+PARSER(string, {
   EXPECT(tSTRING);
   YIELD(STRING, string, {token.text + 1, token.length - 2});
-}
+});
 
-PARSER(expr);
-PARSER(stmt);
+PARSER_PROTOTYPE(expr);
+PARSER_PROTOTYPE(stmt);
 
-PARSER(unary) {
-  BEGIN;
+PARSER(unary, {
   EXPECT_OP(tMINUS);
   MUST_PARSE(expr, expr);
   YIELD(UNARY, unary, {.op = op, .expr = expr});
-}
+});
 
-PARSER(binary) {
-  BEGIN;
+PARSER(binary, {
   MUST_PARSE(expr, left);
   EXPECT_OP(tPLUS, tMINUS, tSTAR, tSLASH);
   MUST_PARSE(expr, right);
   YIELD(BINARY, binary, {.op = op, .left = left, .right = right});
-}
+});
 
-PARSER(expr) {
-  BEGIN;
+PARSER(expr, {
   TRY_PARSE(name);
   TRY_PARSE(integer);
   TRY_PARSE(string);
   TRY_PARSE(unary);
   TRY_PARSE(binary);
   FAIL;
-}
+});
 
-PARSER(declaration);
+PARSER_PROTOTYPE(declaration);
 
-PARSER(assign) {
-  BEGIN;
+PARSER(assign, {
   MUST_PARSE(name, name);
   EXPECT_OP(tEQ);
   MUST_PARSE(expr, value);
   YIELD(ASSIGN, assign, {.op = op, .name = name, .value = value});
-}
+});
 
 bool parse_block(TokenStream stream, size_t *token_index,
                  ASTNodeArray *node_array, size_t *node_index,
                  ErrorData *error_data, size_t *num_out, Span *out_span,
                  size_t *out_tree_size) {
-  BEGIN;
+  BEGIN(block);
   EXPECT(tLBRACE);
 
   ZERO_OR_MORE(stmt, stmts)
@@ -217,8 +226,7 @@ bool parse_block(TokenStream stream, size_t *token_index,
     FAIL;                                                                      \
   EXTEND_SPAN(block_span)
 
-PARSER(for_loop) {
-  BEGIN;
+PARSER(for_loop, {
   MUST_PARSE(declaration, init);
   MUST_PARSE(expr, cond);
   MUST_PARSE(assign, step);
@@ -230,37 +238,33 @@ PARSER(for_loop) {
          .step = step,
          .stmts = stmts,
          .num_stmts = num_stmts});
-}
+});
 
-PARSER(declaration) {
-  BEGIN
+PARSER(declaration, {
   MUST_PARSE(name, name)
   EXPECT(tCOLONEQ)
   MUST_PARSE(expr, value)
 
   YIELD(DECLARATION, declaration, {.name = name, .value = value});
-}
+});
 
-PARSER(stmt) {
-  BEGIN;
+PARSER(stmt, {
   // FIXME: no semicolons
   TRY_PARSE(expr);
   TRY_PARSE(for_loop);
   TRY_PARSE(assign);
   TRY_PARSE(declaration);
   FAIL;
-}
+});
 
-PARSER(param) {
-  BEGIN
+PARSER(param, {
   MUST_PARSE(name, name)
   MUST_PARSE(name, type)
 
   YIELD(PARAM, param, {.name = name, .type = type});
-}
+});
 
-PARSER(function) {
-  BEGIN
+PARSER(function, {
   EXPECT(tFUNC)
   MUST_PARSE(name, name)
   ZERO_OR_MORE(param, params)
@@ -273,24 +277,21 @@ PARSER(function) {
          .num_params = num_params,
          .stmts = stmts,
          .num_stmts = num_stmts});
-}
+});
 
-PARSER(def) {
-  BEGIN;
+PARSER(def, {
   TRY_PARSE(function);
   TRY_PARSE(declaration);
   FAIL;
-}
+});
 
-PARSER(module) {
-  BEGIN;
+PARSER(module, {
   ZERO_OR_MORE(def, defs);
   YIELD(MODULE, module, {defs, num_defs});
-}
+});
 
 void print_parse_error(TokenStream stream, ErrorData error_data) {
   Token token = stream.data[error_data.first_unparsed_token];
-  // FIXME: weird token offset  
   eprintf(
       "Parse error: unexpected token `%.*s` at offset %zu. Expected one of [",
       (int)token.length, token.text, token.offset);
