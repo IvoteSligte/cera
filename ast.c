@@ -12,7 +12,6 @@ Span join_spans(Span left, Span right) {
   };
 }
 
-
 bool name_eq(Name left, Name right) {
   return strncmp(left.text, right.text, MIN(left.length, right.length));
 }
@@ -21,14 +20,8 @@ void free_ast(ASTNode *node_array) { free(node_array); }
 
 #define VISIT(index) ast_visit(node_array, index, depth + 1, callback)
 
-#define VISIT_ARRAY($start, $length)                                           \
-  {                                                                            \
-    size_t index = $start;                                                     \
-    for (size_t i = 0; i < ($length); i++) {                                   \
-      VISIT(index);                                                            \
-      index += node_array[index].tree_size;                                    \
-    }                                                                          \
-  }
+#define VISIT_ARRAY(start_index, length)                                       \
+  ITER_ARRAY(start_index, length, element, { VISIT(element_index); });
 
 void ast_visit(ASTNode *node_array, size_t index, size_t depth,
                void(callback)(ASTNode *node_array, size_t index,
@@ -54,7 +47,6 @@ void ast_visit(ASTNode *node_array, size_t index, size_t depth,
       VISIT_ARRAY(function_call.args, function_call.num_args);
     });
     CASE(function, {
-      VISIT(function.name);
       VISIT_ARRAY(function.params, function.num_params);
       if (function.has_return_type)
         VISIT(function.return_type);
@@ -74,6 +66,7 @@ void ast_visit(ASTNode *node_array, size_t index, size_t depth,
       VISIT(assign.name);
       VISIT(assign.value);
     });
+    CASE(return_stmt, { VISIT(return_stmt.expr); });
     CASE(declaration, {
       VISIT(declaration.name);
       VISIT(declaration.value);
@@ -90,23 +83,19 @@ static void print_node(ASTNode *node_array, size_t index, size_t depth) {
     panicf("Tried to print invalid AST node.\n");
     break;
 
-    CASE(name, {
-      printf("name: `%.*s`\n", (int)node->name.length, node->name.text);
-    });
-    CASE(integer, {
-      printf("integer: `%.*s`\n", (int)node->integer.length,
-             node->integer.text);
-    });
-    CASE(string, {
-      printf("string: `%.*s`\n", (int)node->string.length, node->string.text);
-    });
-    CASE(unary, { printf("unary: `%s`\n", token_name(node->unary.op)); });
-    CASE(binary, { printf("binary: `%s`\n", token_name(node->binary.op)); });
+    CASE(name, { printf("name: `%.*s`\n", (int)name.length, name.text); });
+    CASE(integer,
+         { printf("integer: `%.*s`\n", (int)integer.length, integer.text); });
+    CASE(string,
+         { printf("string: `%.*s`\n", (int)string.length, string.text); });
+    CASE(unary, { printf("unary: `%s`\n", token_name(unary.op)); });
+    CASE(binary, { printf("binary: `%s`\n", token_name(binary.op)); });
     CASE(function_call, { printf("function_call:\n"); })
     CASE(function, { printf("function:\n"); });
     CASE(param, { printf("param:\n"); });
     CASE(for_loop, { printf("for_loop:\n"); });
-    CASE(assign, { printf("assign: `%s`\n", token_name(node->assign.op)); });
+    CASE(assign, { printf("assign: `%s`\n", token_name(assign.op)); });
+    CASE(return_stmt, { printf("return_stmt:\n"); });
     CASE(declaration, { printf("declaration:\n"); });
     CASE(module, { printf("module:\n"); });
   }
@@ -133,6 +122,7 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(PARAM);
     N(FOR_LOOP);
     N(ASSIGN);
+    N(RETURN_STMT);
     N(DECLARATION);
     N(MODULE);
   }

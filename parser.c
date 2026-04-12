@@ -74,8 +74,8 @@ void error_data_add(ParseError *data, size_t token_index,
                   .kind = KIND,                                                \
                   .$kind = __VA_ARGS__})
 
-#define RETURN(KIND, $kind, ...)                                               \
-  YIELD(KIND, $kind, __VA_ARGS__);                                             \
+#define RETURN($kind, ...)                                                     \
+  YIELD(UPPER_##$kind, $kind, __VA_ARGS__);                                    \
   OK;
 
 int log_indent = 0;
@@ -215,22 +215,47 @@ int log_indent = 0;
 PARSER_PROTOTYPE(expr);
 PARSER_PROTOTYPE(stmt);
 
+bool parse_block(TokenStream stream, size_t *token_index,
+                 ASTNodeArray *node_array, size_t *node_index,
+                 ParseError *error_data, size_t *num_out, Span *out_span,
+                 size_t *out_tree_size) {
+  BEGIN(block);
+  EXPECT(tLBRACE);
+
+  ZERO_OR_MORE(stmt, stmts)
+  *num_out = num_stmts;
+
+  EXPECT(tRBRACE)
+  *out_span = span;
+  *out_tree_size += tree_size;
+  OK;
+}
+
+#define MUST_PARSE_BLOCK                                                       \
+  size_t stmts = *node_index;                                                  \
+  size_t num_stmts = 0;                                                        \
+  Span block_span;                                                             \
+  if (!parse_block(stream, token_index, node_array, node_index, error_data,    \
+                   &num_stmts, &block_span, &tree_size))                       \
+    FAIL;                                                                      \
+  EXTEND_SPAN(block_span);
+
 PARSER(name, {
   RESERVE;
   EXPECT(tIDENT);
-  RETURN(NAME, name, {token.text, token.length});
+  RETURN(name, {token.text, token.length});
 });
 
 PARSER(integer, {
   RESERVE;
   EXPECT(tNUMBER);
-  RETURN(INTEGER, integer, {token.text, token.length});
+  RETURN(integer, {token.text, token.length});
 });
 
 PARSER(string, {
   RESERVE;
   EXPECT(tSTRING);
-  RETURN(STRING, string, {token.text + 1, token.length - 2});
+  RETURN(string, {token.text + 1, token.length - 2});
 });
 
 PARSER(function_call, {
@@ -239,8 +264,7 @@ PARSER(function_call, {
   EXPECT(tLPAREN);
   ZERO_OR_MORE_SEPARATED(expr, args, tCOMMA);
   EXPECT(tRPAREN);
-  RETURN(FUNCTION_CALL, function_call,
-         {.name = name, .args = args, .num_args = num_args});
+  RETURN(function_call, {.name = name, .args = args, .num_args = num_args});
 });
 
 PARSER(paren_expr, {
@@ -266,7 +290,7 @@ PARSER(unary, {
   RESERVE;
   EXPECT_OP(tMINUS);
   MUST_PARSE(primary, expr);
-  RETURN(UNARY, unary, {.op = op, .expr = expr});
+  RETURN(unary, {.op = op, .expr = expr});
 });
 
 void fix_precedence(ASTNode *node_array, size_t index) {
@@ -299,11 +323,33 @@ PARSER(binary, {
   EXPECT_OP(tPLUS, tMINUS, tSTAR, tSLASH);
   MUST_PARSE(expr, right);
 
-  // TODO: expr with parens
   YIELD(BINARY, binary,
         {.op = op, .has_parens = false, .left = left, .right = right});
   fix_precedence(node_array->data, *node_index - 1);
   OK;
+});
+
+PARSER(param, {
+  RESERVE;
+  MUST_PARSE(name, name);
+  EXPECT(tCOL);
+  MUST_PARSE(name, type);
+  RETURN(param, {.name = name, .type = type, .inferred_type = {0}});
+});
+
+PARSER(function, {
+  RESERVE;
+  EXPECT(tLPAREN);
+  ZERO_OR_MORE_SEPARATED(param, params, tCOMMA);
+  EXPECT(tRPAREN);
+  MAY_PARSE(name, return_type);
+  MUST_PARSE_BLOCK;
+  RETURN(function, {.params = params,
+                    .num_params = num_params,
+                    .return_type = return_type,
+                    .has_return_type = has_return_type,
+                    .stmts = stmts,
+                    .num_stmts = num_stmts});
 });
 
 PARSER(expr, {
@@ -325,33 +371,16 @@ PARSER(assign, {
   EXPECT_OP(tEQ);
   MUST_PARSE(expr, value);
   EXPECT(tSEMI);
-  RETURN(ASSIGN, assign, {.op = op, .name = name, .value = value});
+  RETURN(assign, {.op = op, .name = name, .value = value});
 });
 
-bool parse_block(TokenStream stream, size_t *token_index,
-                 ASTNodeArray *node_array, size_t *node_index,
-                 ParseError *error_data, size_t *num_out, Span *out_span,
-                 size_t *out_tree_size) {
-  BEGIN(block);
-  EXPECT(tLBRACE);
-
-  ZERO_OR_MORE(stmt, stmts)
-  *num_out = num_stmts;
-
-  EXPECT(tRBRACE)
-  *out_span = span;
-  *out_tree_size += tree_size;
-  OK;
-}
-
-#define MUST_PARSE_BLOCK                                                       \
-  size_t stmts = *node_index;                                                  \
-  size_t num_stmts = 0;                                                        \
-  Span block_span;                                                             \
-  if (!parse_block(stream, token_index, node_array, node_index, error_data,    \
-                   &num_stmts, &block_span, &tree_size))                       \
-    FAIL;                                                                      \
-  EXTEND_SPAN(block_span)
+PARSER(return_stmt, {
+  RESERVE;
+  EXPECT(tRETURN);
+  MUST_PARSE(expr, expr);
+  EXPECT(tSEMI);
+  RETURN(return_stmt, {.expr = expr});
+});
 
 PARSER(for_loop, {
   RESERVE;
@@ -360,69 +389,48 @@ PARSER(for_loop, {
   MUST_PARSE(assign, step);
   MUST_PARSE_BLOCK;
 
-  RETURN(FOR_LOOP, for_loop,
-         {.init = init,
-          .cond = cond,
-          .step = step,
-          .stmts = stmts,
-          .num_stmts = num_stmts});
+  RETURN(for_loop, {.init = init,
+                    .cond = cond,
+                    .step = step,
+                    .stmts = stmts,
+                    .num_stmts = num_stmts});
+});
+
+PARSER(declaration_value, {
+  TRY_PARSE(expr);
+  TRY_PARSE(function);
+  OK;
 });
 
 PARSER(declaration, {
   RESERVE;
   MUST_PARSE(name, name);
-  EXPECT(tCOLCOL);
-  MUST_PARSE(expr, value);
+
+  EXPECT(tCOLCOL, tCOLEQ);
+  bool is_constant = token.kind == tCOLCOL;
+
+  MUST_PARSE(declaration_value, value);
   EXPECT(tSEMI);
 
-  RETURN(DECLARATION, declaration, {.name = name, .value = value});
+  RETURN(declaration, {.is_constant = is_constant,
+                       .name = name,
+                       .value = value,
+                       .inferred_type = (Type){0}});
 });
 
 PARSER(stmt, {
   TRY_PARSE(expr_stmt);
   TRY_PARSE(for_loop);
   TRY_PARSE(assign);
-  TRY_PARSE(declaration);
-  FAIL;
-});
-
-PARSER(param, {
-  RESERVE;
-  MUST_PARSE(name, name);
-  EXPECT(tCOL);
-  MUST_PARSE(name, type);
-  RETURN(PARAM, param, {.name = name, .type = type});
-});
-
-PARSER(function, {
-  RESERVE;
-  MUST_PARSE(name, name);
-  EXPECT(tCOLCOL);
-  EXPECT(tLPAREN);
-  ZERO_OR_MORE_SEPARATED(param, params, tCOMMA);
-  EXPECT(tRPAREN);
-  MAY_PARSE(name, return_type);
-  MUST_PARSE_BLOCK;
-  RETURN(FUNCTION, function,
-         {.name = name,
-          .params = params,
-          .num_params = num_params,
-          .return_type = return_type,
-          .has_return_type = has_return_type,
-          .stmts = stmts,
-          .num_stmts = num_stmts});
-});
-
-PARSER(def, {
-  TRY_PARSE(function);
+  TRY_PARSE(return_stmt);
   TRY_PARSE(declaration);
   FAIL;
 });
 
 PARSER(module, {
   RESERVE;
-  ZERO_OR_MORE(def, defs);
-  RETURN(MODULE, module, {defs, num_defs});
+  ZERO_OR_MORE(declaration, declarations);
+  RETURN(module, {declarations, num_declarations});
 });
 
 typedef struct {

@@ -29,11 +29,12 @@ typedef enum {
   tEQ,
   tCOL,
   tCOLEQ,
-  tCOLCOL,  
+  tCOLCOL,
   // keywords
   tSTRUCT,
   tUNION,
   tENUM,
+  tRETURN,  
 } TokenKind;
 
 typedef struct {

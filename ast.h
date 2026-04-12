@@ -19,6 +19,7 @@ typedef enum {
   PARAM,
   FOR_LOOP,
   ASSIGN,
+  RETURN_STMT,
   DECLARATION, // variable declaration
   MODULE,
 } ASTNodeKind;
@@ -31,6 +32,12 @@ typedef struct {
 bool name_eq(Name left, Name right);
 
 typedef struct ASTNode ASTNode;
+
+typedef struct {
+  enum { tyVOID = 0, tyINT, tySTRING, tyFUNCTION, tySTRUCT, tyUNION, tyALIAS } kind;
+  ASTNode *node; // NULL for primitive types
+} Type;
+
 typedef struct ASTNode {
   Span span;
   // The number of nodes in this AST. At least 1.
@@ -64,9 +71,9 @@ typedef struct ASTNode {
     struct {
       size_t name;
       size_t type;
+      Type inferred_type;      
     } param;
     struct {
-      size_t name;
       size_t params;
       size_t num_params;
       size_t return_type;
@@ -87,8 +94,13 @@ typedef struct ASTNode {
       size_t value;
     } assign;
     struct {
+      size_t expr;
+    } return_stmt;
+    struct {
+      bool is_constant;
       size_t name;
       size_t value;
+      Type inferred_type;
     } declaration;
     struct {
       size_t definitions;

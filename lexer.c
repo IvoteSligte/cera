@@ -41,6 +41,7 @@ const Matcher MATCHERS[] = {
     M(STRUCT, "struct", "struct"),
     M(UNION, "union", "union"),
     M(ENUM, "enum", "enum"),
+    M(RETURN, "return", "return"),
 };
 #undef M
 
@@ -73,13 +74,14 @@ const char *token_display_name(TokenKind kind) {
 int token_precedence(TokenKind kind) {
   switch (kind) {
   case tPLUS:
-  case tMINUS:    
-    return 0;    
+  case tMINUS:
+    return 0;
   case tSTAR:
   case tSLASH:
     return 1;
   default:
-    panicf("Tried to retrieve precedence of non-operator: `%s`\n", token_display_name(kind));
+    panicf("Tried to retrieve precedence of non-operator: `%s`\n",
+           token_display_name(kind));
     break;
   }
 }
@@ -121,7 +123,7 @@ LexResult lex(const char *source, size_t *offset, Token *out) {
 }
 
 static void print_error(const char *source, size_t offset) {
-  // TODO: better error message like in parser.c  
+  // TODO: better error message like in parser.c
   eprintf("Failed to match token in string: `%.*s`\n", 20, &source[offset]);
 }
 

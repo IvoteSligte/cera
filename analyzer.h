@@ -6,3 +6,8 @@ typedef struct {
   Span span;  
   char *message;
 } TypeError;
+
+typedef struct {
+  TypeError *data;
+  size_t length;
+} TypeErrorArray;
