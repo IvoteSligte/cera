@@ -2,18 +2,12 @@
 #include "analyzer.h"
 #include "ast_macro.h"
 
-Name as_name(ASTNode *node_array, size_t index) {
-  ASTNode *name_node = &node_array[index];
-  assert(name_node->kind == NAME);
-  return name_node->name;
-}
-
 // TODO: function types
 
 bool type_node_eq(ASTNode *left, ASTNode *right) {
   // only names can be types at the moment
   assert(left->kind == NAME);
-  assert(right->kind == NAME); 
+  assert(right->kind == NAME);
   return name_eq(left->name, right->name);
 }
 
@@ -37,10 +31,11 @@ bool type_eq(Type left, Type right) {
   ITER_ARRAY(start_index, length, element,                                     \
              { MUST_ANALYZE(element_index, element, defer); });
 
-#define MUST_ANALYZE_BLOCK(table, start_index, length, defer...)               \
+#define MUST_ANALYZE_BLOCK($table, start_index, length, defer...)              \
   {                                                                            \
-    if (!extend_table(table, node_array, start_index, length, error_data))     \
+    if (!extend_table($table, node_array, start_index, length, error_data))    \
       FAIL(defer);                                                             \
+    Table table = *($table);                                                   \
     MUST_ANALYZE_ARRAY(start_index, length, defer);                            \
   }
 
@@ -52,18 +47,61 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
   error_data->length++;
 }
 
-#define EXPECT(condition, node, $message, defer...)                            \
+#define EXPECT(condition, $index, $message, defer...)                          \
   if (!(condition)) {                                                          \
-    add_error(error_data, node_array[node].span, $message);                    \
+    add_error(error_data, node_array[$index].span, $message);                  \
     defer;                                                                     \
     return false;                                                              \
   }
 
 #define OK return true;
 
+bool is_pure_expr(ASTNode *node_array, size_t index) {
+  ASTNode *node = &node_array[index];
+  ITER_ARRAY(index, node->tree_size, expr, {
+    SWITCH(expr, {
+      CASE(function_call, { panicf("TODO"); });
+    default:;
+    });
+  });
+  return true;
+}
+
+bool get_name(ASTNode *node_array, size_t index, Name *out) {
+  ASTNode *node = &node_array[index];
+  size_t name_index;
+  SWITCH(node, {
+    CASE(declaration, { name_index = declaration.name; });
+    CASE(param, { name_index = param.name; });
+  default:
+    return false;
+  });
+  ASTNode *name_node = &node_array[name_index];
+  assert(name_node->kind == NAME);
+  *out = name_node->name;
+  return true;
+}
+
 typedef struct {
-  Name key;
-  ASTNode *value;
+  // not zero-delimited
+  char *text;
+  size_t length;
+} String;
+
+typedef struct {
+  TypeKind kind;
+  union {
+    ssize_t _int;
+    String string;
+    Type type;
+  };
+} Value;
+
+typedef struct {
+  Name name;
+  ASTNode *node;
+  Value value;
+  Type type;
 } Symbol;
 
 typedef struct Table Table;
@@ -73,75 +111,78 @@ typedef struct Table {
   size_t length;
 } Table;
 
-bool get_name(ASTNode *node_array, size_t index, Name *out) {
-  ASTNode *node = &node_array[index];
-  size_t name_index;
-  switch (node->kind) {
-    CASE(declaration, { name_index = declaration.name; });
-    CASE(param, { name_index = param.name; });
-  default:
-    return false;
+#define MATCH_PRIMITIVE(primitive, type_kind)                                  \
+  if (strncmp(name.text, #primitive, name.length)) {                           \
+    const char *text = #primitive;                                             \
+    Type type = {.kind = type_kind, 0};                                        \
+    *out = (Symbol){.name = {.text = text, .length = strlen(text)},            \
+                    .node = NULL,                                              \
+                    .value = {.kind = tyTYPE, .type = type},                   \
+                    .type = type};                                             \
+    return true;                                                               \
   }
-  ASTNode *name_node = &node_array[name_index];
-  assert(name_node->kind == NAME);
-  *out = name_node->name;
-  return true;
-}
 
-bool get_type(ASTNode *node, Type *out) {
-  switch (node->kind) {
-    CASE(declaration, {
-      *out = declaration.inferred_type;
-      return true;
-    });
-    CASE(param, {
-      *out = param.inferred_type;
-      return true;
-    });
-  default:
-    return false;
-  }
+bool get_builtin(Name name, Symbol *out) {
+  MATCH_PRIMITIVE(void, tyTYPE);
+  MATCH_PRIMITIVE(int, tyTYPE);
+  MATCH_PRIMITIVE(string, tyTYPE);
+  return false;
 }
 
 // Adds a symbol to the table, returning false if the key was already in the
 // table.
 bool add_symbol(Table *table, ASTNode *node_array, size_t index,
                 TypeErrorArray *error_data) {
-  Name key;
-  assert(get_name(node_array, index, &key));
+  Name name;
+  assert(get_name(node_array, index, &name));
+
+  Symbol builtin;
+  EXPECT(!get_builtin(name, &builtin), index,
+         strdup("declaration has the same name as a builtin"));
 
   for (size_t i = 0; i < table->length; i++) {
     Symbol symbol = table->data[i];
-    EXPECT(!name_eq(symbol.key, key), index, strdup("duplicate declaration"));
+    EXPECT(!name_eq(symbol.name, name), index, strdup("duplicate declaration"));
   }
+  ASTNode *node = &node_array[index];
+  Value value = {0};
+  if (node->kind == DECLARATION) {
+    node->declaration.value;
+  }
+
   table->data = realloc(table->data, sizeof(Symbol) * (table->length + 1));
-  table->data[table->length] = (Symbol){key, &node_array[index]};
+  table->data[table->length] =
+      (Symbol){.name = name, .node = node, .value = value, .type = {...}};
   table->length++;
   return true;
 }
 
-ASTNode *get_symbol(Table *table, Name key) {
+static bool get_symbol(Table *table, Name name, Symbol *out) {
+  if (get_builtin(name, out)) {
+    return true;
+  }
   for (size_t i = 0; i < table->length; i++) {
-    Symbol symbol = table->data[i];
-    if (name_eq(symbol.key, key)) {
-      return symbol.value;
+    Symbol *symbol = &table->data[i];
+    if (name_eq(symbol->name, name)) {
+      return symbol;
     }
   }
   if (table->parent == NULL) {
     return NULL;
   }
-  return get_symbol(table->parent, key);
+  return get_symbol(table->parent, name, out);
 }
 
-bool has_symbol(Table *table, Name key) {
-  return get_symbol(table, key) != NULL;
+bool has_symbol(Table *table, Name name) {
+  Symbol symbol;
+  return get_symbol(table, name, &symbol);
 }
 
 bool extend_table(Table *table, ASTNode *node_array, size_t start_index,
                   size_t length, TypeErrorArray *error_data) {
   ITER_ARRAY(start_index, length, node, {
     ASTNode *node = &node_array[node_index];
-    if (node->kind == DECLARATION) {
+    if (node->kind == DECLARATION || node->kind == PARAM) {
       if (!add_symbol(table, node_array, node_index, error_data))
         return false;
     }
@@ -149,22 +190,51 @@ bool extend_table(Table *table, ASTNode *node_array, size_t start_index,
   return true;
 }
 
+Table get_top_table(Table table) {
+  if (table.parent == NULL)
+    return table;
+  else
+    return get_top_table(*table.parent);
+}
+
+bool analyze_type(ASTNode *node_array, size_t index, Type *out, Table table,
+                  TypeErrorArray *error_data) {
+  ASTNode *node = &node_array[index];
+  SWITCH(node, {
+    CASE(name, {
+      // NOTE: currently does not have a unique namespace for types and
+      // variables
+      Symbol symbol = {0};
+      EXPECT(get_symbol(&table, name, &symbol), index,
+             strdup("undefined type"));
+      EXPECT((symbol.value.kind == tyTYPE), index, strdup("not a type"));
+      *out = symbol.value.type;
+      return true;
+    });
+  default:
+    panicf("Tried to analyze_type a non-type node. Kind: `%s`\n",
+           ast_node_name(node->kind));
+  });
+}
+
 bool analyze(ASTNode *node_array, size_t index, Type *type, Type return_type,
              Table table, TypeErrorArray *error_data) {
   ASTNode *node = &node_array[index];
-  switch (node->kind) {
-  case INVALID:
-    panicf("Tried to analyze invalid node.\n");
-    break;
-
+  SWITCH(node, {
     CASE(name, {
-      ASTNode *symbol = get_symbol(&table, name);
+      Symbol *symbol = get_symbol(&table, name);
       EXPECT((symbol != NULL), index, strdup("undefined variable"));
-      assert(get_type(symbol, type));
+      *type = symbol->type;
       OK;
     });
-    CASE(integer, { type->kind = tyINT; OK; });
-    CASE(string, { type->kind = tySTRING; OK; });
+    CASE(integer, {
+      type->kind = tyINT;
+      OK;
+    });
+    CASE(string, {
+      type->kind = tySTRING;
+      OK;
+    });
     CASE(unary, {
       MUST_ANALYZE(unary.expr, expr);
       if (unary.op == tMINUS) {
@@ -207,15 +277,23 @@ bool analyze(ASTNode *node_array, size_t index, Type *type, Type return_type,
       MUST_ANALYZE_BLOCK(&table, function.stmts, function.num_stmts,
                          free(table.data));
       free(table.data);
-      // TODO: set type
+      type->kind = tyFUNCTION;
+      type->node = node;
       OK;
     });
     CASE(param, {
-      // TODO: set type
+      MUST_ANALYZE(param.type, type);
+      *type = type_type;
       OK;
     });
-    CASE(for_loop, { OK; });
-    CASE(assign, { OK; });
+    CASE(for_loop, {
+      panicf("TODO\n");
+      OK;
+    });
+    CASE(assign, {
+      panicf("TODO\n");
+      OK;
+    });
     CASE(return_stmt, {
       MUST_ANALYZE(return_stmt.expr, expr);
       EXPECT(type_eq(expr_type, return_type), return_stmt.expr,
@@ -224,7 +302,11 @@ bool analyze(ASTNode *node_array, size_t index, Type *type, Type return_type,
     });
     CASE(declaration, {
       MUST_ANALYZE(declaration.value, value);
-      declaration.inferred_type = value_type;
+      if ((table.parent == NULL) || declaration.is_constant) {
+        // TODO: determine lack of side-effects and compute value
+      }
+      // TODO: check if this is a constant that refers to a runtime declaration
+      // (in a function)
       OK;
     });
     CASE(module, {
@@ -234,5 +316,5 @@ bool analyze(ASTNode *node_array, size_t index, Type *type, Type return_type,
       free(table.data);
       OK;
     });
-  }
+  });
 }

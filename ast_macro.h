@@ -12,18 +12,29 @@
 #define UPPER_declaration DECLARATION
 #define UPPER_module MODULE
 
+#define SWITCH(node, cases)                                                    \
+  {                                                                            \
+    ASTNode *__node = node;                                                    \
+    switch (__node->kind) {                                                    \
+    case INVALID:                                                              \
+      panicf("matched INVALID AST node");                                      \
+      cases;                                                                   \
+    }                                                                          \
+  }
+
 #define CASE(name, ...)                                                        \
   case UPPER_##name: {                                                         \
-    __auto_type name = node->name;                                             \
+    __auto_type name = __node->name;                                           \
     __VA_ARGS__                                                                \
     break;                                                                     \
   }
 
-#define ITER_ARRAY(start_index, length, element_name, ...)                     \
+#define ITER_ARRAY(start_index, length, element, ...)                     \
   {                                                                            \
-    size_t element_name##_index = start_index;                                 \
+    size_t element##_index = start_index;                                      \
     for (size_t i = 0; i < length; i++) {                                      \
+      ASTNode *element = &node_array[element##_index];                         \
       __VA_ARGS__;                                                             \
-      element_name##_index += node_array[element_name##_index].tree_size;      \
+      element##_index += node_array[element##_index].tree_size;                \
     }                                                                          \
   }

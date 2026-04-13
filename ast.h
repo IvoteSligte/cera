@@ -33,8 +33,19 @@ bool name_eq(Name left, Name right);
 
 typedef struct ASTNode ASTNode;
 
+typedef enum {
+  tyVOID = 0,
+  tyINT,
+  tySTRING,
+  tyFUNCTION,
+  tySTRUCT,
+  tyUNION,
+  tyALIAS,
+  tyTYPE,  
+} TypeKind;
+
 typedef struct {
-  enum { tyVOID = 0, tyINT, tySTRING, tyFUNCTION, tySTRUCT, tyUNION, tyALIAS } kind;
+  TypeKind kind;
   ASTNode *node; // NULL for primitive types
 } Type;
 
@@ -71,7 +82,6 @@ typedef struct ASTNode {
     struct {
       size_t name;
       size_t type;
-      Type inferred_type;      
     } param;
     struct {
       size_t params;
@@ -100,7 +110,6 @@ typedef struct ASTNode {
       bool is_constant;
       size_t name;
       size_t value;
-      Type inferred_type;
     } declaration;
     struct {
       size_t definitions;

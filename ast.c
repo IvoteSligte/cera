@@ -29,11 +29,7 @@ void ast_visit(ASTNode *node_array, size_t index, size_t depth,
   ASTNode *node = &node_array[index];
   callback(node_array, index, depth);
 
-  switch (node->kind) {
-  case INVALID:
-    panicf("Tried to visit invalid AST node.\n");
-    break;
-
+  SWITCH(node, {
     CASE(name, {});
     CASE(integer, {});
     CASE(string, {});
@@ -72,17 +68,13 @@ void ast_visit(ASTNode *node_array, size_t index, size_t depth,
       VISIT(declaration.value);
     })
     CASE(module, { VISIT_ARRAY(module.definitions, module.num_definitions); });
-  }
+  });
 }
 
 static void print_node(ASTNode *node_array, size_t index, size_t depth) {
   ASTNode *node = &node_array[index];
   printf("%*.*s", (int)depth, (int)depth, " ");
-  switch (node->kind) {
-  case INVALID:
-    panicf("Tried to print invalid AST node.\n");
-    break;
-
+  SWITCH(node, {
     CASE(name, { printf("name: `%.*s`\n", (int)name.length, name.text); });
     CASE(integer,
          { printf("integer: `%.*s`\n", (int)integer.length, integer.text); });
@@ -98,7 +90,7 @@ static void print_node(ASTNode *node_array, size_t index, size_t depth) {
     CASE(return_stmt, { printf("return_stmt:\n"); });
     CASE(declaration, { printf("declaration:\n"); });
     CASE(module, { printf("module:\n"); });
-  }
+  });
 }
 
 void ast_print_nodes(ASTNode *node_array, size_t index) {
