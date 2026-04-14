@@ -75,7 +75,7 @@ int log_indent = 0;
   }
 
 #define PARSER_PARAMS                                                          \
-  TokenStream stream, size_t *token_index, Allocator *allocator,               \
+  Allocator *allocator, TokenStream stream, size_t *token_index,               \
       ParseError *error_data
 #define PARSER_PROTOTYPE(name) bool parse_##name(PARSER_PARAMS)
 
@@ -139,7 +139,7 @@ int log_indent = 0;
   EXPECT(__VA_ARGS__);                                                         \
   TokenKind op = token.kind;
 
-#define PARSE(name) parse_##name(stream, token_index, allocator, error_data)
+#define PARSE(name) parse_##name(allocator, stream, token_index, error_data)
 
 // Try to parse and return on failure.
 #define MUST_PARSE(name, node)                                                 \
@@ -216,7 +216,7 @@ bool parse_block(PARSER_PARAMS, ASTNode **out_first_stmt, Span *out_span) {
 #define MUST_PARSE_BLOCK                                                       \
   ASTNode *first_stmt = NULL;                                                  \
   Span block_span = {0};                                                       \
-  if (!parse_block(stream, token_index, allocator, error_data, &first_stmt,    \
+  if (!parse_block(allocator, stream, token_index, error_data, &first_stmt,    \
                    &block_span))                                               \
     FAIL;                                                                      \
   EXTEND_SPAN(block_span);
@@ -420,10 +420,16 @@ OffsetInfo get_offset_info(const char *source, size_t offset) {
 
 void print_parse_error(const char *source, TokenStream stream,
                        ParseError error_data) {
-  Token token = stream.data[error_data.first_unparsed_token];
-  eprintf("Parse error: unexpected token `%.*s` at offset %zu. "
-          "Expected one of [",
-          (int)token.length, token.text, token.offset);
+  Token token;
+  if (error_data.first_unparsed_token == stream.length) {
+    eprintf("Parse error: unexpected token EOF. "
+            "Expected one of [");
+  } else {
+    token = stream.data[error_data.first_unparsed_token];
+    eprintf("Parse error: unexpected token `%.*s` at offset %zu. "
+            "Expected one of [",
+            (int)token.length, token.text, token.offset);
+  }
   for (size_t i = 0; i < error_data.num_expected; i++) {
     TokenKind expected = error_data.expected[i];
     if (i > 0)
@@ -431,25 +437,27 @@ void print_parse_error(const char *source, TokenStream stream,
     eprintf("`%s`", token_display_name(expected));
   }
   eprintf("].\n");
-  OffsetInfo oi = get_offset_info(source, token.offset);
-  eprintf(">>> line %zu, column %d\n", oi.line_number, oi.column_number);
-  eprintf(" | %.*s\n", oi.line_length, oi.line);
-  eprintf(" | %*s", oi.column_number, " ");
-  for (size_t i = 0; i < token.length; i++)
-    eprintf("~");
-  eprintf("\n");
+
+  if (error_data.first_unparsed_token != stream.length) {
+    OffsetInfo oi = get_offset_info(source, token.offset);
+    eprintf(">>> line %zu, column %d\n", oi.line_number, oi.column_number);
+    eprintf(" | %.*s\n", oi.line_length, oi.line);
+    eprintf(" | %*s", oi.column_number, " ");
+    for (size_t i = 0; i < token.length; i++)
+      eprintf("~");
+    eprintf("\n");
+  }
 }
 
 bool parse(TokenStream stream, AST *out_ast, ParseError *error_data) {
   Allocator allocator = {0};
   size_t token_index = 0;
   *error_data = (ParseError){0};
-  bool result = parse_module(stream, &token_index, &allocator, error_data);
+  bool result = parse_module(&allocator, stream, &token_index, error_data);
   *out_ast = (AST){.allocator = allocator,
                    .head = allocator.data[allocator.length - 1]};
   if (token_index < stream.length) {
     return false;
   }
-
   return result;
 }
