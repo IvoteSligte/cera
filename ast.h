@@ -111,6 +111,7 @@ typedef struct ASTNode {
     } return_stmt;
     struct {
       bool is_constant;
+      bool is_declared;
       size_t name;
       size_t value;
     } declaration;

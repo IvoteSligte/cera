@@ -25,7 +25,8 @@ bool type_eq(Type left, Type right) {
   }
 
 #define MUST_ANALYZE(index, name, defer...)                                    \
-  if (!analyze_node(node_array, index, table, return_type, error_data))        \
+  if (!analyze_node(node_array, index, table, return_type, error_data,         \
+                    is_second_pass))                                           \
     FAIL(defer);                                                               \
   Type name##_type = node_array[index].type;
 
@@ -53,17 +54,6 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
     node->is_analyzed = true;                                                  \
     return true;                                                               \
   }
-
-bool is_pure_expr(NODE_ARGS) {
-  DEF_NODE;
-  ITER_ARRAY(index, node->tree_size, expr, {
-    SWITCH(expr, {
-      CASE(function_call, { panicf("TODO"); });
-    default:;
-    });
-  });
-  return true;
-}
 
 typedef struct {
   // not zero-delimited
@@ -114,7 +104,7 @@ bool get_builtin(Name name, Symbol *out) {
 
 // Adds a symbol to the table, returning false if the key was already in the
 // table.
-bool add_symbol(NODE_ARGS, Table *table, Name name, Type type, Value value,
+bool add_symbol(NODE_ARGS, Table *table, Name name, Type type,
                 TypeErrorArray *error_data) {
   Symbol builtin;
   EXPECT(!get_builtin(name, &builtin), index,
@@ -127,12 +117,12 @@ bool add_symbol(NODE_ARGS, Table *table, Name name, Type type, Value value,
   DEF_NODE;
   table->data = realloc(table->data, sizeof(Symbol) * (table->length + 1));
   table->data[table->length] =
-      (Symbol){.name = name, .node = node, .value = value, .type = type};
+      (Symbol){.name = name, .node = node, .value = {0}, .type = type};
   table->length++;
   return true;
 }
 
-static bool get_symbol(Table *table, Name name, Symbol *out) {
+bool get_symbol(Table *table, Name name, Symbol *out) {
   if (get_builtin(name, out)) {
     return true;
   }
@@ -146,6 +136,17 @@ static bool get_symbol(Table *table, Name name, Symbol *out) {
     return NULL;
   }
   return get_symbol(table->parent, name, out);
+}
+
+bool set_symbol_value(Table *table, Name name, Value value) {
+  for (size_t i = 0; i < table->length; i++) {
+    Symbol *symbol = &table->data[i];
+    if (name_eq(symbol->name, name)) {
+      symbol->value = value;
+      return true;
+    }
+  }
+  return false;
 }
 
 Table get_top_table(Table table) {
@@ -163,28 +164,35 @@ bool analyze_type(NODE_ARGS, Type *out, Table table,
       // NOTE: currently does not have a unique namespace for types and
       // variables
       Symbol symbol = {0};
-      EXPECT(get_symbol(&table, name, &symbol), index,
+      EXPECT(get_symbol(&table, *name, &symbol), index,
              strdup("undefined type"));
       EXPECT((symbol.value.kind == tyTYPE), index, strdup("not a type"));
       *out = symbol.value.type;
       return true;
     });
   default:
-    panicf("Tried to analyze_type a non-type node. Kind: `%s`\n",
+    panicf("Tried to analyze a non-type node as type. Kind: `%s`\n",
            ast_node_name(node->kind));
   });
 }
 
-bool analyze_node(NODE_ARGS, Table *table, Type return_type,
-                  TypeErrorArray *error_data) {
+typedef enum {
+  ERROR,
+  UNFINISHED,
+  OK,
+} Result;
+
+Result analyze_node(NODE_ARGS, Table *table, Type return_type,
+                    TypeErrorArray *error_data, bool is_second_pass) {
   DEF_NODE;
   if (node->is_analyzed)
     return true;
   SWITCH(node, {
     CASE(name, {
       Symbol symbol = {0};
-      EXPECT(get_symbol(table, *name, &symbol), index,
-             strdup("undefined variable"));
+      if (!get_symbol(table, *name, &symbol)) {
+        return UNFINISHED;
+      }
       OK(symbol.type);
     });
     CASE(integer, { OK((Type){.kind = tyINT}); });
@@ -223,10 +231,10 @@ bool analyze_node(NODE_ARGS, Table *table, Type return_type,
       MUST_ANALYZE_ARRAY(function_call->args);
       EXPECT((function_type.kind == tyFUNCTION), function_call->function,
              strdup("not a function"));
+      Type function_return_type = {0};
       {
-        ASTNode *function_node = function_type.node;
-        assert(function_node->kind == FUNCTION);
-        __auto_type function = &function_node->function;
+        assert(function_type.node->kind == FUNCTION);
+        __auto_type function = &function_type.node->function;
 
         EXPECT((function_call->args.length == function->params.length), index,
                strdup("argument count mismatch"));
@@ -240,10 +248,11 @@ bool analyze_node(NODE_ARGS, Table *table, Type return_type,
           arg_index += arg->tree_size;
           param_index += param->tree_size;
         }
+        if (function->has_return_type) {
+          function_return_type = node_array[function->return_type].type;
+        }
       }
-      panicf("TODO");
-      ASTNode *function_node = NULL; // TODO
-      OK((Type){.kind = tyFUNCTION, .node = function_node});
+      OK(function_return_type);
     });
     CASE(function, {
       Table local_table = (Table){.parent = table, 0};
@@ -279,8 +288,21 @@ bool analyze_node(NODE_ARGS, Table *table, Type return_type,
     });
     CASE(declaration, {
       MUST_ANALYZE(declaration->value, value);
+
+      ASTNode *name_node = &node_array[declaration->name];
+      assert(name_node->kind == NAME);
+      Name name = name_node->name;
+          
+      if (!declaration->is_declared) {
+        EXPECT(add_symbol(node_array, index, table, name, value_type,
+                          error_data),
+               index, strdup("duplicate declaration"));
+        declaration->is_declared = true;
+      }
       if ((table->parent == NULL) || declaration->is_constant) {
         // TODO: determine lack of side-effects and compute value
+        Value value = {0};
+        set_symbol_value(table, name, value);
       }
       // TODO: check if this is a constant that refers to a runtime declaration
       // (in a function)
@@ -298,7 +320,15 @@ bool analyze_node(NODE_ARGS, Table *table, Type return_type,
 
 bool analyze(ASTNode *node_array, TypeErrorArray *error_data) {
   Table table = {0};
-  bool result = analyze_node(node_array, 0, &table, (Type){0}, error_data);
+  Result result = 0;
+  // needs two passes so that forward references are also resolved
+  for (bool is_second_pass = false; !is_second_pass; is_second_pass = true) {
+    Result result = analyze_node(node_array, 0, &table, (Type){0}, error_data,
+                                 is_second_pass);
+    if (result == ERROR)
+      break;
+  }
+  assert(result != UNFINISHED); // should be finished after 2 passes
   free(table.data);
-  return result;
+  return result == OK;
 }
