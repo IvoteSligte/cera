@@ -15,6 +15,9 @@ bool type_eq(Type left, Type right) {
   return (left.kind == right.kind) && type_node_eq(left.node, right.node);
 }
 
+#define DEF_NODE ASTNode *node = &node_array[index]
+#define NODE_ARGS ASTNode *node_array, size_t index
+
 #define FAIL(defer...)                                                         \
   {                                                                            \
     defer;                                                                     \
@@ -23,21 +26,13 @@ bool type_eq(Type left, Type right) {
 
 #define MUST_ANALYZE(index, name, defer...)                                    \
   Type name##_type = {0};                                                      \
-  if (!analyze(node_array, index, &name##_type, return_type, table,            \
-               error_data))                                                    \
+  if (!analyze_node(node_array, index, wait_list, table, return_type,          \
+                    &name##_type, error_data))                                 \
     FAIL(defer);
 
 #define MUST_ANALYZE_ARRAY(start_index, length, defer...)                      \
   ITER_ARRAY(start_index, length, element,                                     \
              { MUST_ANALYZE(element_index, element, defer); });
-
-#define MUST_ANALYZE_BLOCK($table, start_index, length, defer...)              \
-  {                                                                            \
-    if (!extend_table($table, node_array, start_index, length, error_data))    \
-      FAIL(defer);                                                             \
-    Table table = *($table);                                                   \
-    MUST_ANALYZE_ARRAY(start_index, length, defer);                            \
-  }
 
 void add_error(TypeErrorArray *error_data, Span span, char *message) {
   TypeError error = {.span = span, .message = message};
@@ -56,29 +51,14 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
 
 #define OK return true;
 
-bool is_pure_expr(ASTNode *node_array, size_t index) {
-  ASTNode *node = &node_array[index];
+bool is_pure_expr(NODE_ARGS) {
+  DEF_NODE;
   ITER_ARRAY(index, node->tree_size, expr, {
     SWITCH(expr, {
       CASE(function_call, { panicf("TODO"); });
     default:;
     });
   });
-  return true;
-}
-
-bool get_name(ASTNode *node_array, size_t index, Name *out) {
-  ASTNode *node = &node_array[index];
-  size_t name_index;
-  SWITCH(node, {
-    CASE(declaration, { name_index = declaration.name; });
-    CASE(param, { name_index = param.name; });
-  default:
-    return false;
-  });
-  ASTNode *name_node = &node_array[name_index];
-  assert(name_node->kind == NAME);
-  *out = name_node->name;
   return true;
 }
 
@@ -131,11 +111,8 @@ bool get_builtin(Name name, Symbol *out) {
 
 // Adds a symbol to the table, returning false if the key was already in the
 // table.
-bool add_symbol(Table *table, ASTNode *node_array, size_t index,
+bool add_symbol(NODE_ARGS, Table *table, Name name, Type type, Value value,
                 TypeErrorArray *error_data) {
-  Name name;
-  assert(get_name(node_array, index, &name));
-
   Symbol builtin;
   EXPECT(!get_builtin(name, &builtin), index,
          strdup("declaration has the same name as a builtin"));
@@ -144,15 +121,10 @@ bool add_symbol(Table *table, ASTNode *node_array, size_t index,
     Symbol symbol = table->data[i];
     EXPECT(!name_eq(symbol.name, name), index, strdup("duplicate declaration"));
   }
-  ASTNode *node = &node_array[index];
-  Value value = {0};
-  if (node->kind == DECLARATION) {
-    node->declaration.value;
-  }
-
+  DEF_NODE;
   table->data = realloc(table->data, sizeof(Symbol) * (table->length + 1));
   table->data[table->length] =
-      (Symbol){.name = name, .node = node, .value = value, .type = {...}};
+      (Symbol){.name = name, .node = node, .value = value, .type = type};
   table->length++;
   return true;
 }
@@ -173,23 +145,6 @@ static bool get_symbol(Table *table, Name name, Symbol *out) {
   return get_symbol(table->parent, name, out);
 }
 
-bool has_symbol(Table *table, Name name) {
-  Symbol symbol;
-  return get_symbol(table, name, &symbol);
-}
-
-bool extend_table(Table *table, ASTNode *node_array, size_t start_index,
-                  size_t length, TypeErrorArray *error_data) {
-  ITER_ARRAY(start_index, length, node, {
-    ASTNode *node = &node_array[node_index];
-    if (node->kind == DECLARATION || node->kind == PARAM) {
-      if (!add_symbol(table, node_array, node_index, error_data))
-        return false;
-    }
-  });
-  return true;
-}
-
 Table get_top_table(Table table) {
   if (table.parent == NULL)
     return table;
@@ -197,9 +152,25 @@ Table get_top_table(Table table) {
     return get_top_table(*table.parent);
 }
 
-bool analyze_type(ASTNode *node_array, size_t index, Type *out, Table table,
+typedef struct {
+  Name for_name;
+  ASTNode *node; // node that is waiting for a declaration named for_name
+} Waiting;
+
+typedef struct {
+  Waiting *data;
+  size_t length;
+} WaitList;
+
+void add_waiting(WaitList *wait_list, Name for_name, ASTNode *node) {
+  wait_list->data = realloc(wait_list->data, sizeof(Waiting) * (wait_list->length + 1));  
+  wait_list->data[wait_list->length] = (Waiting){for_name, node};
+  wait_list->length++;
+}
+
+bool analyze_type(NODE_ARGS, Type *out, Table table,
                   TypeErrorArray *error_data) {
-  ASTNode *node = &node_array[index];
+  DEF_NODE;
   SWITCH(node, {
     CASE(name, {
       // NOTE: currently does not have a unique namespace for types and
@@ -217,22 +188,24 @@ bool analyze_type(ASTNode *node_array, size_t index, Type *out, Table table,
   });
 }
 
-bool analyze(ASTNode *node_array, size_t index, Type *type, Type return_type,
-             Table table, TypeErrorArray *error_data) {
-  ASTNode *node = &node_array[index];
+bool analyze_node(NODE_ARGS, WaitList *wait_list, Table *table,
+                  Type return_type, Type *expr_type,
+                  TypeErrorArray *error_data) {
+  DEF_NODE;
   SWITCH(node, {
     CASE(name, {
-      Symbol *symbol = get_symbol(&table, name);
-      EXPECT((symbol != NULL), index, strdup("undefined variable"));
-      *type = symbol->type;
+      Symbol symbol = {0};
+      EXPECT(get_symbol(table, name, &symbol), index,
+             strdup("undefined variable"));
+      *expr_type = symbol.type;
       OK;
     });
     CASE(integer, {
-      type->kind = tyINT;
+      expr_type->kind = tyINT;
       OK;
     });
     CASE(string, {
-      type->kind = tySTRING;
+      expr_type->kind = tySTRING;
       OK;
     });
     CASE(unary, {
@@ -242,6 +215,7 @@ bool analyze(ASTNode *node_array, size_t index, Type *type, Type return_type,
                strdup("cannot apply unary operator `-` to non-numeric type"));
         OK;
       }
+      // TODO: set expr_type
       panicf("Unknown unary operator: `%s`\n", token_display_name(unary.op));
     });
     CASE(binary, {
@@ -259,31 +233,31 @@ bool analyze(ASTNode *node_array, size_t index, Type *type, Type return_type,
         EXPECT((left_type.kind == right_type.kind), index,
                strdup("types on both sides of the binary arithmetic operator "
                       "must be the same"));
+        // TODO: set expr_type
         OK;
       }
       panicf("Unknown binary operator: `%s`\n", token_display_name(binary.op));
     });
     CASE(function_call, { OK; });
     CASE(function, {
-      Table table = (Table){.parent = &table, 0};
+      Table local_table = (Table){.parent = table, 0};
+      Table *table = &local_table;
 
-      MUST_ANALYZE_BLOCK(&table, function.params, function.num_params,
-                         free(table.data));
+      MUST_ANALYZE_ARRAY(function.params, function.num_params,
+                         free(local_table.data));
       Type return_type = {.kind = tyVOID};
       if (function.has_return_type) {
-        MUST_ANALYZE(function.return_type, declared, free(table.data));
+        MUST_ANALYZE(function.return_type, declared, free(local_table.data));
         return_type = declared_type;
       }
-      MUST_ANALYZE_BLOCK(&table, function.stmts, function.num_stmts,
-                         free(table.data));
-      free(table.data);
-      type->kind = tyFUNCTION;
-      type->node = node;
+      MUST_ANALYZE_ARRAY(function.stmts, function.num_stmts, free(local_table.data));
+      free(local_table.data);
+      expr_type->kind = tyFUNCTION;
+      expr_type->node = node;
       OK;
     });
     CASE(param, {
       MUST_ANALYZE(param.type, type);
-      *type = type_type;
       OK;
     });
     CASE(for_loop, {
@@ -302,7 +276,7 @@ bool analyze(ASTNode *node_array, size_t index, Type *type, Type return_type,
     });
     CASE(declaration, {
       MUST_ANALYZE(declaration.value, value);
-      if ((table.parent == NULL) || declaration.is_constant) {
+      if ((table->parent == NULL) || declaration.is_constant) {
         // TODO: determine lack of side-effects and compute value
       }
       // TODO: check if this is a constant that refers to a runtime declaration
@@ -310,11 +284,22 @@ bool analyze(ASTNode *node_array, size_t index, Type *type, Type return_type,
       OK;
     });
     CASE(module, {
-      Table table = {0};
-      MUST_ANALYZE_BLOCK(&table, module.definitions, module.num_definitions,
-                         free(table.data));
-      free(table.data);
+      Table local_table = {0};
+      Table* table = &local_table;
+      MUST_ANALYZE_ARRAY(module.definitions, module.num_definitions,
+                         free(local_table.data));
+      free(local_table.data);
       OK;
     });
   });
+}
+
+bool analyze(ASTNode *node_array, TypeErrorArray *error_data) {
+  WaitList wait_list = {0};
+  Table table = {0};
+  bool result = analyze_node(node_array, 0, &wait_list, &table, (Type){0}, NULL,
+                             error_data);
+  free(wait_list.data);
+  free(table.data);
+  return result;
 }

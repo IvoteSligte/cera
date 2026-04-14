@@ -11,3 +11,5 @@ typedef struct {
   TypeError *data;
   size_t length;
 } TypeErrorArray;
+
+bool analyze(ASTNode* node_array, TypeErrorArray* error_data);
