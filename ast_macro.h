@@ -24,17 +24,18 @@
 
 #define CASE(name, ...)                                                        \
   case UPPER_##name: {                                                         \
-    __auto_type name = &__node->name;                                           \
+    __auto_type name = &__node->name;                                          \
     __VA_ARGS__                                                                \
     break;                                                                     \
   }
 
-#define ITER_ARRAY(array, element, ...)                                        \
+#define ITER_ARRAY(first_element, element, ...)                                \
   {                                                                            \
-    size_t element##_index = (array).start_index;                              \
-    for (size_t i = 0; i < (array).length; i++) {                              \
-      ASTNode *element = &node_array[element##_index];                         \
+    ASTNode *element = first_element;                                          \
+    size_t i = 0;                                                              \
+    while (element != NULL) {                                                  \
       __VA_ARGS__;                                                             \
-      element##_index += node_array[element##_index].tree_size;                \
+      element = element->next_sibling;                                         \
+      i++;                                                                     \
     }                                                                          \
   }

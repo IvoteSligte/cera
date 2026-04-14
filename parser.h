@@ -13,6 +13,6 @@ typedef struct {
   size_t num_expected;
 } ParseError;
 
-bool parse(TokenStream stream, ASTNode **out, ParseError *error_data);
+bool parse(TokenStream stream, AST *out_ast, ParseError *error_data);
 
 void print_parse_error(const char* source, TokenStream stream, ParseError error_data);

@@ -2,21 +2,7 @@
 #include "analyzer.h"
 #include "ast_macro.h"
 
-// TODO: function types
-
-bool type_node_eq(ASTNode *left, ASTNode *right) {
-  // only names can be types at the moment
-  assert(left->kind == NAME);
-  assert(right->kind == NAME);
-  return name_eq(left->name, right->name);
-}
-
-bool type_eq(Type left, Type right) {
-  return (left.kind == right.kind) && type_node_eq(left.node, right.node);
-}
-
-#define DEF_NODE ASTNode *node = &node_array[index]
-#define NODE_ARGS ASTNode *node_array, size_t index
+typedef RandomAllocator Allocator;
 
 #define FAIL(defer...)                                                         \
   {                                                                            \
@@ -24,14 +10,14 @@ bool type_eq(Type left, Type right) {
     return false;                                                              \
   }
 
-#define MUST_ANALYZE(index, name, defer...)                                    \
-  if (!analyze_node(node_array, index, table, return_type, error_data,         \
+#define MUST_ANALYZE(node, name, defer...)                                     \
+  if (!analyze_node(allocator, node, table, return_type, error_data,           \
                     is_second_pass))                                           \
     FAIL(defer);                                                               \
-  Type name##_type = node_array[index].type;
+  Type name##_type = node->type;
 
 #define MUST_ANALYZE_ARRAY(array, defer...)                                    \
-  ITER_ARRAY(array, element, { MUST_ANALYZE(element_index, element, defer); });
+  ITER_ARRAY(array, element, { MUST_ANALYZE(element, element, defer); });
 
 void add_error(TypeErrorArray *error_data, Span span, char *message) {
   TypeError error = {.span = span, .message = message};
@@ -41,9 +27,9 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
   error_data->length++;
 }
 
-#define EXPECT(condition, $index, $message, defer...)                          \
+#define EXPECT(condition, node, $message, defer...)                            \
   if (!(condition)) {                                                          \
-    add_error(error_data, node_array[$index].span, $message);                  \
+    add_error(error_data, node->span, $message);                               \
     defer;                                                                     \
     return false;                                                              \
   }
@@ -104,17 +90,16 @@ bool get_builtin(Name name, Symbol *out) {
 
 // Adds a symbol to the table, returning false if the key was already in the
 // table.
-bool add_symbol(NODE_ARGS, Table *table, Name name, Type type,
+bool add_symbol(Table *table, ASTNode *node, Name name, Type type,
                 TypeErrorArray *error_data) {
   Symbol builtin;
-  EXPECT(!get_builtin(name, &builtin), index,
+  EXPECT(!get_builtin(name, &builtin), node,
          strdup("declaration has the same name as a builtin"));
 
   for (size_t i = 0; i < table->length; i++) {
     Symbol symbol = table->data[i];
-    EXPECT(!name_eq(symbol.name, name), index, strdup("duplicate declaration"));
+    EXPECT(!name_eq(symbol.name, name), node, strdup("duplicate declaration"));
   }
-  DEF_NODE;
   table->data = realloc(table->data, sizeof(Symbol) * (table->length + 1));
   table->data[table->length] =
       (Symbol){.name = name, .node = node, .value = {0}, .type = type};
@@ -156,17 +141,16 @@ Table get_top_table(Table table) {
     return get_top_table(*table.parent);
 }
 
-bool analyze_type(NODE_ARGS, Type *out, Table table,
+bool analyze_type(ASTNode *node, Type *out, Table table,
                   TypeErrorArray *error_data) {
-  DEF_NODE;
   SWITCH(node, {
     CASE(name, {
       // NOTE: currently does not have a unique namespace for types and
       // variables
       Symbol symbol = {0};
-      EXPECT(get_symbol(&table, *name, &symbol), index,
+      EXPECT(get_symbol(&table, *name, &symbol), node,
              strdup("undefined type"));
-      EXPECT((symbol.value.kind == tyTYPE), index, strdup("not a type"));
+      EXPECT((symbol.value.kind == tyTYPE), node, strdup("not a type"));
       *out = symbol.value.type;
       return true;
     });
@@ -182,9 +166,9 @@ typedef enum {
   OK,
 } Result;
 
-Result analyze_node(NODE_ARGS, Table *table, Type return_type,
-                    TypeErrorArray *error_data, bool is_second_pass) {
-  DEF_NODE;
+Result analyze_node(Allocator *allocator, ASTNode *node, Table *table,
+                    Type return_type, TypeErrorArray *error_data,
+                    bool is_second_pass) {
   if (node->is_analyzed)
     return true;
   SWITCH(node, {
@@ -219,7 +203,7 @@ Result analyze_node(NODE_ARGS, Table *table, Type return_type,
             (right_type.kind == tyINT), binary->right,
             strdup(
                 "cannot apply binary arithmetic operator to non-numeric type"));
-        EXPECT((left_type.kind == right_type.kind), index,
+        EXPECT((left_type.kind == right_type.kind), node,
                strdup("types on both sides of the binary arithmetic operator "
                       "must be the same"));
         OK(left_type);
@@ -233,23 +217,21 @@ Result analyze_node(NODE_ARGS, Table *table, Type return_type,
              strdup("not a function"));
       Type function_return_type = {0};
       {
-        assert(function_type.node->kind == FUNCTION);
-        __auto_type function = &function_type.node->function;
+        __auto_type function = function_type.function;
 
-        EXPECT((function_call->args.length == function->params.length), index,
-               strdup("argument count mismatch"));
-        size_t arg_index = function_call->args.start_index;
-        size_t param_index = function->params.start_index;
-        for (size_t i = 0; i < function_call->args.length; i++) {
-          ASTNode *arg = &node_array[arg_index];
-          ASTNode *param = &node_array[param_index];
-          EXPECT((type_eq(arg->type, param->type)), arg_index,
+        ASTNode *arg = function_call->args;
+        Type *param_type = function.params;
+        size_t i = 0;
+        while (arg != NULL || i < function.num_params) {
+          EXPECT((arg != NULL && param_type != NULL), node,
+                 strdup("argument count mismatch"));
+          EXPECT((type_eq(arg->type, *param_type)), arg,
                  strdup("argument type mismatch"));
-          arg_index += arg->tree_size;
-          param_index += param->tree_size;
+          arg = arg->next_sibling;
+          i++;
         }
-        if (function->has_return_type) {
-          function_return_type = node_array[function->return_type].type;
+        if (function._return != NULL) {
+          function_return_type = *function._return;
         }
       }
       OK(function_return_type);
@@ -257,16 +239,24 @@ Result analyze_node(NODE_ARGS, Table *table, Type return_type,
     CASE(function, {
       Table local_table = (Table){.parent = table, 0};
       Table *table = &local_table;
-
+      Type type = {.kind = tyFUNCTION, .function = {0}};
+      type.function.params = ra_calloc(allocator, sizeof(Type) * function->num_params);
+      
+      ITER_ARRAY(function->params, param, {
+        MUST_ANALYZE(param, param, free(local_table.data));
+        type.function.params[i] = param_type;
+     });
       MUST_ANALYZE_ARRAY(function->params, free(local_table.data));
-      Type return_type = {.kind = tyVOID};
-      if (function->has_return_type) {
+
+      Type return_type = {.kind = tyVOID, 0};
+      if (function->return_type != NULL) {
         MUST_ANALYZE(function->return_type, declared, free(local_table.data));
-        return_type = declared_type;
+        type.function._return = ra_calloc(allocator, sizeof(Type));
+        *type.function._return = declared_type;
       }
       MUST_ANALYZE_ARRAY(function->stmts, free(local_table.data));
       free(local_table.data);
-      OK((Type){.kind = tyFUNCTION, .node = node});
+      OK(type);
     });
     CASE(param, {
       MUST_ANALYZE(param->type, type);
@@ -289,14 +279,12 @@ Result analyze_node(NODE_ARGS, Table *table, Type return_type,
     CASE(declaration, {
       MUST_ANALYZE(declaration->value, value);
 
-      ASTNode *name_node = &node_array[declaration->name];
-      assert(name_node->kind == NAME);
-      Name name = name_node->name;
-          
+      assert(declaration->name->kind == NAME);
+      Name name = declaration->name->name;
+
       if (!declaration->is_declared) {
-        EXPECT(add_symbol(node_array, index, table, name, value_type,
-                          error_data),
-               index, strdup("duplicate declaration"));
+        EXPECT(add_symbol(table, node, name, value_type, error_data), node,
+               strdup("duplicate declaration"));
         declaration->is_declared = true;
       }
       if ((table->parent == NULL) || declaration->is_constant) {
@@ -311,24 +299,29 @@ Result analyze_node(NODE_ARGS, Table *table, Type return_type,
     CASE(module, {
       Table local_table = {0};
       Table *table = &local_table;
-      MUST_ANALYZE_ARRAY(module->definitions, free(local_table.data));
+      MUST_ANALYZE_ARRAY(module->declarations, free(local_table.data));
       free(local_table.data);
       OK((Type){0});
     });
   });
 }
 
-bool analyze(ASTNode *node_array, TypeErrorArray *error_data) {
+bool analyze(AST *ast, TypeErrorArray *error_data) {
+  Allocator allocator = {0};
   Table table = {0};
   Result result = 0;
   // needs two passes so that forward references are also resolved
   for (bool is_second_pass = false; !is_second_pass; is_second_pass = true) {
-    Result result = analyze_node(node_array, 0, &table, (Type){0}, error_data,
-                                 is_second_pass);
+    Result result = analyze_node(&allocator, ast->head, &table, (Type){0},
+                                 error_data, is_second_pass);
     if (result == ERROR)
       break;
   }
   assert(result != UNFINISHED); // should be finished after 2 passes
   free(table.data);
+  // NOTE: this leaves the type in an undefined state
+  // should the allocator be passed along without freeing
+  // or should types be zeroed?
+  ra_free_all(&allocator);
   return result == OK;
 }

@@ -51,21 +51,21 @@ int main() {
   lexer_free();
   lexer_print_token_stream(stream);
 
-  ASTNode *ast = NULL;
+  AST ast = {0};
   ParseError error_data;
   if (!parse(stream, &ast, &error_data)) {
     print_parse_error(source, stream, error_data);
     free_token_stream(stream);
-    free_ast(ast);
+    free_ast(&ast);
     free(source);
     panicf("Parse error.\n");
   }
   free_token_stream(stream);
 
   printf("Parse success.\n");
-  ast_print_nodes(ast, 0);
+  ast_print_nodes(ast.head);
 
-  free_ast(ast);
+  free_ast(&ast);
   free(source);
   return 0;
 }

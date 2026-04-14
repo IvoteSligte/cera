@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "alloc.h"
+
 #define eprintf(format, ...) fprintf(stderr, format __VA_OPT__(, ) __VA_ARGS__)
 #define panicf(format, ...)                                                    \
   {                                                                            \

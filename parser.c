@@ -1,32 +1,15 @@
 #include "parser.h"
+#include "alloc.h"
 #include "ast.h"
 #include "ast_macro.h"
 
 #include <stdarg.h>
 
-typedef struct {
-  ASTNode *data;
-  size_t length;
-} ASTNodeArray;
+typedef ListAllocator Allocator;
 
-void *zeroed_realloc(void *data, size_t current_nmemb, size_t new_nmemb,
-                     size_t element_size) {
-  assert(current_nmemb <= new_nmemb);
-  data = realloc(data, new_nmemb * element_size);
-  memset(data + (current_nmemb * element_size), 0,
-         (new_nmemb - current_nmemb) * element_size);
-  return data;
-}
-
-void yield(ASTNodeArray *node_array, size_t node_index, ASTNode node) {
-  assert(node.tree_size > 0);
-  if (node_index >= node_array->length) {
-    size_t new_length = node_index + 1;
-    node_array->data = zeroed_realloc(node_array->data, node_array->length,
-                                      new_length, sizeof(ASTNode));
-    node_array->length = new_length;
-  }
-  node_array->data[node_index] = node;
+void yield(Allocator *allocator, ASTNode node) {
+  ASTNode *dest = la_calloc(allocator, sizeof(ASTNode));
+  *dest = node;
 }
 
 void error_data_add(ParseError *data, size_t token_index,
@@ -64,15 +47,11 @@ void error_data_add(ParseError *data, size_t token_index,
               _ERROR_DATA_ADD_3, _ERROR_DATA_ADD_2,                            \
               _ERROR_DATA_ADD_1)(__VA_ARGS__)}
 
-#define GET(index) node_array->data[index]
-
 #define YIELD(KIND, $kind, ...)                                                \
-  __RESERVED__ = true; /* checks that RESERVE has been used before YIELD */    \
-  yield(node_array, start_node_index,                                          \
-        (ASTNode){.span = span,                                                \
-                  .tree_size = tree_size,                                      \
-                  .kind = KIND,                                                \
-                  .$kind = __VA_ARGS__})
+  yield(allocator, (ASTNode){.span = span,                                     \
+                             .next_sibling = NULL,                             \
+                             .kind = KIND,                                     \
+                             .$kind = __VA_ARGS__})
 
 #define RETURN($kind, ...)                                                     \
   YIELD(UPPER_##$kind, $kind, __VA_ARGS__);                                    \
@@ -81,7 +60,7 @@ void error_data_add(ParseError *data, size_t token_index,
 int log_indent = 0;
 
 #define LOG(format, ...)                                                       \
-  eprintf("%-4zu %-3zu %*.*s" format "\n", *token_index, *node_index,          \
+  eprintf("%-4zu %-3zu %*.*s" format "\n", *token_index, allocator->length,    \
           log_indent, log_indent, " " __VA_OPT__(, ) __VA_ARGS__)
 
 #define LOG_ENTER                                                              \
@@ -95,6 +74,21 @@ int log_indent = 0;
     LOG("Exit " status ": %s", parser_name);                                   \
   }
 
+#define PARSER_PARAMS                                                          \
+  TokenStream stream, size_t *token_index, Allocator *allocator,               \
+      ParseError *error_data
+#define PARSER_PROTOTYPE(name) bool parse_##name(PARSER_PARAMS)
+
+#define BEGIN(name)                                                            \
+  const char *parser_name = #name;                                             \
+  LOG_ENTER;                                                                   \
+  size_t start_token_index = *token_index;                                     \
+  size_t start_allocator_length = allocator->length;                           \
+  Token token;                                                                 \
+  if (!peek_token(stream, *token_index, &token))                               \
+    FAIL;                                                                      \
+  Span span = (Span){.offset = token.offset, .length = 0};
+
 #define OK                                                                     \
   {                                                                            \
     LOG_EXIT("OK");                                                            \
@@ -103,30 +97,10 @@ int log_indent = 0;
 #define FAIL                                                                   \
   {                                                                            \
     *token_index = start_token_index;                                          \
-    *node_index = start_node_index;                                            \
+    la_shrink(allocator, start_allocator_length);                              \
     LOG_EXIT("FAIL");                                                          \
     return false;                                                              \
   }
-
-#define PARSER_PROTOTYPE(name)                                                 \
-  bool parse_##name(TokenStream stream, size_t *token_index,                   \
-                    ASTNodeArray *node_array, size_t *node_index,              \
-                    ParseError *error_data)
-
-#define RESERVE                                                                \
-  *node_index += 1;                                                            \
-  bool __RESERVED__;
-
-#define BEGIN(name)                                                            \
-  const char *parser_name = #name;                                             \
-  LOG_ENTER;                                                                   \
-  size_t start_token_index = *token_index;                                     \
-  size_t start_node_index = *node_index;                                       \
-  Token token;                                                                 \
-  if (!peek_token(stream, *token_index, &token))                               \
-    FAIL;                                                                      \
-  Span span = (Span){.offset = token.offset, .length = 0};                     \
-  size_t tree_size = 1;
 
 #define PARSER(name, ...)                                                      \
   PARSER_PROTOTYPE(name) {                                                     \
@@ -137,7 +111,7 @@ int log_indent = 0;
 #define EXTEND_SPAN($span)                                                     \
   span.length = ($span).offset + ($span).length - span.offset
 
-#define JOIN_SPANS(left, right) join_spans(GET(left).span, GET(right).span)
+#define JOIN_SPANS(left, right) join_spans(left->span, right->span)
 
 #define CONSUME                                                                \
   {                                                                            \
@@ -165,105 +139,109 @@ int log_indent = 0;
   EXPECT(__VA_ARGS__);                                                         \
   TokenKind op = token.kind;
 
-#define PARSE(name)                                                            \
-  parse_##name(stream, token_index, node_array, node_index, error_data)
+#define PARSE(name) parse_##name(stream, token_index, allocator, error_data)
 
 // Try to parse and return on failure.
-#define MUST_PARSE(name, out)                                                  \
-  size_t out = *node_index;                                                    \
+#define MUST_PARSE(name, node)                                                 \
   if (!PARSE(name))                                                            \
     FAIL;                                                                      \
-  tree_size += GET(out).tree_size;
+  ASTNode *node = allocator->data[allocator->length - 1];
 
 // Try to parse and continue on success.
 // Declares has_##out indicating whether it succeeded.
-#define MAY_PARSE(name, out)                                                   \
-  size_t out = *node_index;                                                    \
-  bool has_##out = PARSE(name);
+// TODO: is it possible to differentiate between 'not found' and error?
+#define MAY_PARSE(name, node)                                                  \
+  ASTNode *node = PARSE(name) ? allocator->data[allocator->length] : NULL;
 
 // Try to parse and return on success.
 #define TRY_PARSE(name)                                                        \
   if (PARSE(name))                                                             \
     OK;
 
-#define ZERO_OR_MORE(element, nodes)                                           \
-  size_t nodes = *node_index;                                                  \
-  size_t num_##nodes = 0;                                                      \
-  while (PARSE(element)) {                                                     \
-    num_##nodes++;                                                             \
-    tree_size += GET(*node_index - 1).tree_size;                               \
-  }                                                                            \
-  if (num_##nodes > 0)                                                         \
-    EXTEND_SPAN(GET(*node_index - 1).span);
-
-#define ZERO_OR_MORE_SEPARATED(element, nodes, ...)                            \
-  size_t nodes = *node_index;                                                  \
-  size_t num_##nodes = 0;                                                      \
-  while (PARSE(element)) {                                                     \
-    num_##nodes++;                                                             \
-    tree_size += GET(*node_index - 1).tree_size;                               \
-    if (!peek_token(stream, *token_index, &token) ||                           \
-        !IS_ONE_OF(token.kind, __VA_ARGS__)) {                                 \
-      break;                                                                   \
+#define ZERO_OR_MORE(element, node)                                            \
+  ASTNode *first_##node = NULL;                                                \
+  {                                                                            \
+    ASTNode *last_##node = NULL;                                               \
+    while (PARSE(element)) {                                                   \
+      last_##node = allocator->data[allocator->length - 1];                    \
+      if (first_##node == NULL) {                                              \
+        first_##node = last_##node;                                            \
+      } else {                                                                 \
+        last_##node->next_sibling = allocator->data[allocator->length - 1];    \
+      }                                                                        \
     }                                                                          \
-    *token_index += 1;                                                         \
-    EXTEND_SPAN(token);                                                        \
-  }                                                                            \
-  if (num_##nodes > 0)                                                         \
-    EXTEND_SPAN(GET(*node_index - 1).span);
+    if (last_##node != NULL)                                                   \
+      EXTEND_SPAN(last_##node->span);                                          \
+  }
+
+#define ZERO_OR_MORE_SEPARATED(element, node, ...)                             \
+  ASTNode *first_##node = NULL;                                                \
+  size_t num_##node##s = 0;                                                    \
+  {                                                                            \
+    ASTNode *last_##node = NULL;                                               \
+    while (PARSE(element)) {                                                   \
+      last_##node = allocator->data[allocator->length - 1];                    \
+      num_##node##s++;                                                         \
+      if (first_##node == NULL) {                                              \
+        first_##node = last_##node;                                            \
+      } else {                                                                 \
+        last_##node->next_sibling = allocator->data[allocator->length - 1];    \
+      }                                                                        \
+      if (!peek_token(stream, *token_index, &token) ||                         \
+          !IS_ONE_OF(token.kind, __VA_ARGS__)) {                               \
+        break;                                                                 \
+      }                                                                        \
+      *token_index += 1;                                                       \
+      EXTEND_SPAN(token);                                                      \
+    }                                                                          \
+    if (last_##node != NULL)                                                   \
+      EXTEND_SPAN(last_##node->span);                                          \
+  }
 
 PARSER_PROTOTYPE(expr);
 PARSER_PROTOTYPE(stmt);
 
-bool parse_block(TokenStream stream, size_t *token_index,
-                 ASTNodeArray *node_array, size_t *node_index,
-                 ParseError *error_data, size_t *num_out, Span *out_span,
-                 size_t *out_tree_size) {
+bool parse_block(PARSER_PARAMS, ASTNode **out_first_stmt, Span *out_span) {
   BEGIN(block);
   EXPECT(tLBRACE);
 
-  ZERO_OR_MORE(stmt, stmts)
-  *num_out = num_stmts;
+  ZERO_OR_MORE(stmt, stmt);
+  *out_first_stmt = first_stmt;
 
   EXPECT(tRBRACE)
   *out_span = span;
-  *out_tree_size += tree_size;
   OK;
 }
 
 #define MUST_PARSE_BLOCK                                                       \
-  ImplicitArray stmts = {.start_index = *node_index, .length = 0};             \
-  Span block_span;                                                             \
-  if (!parse_block(stream, token_index, node_array, node_index, error_data,    \
-                   &stmts.length, &block_span, &tree_size))                    \
+  ASTNode *first_stmt = NULL;                                                  \
+  Span block_span = {0};                                                       \
+  if (!parse_block(stream, token_index, allocator, error_data, &first_stmt,    \
+                   &block_span))                                               \
     FAIL;                                                                      \
   EXTEND_SPAN(block_span);
 
 PARSER(name, {
-  RESERVE;
   EXPECT(tIDENT);
   RETURN(name, {token.text, token.length});
 });
 
 PARSER(integer, {
-  RESERVE;
   EXPECT(tNUMBER);
   RETURN(integer, {token.text, token.length});
 });
 
 PARSER(string, {
-  RESERVE;
   EXPECT(tSTRING);
   RETURN(string, {token.text + 1, token.length - 2});
 });
 
 PARSER(function_call, {
-  RESERVE;
   MUST_PARSE(name, function);
   EXPECT(tLPAREN);
-  ZERO_OR_MORE_SEPARATED(expr, args, tCOMMA);
+  ZERO_OR_MORE_SEPARATED(expr, arg, tCOMMA);
   EXPECT(tRPAREN);
-  RETURN(function_call, {.function = function, .args = args});
+  RETURN(function_call, {.function = function, .args = first_arg});
 });
 
 PARSER(paren_expr, {
@@ -286,30 +264,27 @@ PARSER(primary, {
 PARSER(unary, {
   TRY_PARSE(primary);
 
-  RESERVE;
   EXPECT_OP(tMINUS);
   MUST_PARSE(primary, expr);
   RETURN(unary, {.op = op, .expr = expr});
 });
 
-void fix_precedence(ASTNode *node_array, size_t index) {
-  ASTNode *node = &node_array[index];
+void fix_precedence(ASTNode *node) {
   assert(node->kind == BINARY);
   __auto_type binary = &node->binary;
-  ASTNode *left_node = &node_array[binary->left];
-  assert(left_node->kind != BINARY);
-  ASTNode *right_node = &node_array[binary->right];
+  assert(binary->left->kind != BINARY);
 
-  if (right_node->kind == BINARY) {
-    __auto_type right = &right_node->binary;
+  if (binary->right->kind == BINARY) {
+    __auto_type right = &binary->right->binary;
 
     if (!right->has_parens &&
         token_precedence(right->op) < token_precedence(binary->op)) {
+      ASTNode *binary_right = binary->right;
       // performs a left-rotation on the tree
       // NOTE: this does not preserve order of nodes
       binary->right = right->left;
-      right->left = index;
-      SWAP(node, right_node);
+      right->left = node;
+      SWAP(node, binary_right);
     }
   }
 }
@@ -317,19 +292,17 @@ void fix_precedence(ASTNode *node_array, size_t index) {
 PARSER(binary, {
   TRY_PARSE(unary);
 
-  RESERVE;
   MUST_PARSE(unary, left);
   EXPECT_OP(tPLUS, tMINUS, tSTAR, tSLASH);
   MUST_PARSE(expr, right);
 
   YIELD(BINARY, binary,
         {.op = op, .has_parens = false, .left = left, .right = right});
-  fix_precedence(node_array->data, *node_index - 1);
+  fix_precedence(allocator->data[allocator->length - 1]);
   OK;
 });
 
 PARSER(param, {
-  RESERVE;
   MUST_PARSE(name, name);
   EXPECT(tCOL);
   MUST_PARSE(name, type);
@@ -337,16 +310,15 @@ PARSER(param, {
 });
 
 PARSER(function, {
-  RESERVE;
   EXPECT(tLPAREN);
-  ZERO_OR_MORE_SEPARATED(param, params, tCOMMA);
+  ZERO_OR_MORE_SEPARATED(param, param, tCOMMA);
   EXPECT(tRPAREN);
   MAY_PARSE(name, return_type);
   MUST_PARSE_BLOCK;
-  RETURN(function, {.params = params,
+  RETURN(function, {.params = first_param,
+                    .num_params = num_params,
                     .return_type = return_type,
-                    .has_return_type = has_return_type,
-                    .stmts = stmts});
+                    .stmts = first_stmt});
 });
 
 PARSER(expr, {
@@ -363,7 +335,6 @@ PARSER(expr_stmt, {
 PARSER_PROTOTYPE(declaration);
 
 PARSER(assign, {
-  RESERVE;
   MUST_PARSE(name, name);
   EXPECT_OP(tEQ);
   MUST_PARSE(expr, value);
@@ -372,7 +343,6 @@ PARSER(assign, {
 });
 
 PARSER(return_stmt, {
-  RESERVE;
   EXPECT(tRETURN);
   MUST_PARSE(expr, expr);
   EXPECT(tSEMI);
@@ -380,13 +350,13 @@ PARSER(return_stmt, {
 });
 
 PARSER(for_loop, {
-  RESERVE;
   MUST_PARSE(declaration, init);
   MUST_PARSE(expr, cond);
   MUST_PARSE(assign, step);
   MUST_PARSE_BLOCK;
 
-  RETURN(for_loop, {.init = init, .cond = cond, .step = step, .stmts = stmts});
+  RETURN(for_loop,
+         {.init = init, .cond = cond, .step = step, .stmts = first_stmt});
 });
 
 PARSER(declaration_value, {
@@ -396,7 +366,6 @@ PARSER(declaration_value, {
 });
 
 PARSER(declaration, {
-  RESERVE;
   MUST_PARSE(name, name);
 
   EXPECT(tCOLCOL, tCOLEQ);
@@ -419,9 +388,8 @@ PARSER(stmt, {
 });
 
 PARSER(module, {
-  RESERVE;
-  ZERO_OR_MORE(declaration, declarations);
-  RETURN(module, {declarations, num_declarations});
+  ZERO_OR_MORE(declaration, declaration);
+  RETURN(module, {.declarations = first_declaration});
 });
 
 typedef struct {
@@ -472,16 +440,16 @@ void print_parse_error(const char *source, TokenStream stream,
   eprintf("\n");
 }
 
-bool parse(TokenStream stream, ASTNode **out, ParseError *error_data) {
+bool parse(TokenStream stream, AST *out_ast, ParseError *error_data) {
+  Allocator allocator = {0};
   size_t token_index = 0;
-  ASTNodeArray node_array = {.data = NULL, .length = 0};
-  size_t node_index = 0;
   *error_data = (ParseError){0};
-  bool result =
-      parse_module(stream, &token_index, &node_array, &node_index, error_data);
+  bool result = parse_module(stream, &token_index, &allocator, error_data);
+  *out_ast = (AST){.allocator = allocator,
+                   .head = allocator.data[allocator.length - 1]};
   if (token_index < stream.length) {
     return false;
   }
-  *out = node_array.data;
+
   return result;
 }

@@ -29,14 +29,12 @@ typedef struct {
   size_t length;
 } Name;
 
-bool name_eq(Name left, Name right);
+typedef struct ASTNode ASTNode;
 
 typedef struct {
-  size_t start_index;
-  size_t length;
-} ImplicitArray;
-
-typedef struct ASTNode ASTNode;
+  ListAllocator allocator;
+  ASTNode *head;
+} AST;
 
 typedef enum {
   tyVOID = 0,
@@ -49,15 +47,23 @@ typedef enum {
   tyTYPE,
 } TypeKind;
 
-typedef struct {
+typedef struct Type Type;
+typedef struct Type {
   TypeKind kind;
-  ASTNode *node; // NULL for primitive types
+  union {
+    Name name;
+    struct {
+      Type *params;
+      size_t num_params;
+      Type *_return;
+    } function;
+  };
 } Type;
 
 typedef struct ASTNode {
   Span span;
-  // The number of nodes in this AST. At least 1.
-  size_t tree_size;
+  // Next sibling in case of an array.
+  ASTNode *next_sibling;
   bool is_analyzed;
   Type type;
   ASTNodeKind kind;
@@ -73,50 +79,50 @@ typedef struct ASTNode {
     } string;
     struct {
       TokenKind op;
-      size_t expr;
+      ASTNode *expr;
     } unary;
     struct {
       TokenKind op;
       bool has_parens;
-      size_t left;
-      size_t right;
+      ASTNode *left;
+      ASTNode *right;
     } binary;
     struct {
-      size_t function;
-      ImplicitArray args;
+      ASTNode *function;
+      ASTNode *args;
     } function_call;
     struct {
-      size_t name;
-      size_t type;
+      ASTNode *name;
+      ASTNode *type;
     } param;
     struct {
-      ImplicitArray params;
-      size_t return_type;
-      bool has_return_type;
-      ImplicitArray stmts;
+      ASTNode *params;
+      size_t num_params;      
+      ASTNode *return_type; // nullable
+      ASTNode *stmts;
     } function;
     struct {
-      size_t init;
-      size_t cond;
-      size_t step;
-      ImplicitArray stmts;
+      ASTNode *init;
+      ASTNode *cond;
+      ASTNode *step;
+      ASTNode *stmts;
     } for_loop;
     struct {
       TokenKind op;
-      size_t name;
-      size_t value;
+      ASTNode *name;
+      ASTNode *value;
     } assign;
     struct {
-      size_t expr;
+      ASTNode *expr;
     } return_stmt;
     struct {
       bool is_constant;
       bool is_declared;
-      size_t name;
-      size_t value;
+      ASTNode *name;
+      ASTNode *value;
     } declaration;
     struct {
-      ImplicitArray definitions;
+      ASTNode *declarations;
     } module;
   };
 } ASTNode;
@@ -124,9 +130,12 @@ typedef struct ASTNode {
 Span token_span(Token token);
 Span join_spans(Span left, Span right);
 
-void free_ast(ASTNode *node_array);
+bool name_eq(Name left, Name right);
+bool type_eq(Type left, Type right);
 
-void ast_visit(ASTNode *node_array, size_t index, size_t depth,
-               void(callback)(ASTNode *node_array, size_t index, size_t depth));
-void ast_print_nodes(ASTNode *node_array, size_t index);
+void free_ast(AST *ast);
+
+void ast_visit(ASTNode *node, size_t depth,
+               void(callback)(ASTNode *node, size_t depth));
+void ast_print_nodes(ASTNode *node);
 const char *ast_node_name(ASTNodeKind kind);
