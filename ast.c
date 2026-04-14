@@ -20,8 +20,8 @@ void free_ast(ASTNode *node_array) { free(node_array); }
 
 #define VISIT(index) ast_visit(node_array, index, depth + 1, callback)
 
-#define VISIT_ARRAY(start_index, length)                                       \
-  ITER_ARRAY(start_index, length, element, { VISIT(element_index); });
+#define VISIT_ARRAY(array)                                       \
+  ITER_ARRAY(array, element, { VISIT(element_index); });
 
 void ast_visit(ASTNode *node_array, size_t index, size_t depth,
                void(callback)(ASTNode *node_array, size_t index,
@@ -39,14 +39,14 @@ void ast_visit(ASTNode *node_array, size_t index, size_t depth,
       VISIT(binary.right);
     });
     CASE(function_call, {
-      VISIT(function_call.name);
-      VISIT_ARRAY(function_call.args, function_call.num_args);
+      VISIT(function_call.function);
+      VISIT_ARRAY(function_call.args);
     });
     CASE(function, {
-      VISIT_ARRAY(function.params, function.num_params);
+      VISIT_ARRAY(function.params);
       if (function.has_return_type)
         VISIT(function.return_type);
-      VISIT_ARRAY(function.stmts, function.num_stmts);
+      VISIT_ARRAY(function.stmts);
     });
     CASE(param, {
       VISIT(param.name);
@@ -56,7 +56,7 @@ void ast_visit(ASTNode *node_array, size_t index, size_t depth,
       VISIT(for_loop.init);
       VISIT(for_loop.cond);
       VISIT(for_loop.step);
-      VISIT_ARRAY(for_loop.stmts, for_loop.num_stmts);
+      VISIT_ARRAY(for_loop.stmts);
     });
     CASE(assign, {
       VISIT(assign.name);
@@ -67,7 +67,7 @@ void ast_visit(ASTNode *node_array, size_t index, size_t depth,
       VISIT(declaration.name);
       VISIT(declaration.value);
     })
-    CASE(module, { VISIT_ARRAY(module.definitions, module.num_definitions); });
+    CASE(module, { VISIT_ARRAY(module.definitions); });
   });
 }
 

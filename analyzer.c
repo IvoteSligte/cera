@@ -25,14 +25,12 @@ bool type_eq(Type left, Type right) {
   }
 
 #define MUST_ANALYZE(index, name, defer...)                                    \
-  Type name##_type = {0};                                                      \
-  if (!analyze_node(node_array, index, wait_list, table, return_type,          \
-                    &name##_type, error_data))                                 \
-    FAIL(defer);
+  if (!analyze_node(node_array, index, table, return_type, error_data))        \
+    FAIL(defer);                                                               \
+  Type name##_type = node_array[index].type;
 
-#define MUST_ANALYZE_ARRAY(start_index, length, defer...)                      \
-  ITER_ARRAY(start_index, length, element,                                     \
-             { MUST_ANALYZE(element_index, element, defer); });
+#define MUST_ANALYZE_ARRAY(array, defer...)                                    \
+  ITER_ARRAY(array, element, { MUST_ANALYZE(element_index, element, defer); });
 
 void add_error(TypeErrorArray *error_data, Span span, char *message) {
   TypeError error = {.span = span, .message = message};
@@ -49,7 +47,12 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
     return false;                                                              \
   }
 
-#define OK return true;
+#define OK($type...)                                                           \
+  {                                                                            \
+    node->type = $type;                                                        \
+    node->is_analyzed = true;                                                  \
+    return true;                                                               \
+  }
 
 bool is_pure_expr(NODE_ARGS) {
   DEF_NODE;
@@ -152,22 +155,6 @@ Table get_top_table(Table table) {
     return get_top_table(*table.parent);
 }
 
-typedef struct {
-  Name for_name;
-  ASTNode *node; // node that is waiting for a declaration named for_name
-} Waiting;
-
-typedef struct {
-  Waiting *data;
-  size_t length;
-} WaitList;
-
-void add_waiting(WaitList *wait_list, Name for_name, ASTNode *node) {
-  wait_list->data = realloc(wait_list->data, sizeof(Waiting) * (wait_list->length + 1));  
-  wait_list->data[wait_list->length] = (Waiting){for_name, node};
-  wait_list->length++;
-}
-
 bool analyze_type(NODE_ARGS, Type *out, Table table,
                   TypeErrorArray *error_data) {
   DEF_NODE;
@@ -188,118 +175,130 @@ bool analyze_type(NODE_ARGS, Type *out, Table table,
   });
 }
 
-bool analyze_node(NODE_ARGS, WaitList *wait_list, Table *table,
-                  Type return_type, Type *expr_type,
+bool analyze_node(NODE_ARGS, Table *table, Type return_type,
                   TypeErrorArray *error_data) {
   DEF_NODE;
+  if (node->is_analyzed)
+    return true;
   SWITCH(node, {
     CASE(name, {
       Symbol symbol = {0};
-      EXPECT(get_symbol(table, name, &symbol), index,
+      EXPECT(get_symbol(table, *name, &symbol), index,
              strdup("undefined variable"));
-      *expr_type = symbol.type;
-      OK;
+      OK(symbol.type);
     });
-    CASE(integer, {
-      expr_type->kind = tyINT;
-      OK;
-    });
-    CASE(string, {
-      expr_type->kind = tySTRING;
-      OK;
-    });
+    CASE(integer, { OK((Type){.kind = tyINT}); });
+    CASE(string, { OK((Type){.kind = tySTRING}); });
     CASE(unary, {
-      MUST_ANALYZE(unary.expr, expr);
-      if (unary.op == tMINUS) {
-        EXPECT((expr_type.kind != tyINT), unary.expr,
+      MUST_ANALYZE(unary->expr, expr);
+      if (unary->op == tMINUS) {
+        EXPECT((expr_type.kind != tyINT), unary->expr,
                strdup("cannot apply unary operator `-` to non-numeric type"));
-        OK;
+        OK(expr_type);
       }
       // TODO: set expr_type
-      panicf("Unknown unary operator: `%s`\n", token_display_name(unary.op));
+      panicf("Unknown unary operator: `%s`\n", token_display_name(unary->op));
     });
     CASE(binary, {
-      MUST_ANALYZE(binary.left, left);
-      MUST_ANALYZE(binary.right, right);
-      if (IS_ONE_OF(binary.op, tPLUS, tMINUS, tSTAR, tSLASH)) {
+      MUST_ANALYZE(binary->left, left);
+      MUST_ANALYZE(binary->right, right);
+      if (IS_ONE_OF(binary->op, tPLUS, tMINUS, tSTAR, tSLASH)) {
         EXPECT(
-            (left_type.kind == tyINT), binary.left,
+            (left_type.kind == tyINT), binary->left,
             strdup(
                 "cannot apply binary arithmetic operator to non-numeric type"));
         EXPECT(
-            (right_type.kind == tyINT), binary.right,
+            (right_type.kind == tyINT), binary->right,
             strdup(
                 "cannot apply binary arithmetic operator to non-numeric type"));
         EXPECT((left_type.kind == right_type.kind), index,
                strdup("types on both sides of the binary arithmetic operator "
                       "must be the same"));
-        // TODO: set expr_type
-        OK;
+        OK(left_type);
       }
-      panicf("Unknown binary operator: `%s`\n", token_display_name(binary.op));
+      panicf("Unknown binary operator: `%s`\n", token_display_name(binary->op));
     });
-    CASE(function_call, { OK; });
+    CASE(function_call, {
+      MUST_ANALYZE(function_call->function, function);
+      MUST_ANALYZE_ARRAY(function_call->args);
+      EXPECT((function_type.kind == tyFUNCTION), function_call->function,
+             strdup("not a function"));
+      {
+        ASTNode *function_node = function_type.node;
+        assert(function_node->kind == FUNCTION);
+        __auto_type function = &function_node->function;
+
+        EXPECT((function_call->args.length == function->params.length), index,
+               strdup("argument count mismatch"));
+        size_t arg_index = function_call->args.start_index;
+        size_t param_index = function->params.start_index;
+        for (size_t i = 0; i < function_call->args.length; i++) {
+          ASTNode *arg = &node_array[arg_index];
+          ASTNode *param = &node_array[param_index];
+          EXPECT((type_eq(arg->type, param->type)), arg_index,
+                 strdup("argument type mismatch"));
+          arg_index += arg->tree_size;
+          param_index += param->tree_size;
+        }
+      }
+      panicf("TODO");
+      ASTNode *function_node = NULL; // TODO
+      OK((Type){.kind = tyFUNCTION, .node = function_node});
+    });
     CASE(function, {
       Table local_table = (Table){.parent = table, 0};
       Table *table = &local_table;
 
-      MUST_ANALYZE_ARRAY(function.params, function.num_params,
-                         free(local_table.data));
+      MUST_ANALYZE_ARRAY(function->params, free(local_table.data));
       Type return_type = {.kind = tyVOID};
-      if (function.has_return_type) {
-        MUST_ANALYZE(function.return_type, declared, free(local_table.data));
+      if (function->has_return_type) {
+        MUST_ANALYZE(function->return_type, declared, free(local_table.data));
         return_type = declared_type;
       }
-      MUST_ANALYZE_ARRAY(function.stmts, function.num_stmts, free(local_table.data));
+      MUST_ANALYZE_ARRAY(function->stmts, free(local_table.data));
       free(local_table.data);
-      expr_type->kind = tyFUNCTION;
-      expr_type->node = node;
-      OK;
+      OK((Type){.kind = tyFUNCTION, .node = node});
     });
     CASE(param, {
-      MUST_ANALYZE(param.type, type);
-      OK;
+      MUST_ANALYZE(param->type, type);
+      OK(type_type);
     });
     CASE(for_loop, {
       panicf("TODO\n");
-      OK;
+      OK((Type){0});
     });
     CASE(assign, {
       panicf("TODO\n");
-      OK;
+      OK((Type){0});
     });
     CASE(return_stmt, {
-      MUST_ANALYZE(return_stmt.expr, expr);
-      EXPECT(type_eq(expr_type, return_type), return_stmt.expr,
+      MUST_ANALYZE(return_stmt->expr, expr);
+      EXPECT(type_eq(expr_type, return_type), return_stmt->expr,
              strdup("unexpected type"));
-      OK;
+      OK(return_type);
     });
     CASE(declaration, {
-      MUST_ANALYZE(declaration.value, value);
-      if ((table->parent == NULL) || declaration.is_constant) {
+      MUST_ANALYZE(declaration->value, value);
+      if ((table->parent == NULL) || declaration->is_constant) {
         // TODO: determine lack of side-effects and compute value
       }
       // TODO: check if this is a constant that refers to a runtime declaration
       // (in a function)
-      OK;
+      OK(value_type);
     });
     CASE(module, {
       Table local_table = {0};
-      Table* table = &local_table;
-      MUST_ANALYZE_ARRAY(module.definitions, module.num_definitions,
-                         free(local_table.data));
+      Table *table = &local_table;
+      MUST_ANALYZE_ARRAY(module->definitions, free(local_table.data));
       free(local_table.data);
-      OK;
+      OK((Type){0});
     });
   });
 }
 
 bool analyze(ASTNode *node_array, TypeErrorArray *error_data) {
-  WaitList wait_list = {0};
   Table table = {0};
-  bool result = analyze_node(node_array, 0, &wait_list, &table, (Type){0}, NULL,
-                             error_data);
-  free(wait_list.data);
+  bool result = analyze_node(node_array, 0, &table, (Type){0}, error_data);
   free(table.data);
   return result;
 }

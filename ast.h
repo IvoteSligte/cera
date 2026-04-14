@@ -31,6 +31,11 @@ typedef struct {
 
 bool name_eq(Name left, Name right);
 
+typedef struct {
+  size_t start_index;
+  size_t length;
+} ImplicitArray;
+
 typedef struct ASTNode ASTNode;
 
 typedef enum {
@@ -41,7 +46,7 @@ typedef enum {
   tySTRUCT,
   tyUNION,
   tyALIAS,
-  tyTYPE,  
+  tyTYPE,
 } TypeKind;
 
 typedef struct {
@@ -53,6 +58,8 @@ typedef struct ASTNode {
   Span span;
   // The number of nodes in this AST. At least 1.
   size_t tree_size;
+  bool is_analyzed;
+  Type type;
   ASTNodeKind kind;
   union {
     Name name;
@@ -75,28 +82,24 @@ typedef struct ASTNode {
       size_t right;
     } binary;
     struct {
-      size_t name;
-      size_t args;
-      size_t num_args;
+      size_t function;
+      ImplicitArray args;
     } function_call;
     struct {
       size_t name;
       size_t type;
     } param;
     struct {
-      size_t params;
-      size_t num_params;
+      ImplicitArray params;
       size_t return_type;
       bool has_return_type;
-      size_t stmts;
-      size_t num_stmts;
+      ImplicitArray stmts;
     } function;
     struct {
       size_t init;
       size_t cond;
       size_t step;
-      size_t stmts;
-      size_t num_stmts;
+      ImplicitArray stmts;
     } for_loop;
     struct {
       TokenKind op;
@@ -112,8 +115,7 @@ typedef struct ASTNode {
       size_t value;
     } declaration;
     struct {
-      size_t definitions;
-      size_t num_definitions;
+      ImplicitArray definitions;
     } module;
   };
 } ASTNode;

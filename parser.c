@@ -232,11 +232,10 @@ bool parse_block(TokenStream stream, size_t *token_index,
 }
 
 #define MUST_PARSE_BLOCK                                                       \
-  size_t stmts = *node_index;                                                  \
-  size_t num_stmts = 0;                                                        \
+  ImplicitArray stmts = {.start_index = *node_index, .length = 0};             \
   Span block_span;                                                             \
   if (!parse_block(stream, token_index, node_array, node_index, error_data,    \
-                   &num_stmts, &block_span, &tree_size))                       \
+                   &stmts.length, &block_span, &tree_size))                    \
     FAIL;                                                                      \
   EXTEND_SPAN(block_span);
 
@@ -260,11 +259,11 @@ PARSER(string, {
 
 PARSER(function_call, {
   RESERVE;
-  MUST_PARSE(name, name);
+  MUST_PARSE(name, function);
   EXPECT(tLPAREN);
   ZERO_OR_MORE_SEPARATED(expr, args, tCOMMA);
   EXPECT(tRPAREN);
-  RETURN(function_call, {.name = name, .args = args, .num_args = num_args});
+  RETURN(function_call, {.function = function, .args = args});
 });
 
 PARSER(paren_expr, {
@@ -334,7 +333,7 @@ PARSER(param, {
   MUST_PARSE(name, name);
   EXPECT(tCOL);
   MUST_PARSE(name, type);
-  RETURN(param, {.name = name, .type = type, .inferred_type = {0}});
+  RETURN(param, {.name = name, .type = type});
 });
 
 PARSER(function, {
@@ -345,11 +344,9 @@ PARSER(function, {
   MAY_PARSE(name, return_type);
   MUST_PARSE_BLOCK;
   RETURN(function, {.params = params,
-                    .num_params = num_params,
                     .return_type = return_type,
                     .has_return_type = has_return_type,
-                    .stmts = stmts,
-                    .num_stmts = num_stmts});
+                    .stmts = stmts});
 });
 
 PARSER(expr, {
@@ -389,11 +386,7 @@ PARSER(for_loop, {
   MUST_PARSE(assign, step);
   MUST_PARSE_BLOCK;
 
-  RETURN(for_loop, {.init = init,
-                    .cond = cond,
-                    .step = step,
-                    .stmts = stmts,
-                    .num_stmts = num_stmts});
+  RETURN(for_loop, {.init = init, .cond = cond, .step = step, .stmts = stmts});
 });
 
 PARSER(declaration_value, {
@@ -412,10 +405,8 @@ PARSER(declaration, {
   MUST_PARSE(declaration_value, value);
   EXPECT(tSEMI);
 
-  RETURN(declaration, {.is_constant = is_constant,
-                       .name = name,
-                       .value = value,
-                       .inferred_type = (Type){0}});
+  RETURN(declaration,
+         {.is_constant = is_constant, .name = name, .value = value});
 });
 
 PARSER(stmt, {
