@@ -16,19 +16,17 @@
     abort();                                                                   \
   }
 
-// Base case
-#define _IS_ONE_OF_1(x, a) ((x) == (a))
+#define UNUSED(x) (void)(x)
 
-// Recursive cases
+// Argument counter (supports up to 5 here)
+#define _GET_MACRO(_1, _2, _3, _4, _5, NAME, ...) NAME
+
+#define _IS_ONE_OF_1(x, a) ((x) == (a))
 #define _IS_ONE_OF_2(x, a, ...) ((x) == (a) || _IS_ONE_OF_1(x, __VA_ARGS__))
 #define _IS_ONE_OF_3(x, a, ...) ((x) == (a) || _IS_ONE_OF_2(x, __VA_ARGS__))
 #define _IS_ONE_OF_4(x, a, ...) ((x) == (a) || _IS_ONE_OF_3(x, __VA_ARGS__))
 #define _IS_ONE_OF_5(x, a, ...) ((x) == (a) || _IS_ONE_OF_4(x, __VA_ARGS__))
 
-// Argument counter (supports up to 5 here)
-#define _GET_MACRO(_1, _2, _3, _4, _5, NAME, ...) NAME
-
-// Public macro
 #define IS_ONE_OF(x, ...)                                                      \
   _GET_MACRO(__VA_ARGS__, _IS_ONE_OF_5, _IS_ONE_OF_4, _IS_ONE_OF_3,            \
              _IS_ONE_OF_2, _IS_ONE_OF_1)(x, __VA_ARGS__)
@@ -37,7 +35,7 @@
   {                                                                            \
     __auto_type t = *a;                                                        \
     *a = *b;                                                                   \
-    *b = *a;                                                                   \
+    *b = t;                                                                   \
   }
 
 #define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))

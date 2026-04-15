@@ -25,7 +25,10 @@
 #define CASE(name, ...)                                                        \
   case UPPER_##name: {                                                         \
     __auto_type name = &__node->name;                                          \
-    __VA_ARGS__                                                                \
+    UNUSED(name);                                                              \
+    {                                                                          \
+      __VA_ARGS__;                                                             \
+    }                                                                          \
     break;                                                                     \
   }
 

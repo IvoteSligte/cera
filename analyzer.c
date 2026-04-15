@@ -14,7 +14,8 @@ typedef RandomAllocator Allocator;
   if (!analyze_node(allocator, node, table, return_type, error_data,           \
                     is_second_pass))                                           \
     FAIL(defer);                                                               \
-  Type name##_type = node->type;
+  Type name##_type = node->type;                                               \
+  UNUSED(name##_type);
 
 #define MUST_ANALYZE_ARRAY(array, defer...)                                    \
   ITER_ARRAY(array, element, { MUST_ANALYZE(element, element, defer); });
@@ -70,10 +71,13 @@ typedef struct Table {
   size_t length;
 } Table;
 
+#define PRIM(type_kind)                                                        \
+  (Type) { .kind = type_kind, .name = {0} }
+
 #define MATCH_PRIMITIVE(primitive, type_kind)                                  \
   if (strncmp(name.text, #primitive, name.length)) {                           \
     const char *text = #primitive;                                             \
-    Type type = {.kind = type_kind, 0};                                        \
+    Type type = PRIM(type_kind);                                               \
     *out = (Symbol){.name = {.text = text, .length = strlen(text)},            \
                     .node = NULL,                                              \
                     .value = {.kind = tyTYPE, .type = type},                   \
@@ -179,8 +183,8 @@ Result analyze_node(Allocator *allocator, ASTNode *node, Table *table,
       }
       OK(symbol.type);
     });
-    CASE(integer, { OK((Type){.kind = tyINT}); });
-    CASE(string, { OK((Type){.kind = tySTRING}); });
+    CASE(integer, { OK(PRIM(tyINT)); });
+    CASE(string, { OK(PRIM(tySTRING)); });
     CASE(unary, {
       MUST_ANALYZE(unary->expr, expr);
       if (unary->op == tMINUS) {
@@ -240,15 +244,16 @@ Result analyze_node(Allocator *allocator, ASTNode *node, Table *table,
       Table local_table = (Table){.parent = table, 0};
       Table *table = &local_table;
       Type type = {.kind = tyFUNCTION, .function = {0}};
-      type.function.params = ra_calloc(allocator, sizeof(Type) * function->num_params);
-      
+      type.function.params =
+          ra_calloc(allocator, sizeof(Type) * function->num_params);
+
       ITER_ARRAY(function->params, param, {
         MUST_ANALYZE(param, param, free(local_table.data));
         type.function.params[i] = param_type;
-     });
+      });
       MUST_ANALYZE_ARRAY(function->params, free(local_table.data));
 
-      Type return_type = {.kind = tyVOID, 0};
+      Type return_type = PRIM(tyVOID);
       if (function->return_type != NULL) {
         MUST_ANALYZE(function->return_type, declared, free(local_table.data));
         type.function._return = ra_calloc(allocator, sizeof(Type));
@@ -274,7 +279,7 @@ Result analyze_node(Allocator *allocator, ASTNode *node, Table *table,
       MUST_ANALYZE(return_stmt->expr, expr);
       EXPECT(type_eq(expr_type, return_type), return_stmt->expr,
              strdup("unexpected type"));
-      OK(return_type);
+      OK(PRIM(tyVOID));
     });
     CASE(declaration, {
       MUST_ANALYZE(declaration->value, value);
@@ -301,7 +306,7 @@ Result analyze_node(Allocator *allocator, ASTNode *node, Table *table,
       Table *table = &local_table;
       MUST_ANALYZE_ARRAY(module->declarations, free(local_table.data));
       free(local_table.data);
-      OK((Type){0});
+      OK(PRIM(tyVOID));
     });
   });
 }

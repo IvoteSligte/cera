@@ -1,4 +1,7 @@
 
+check:
+    cc -fsyntax-only *.c -Wall -Wextra
+
 build:
     make
 

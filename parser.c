@@ -87,7 +87,8 @@ int log_indent = 0;
   Token token;                                                                 \
   if (!peek_token(stream, *token_index, &token))                               \
     FAIL;                                                                      \
-  Span span = (Span){.offset = token.offset, .length = 0};
+  Span span = (Span){.offset = token.offset, .length = 0};                     \
+  UNUSED(span);
 
 #define OK                                                                     \
   {                                                                            \
@@ -145,7 +146,8 @@ int log_indent = 0;
 #define MUST_PARSE(name, node)                                                 \
   if (!PARSE(name))                                                            \
     FAIL;                                                                      \
-  ASTNode *node = allocator->data[allocator->length - 1];
+  ASTNode *node = allocator->data[allocator->length - 1];                      \
+  UNUSED(node);
 
 // Try to parse and continue on success.
 // Declares has_##out indicating whether it succeeded.

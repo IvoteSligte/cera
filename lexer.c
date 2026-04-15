@@ -54,7 +54,7 @@ void lexer_init(void) {
     int result = regcomp(&regexes[i], MATCHERS[i].regex, REG_EXTENDED);
     if (result) {
       char errbuf[100];
-      size_t err_size = regerror(result, &regexes[i], errbuf, 100);
+      regerror(result, &regexes[i], errbuf, 100);
       panicf("Failed to compile regex `%s`. Error: %s\n", MATCHERS[i].regex,
              errbuf);
     }
@@ -109,7 +109,7 @@ LexResult lex(const char *source, size_t *offset, Token *out) {
       continue;
     }
     char errbuf[100];
-    size_t err_size = regerror(result, &regexes[i], errbuf, 100);
+    regerror(result, &regexes[i], errbuf, 100);
     panicf("Failed to run regex. Error: %s\n", errbuf);
   }
   *offset += longest_match;
