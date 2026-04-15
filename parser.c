@@ -337,21 +337,19 @@ PARSER_PROTOTYPE(declaration);
 PARSER(assign, {
   MUST_PARSE(name, name);
   EXPECT_OP(tEQ);
-  MUST_PARSE(expr, value);
-  EXPECT(tSEMI);
+  MUST_PARSE(expr_stmt, value);
   RETURN(assign, {.op = op, .name = name, .value = value});
 });
 
 PARSER(return_stmt, {
   EXPECT(tRETURN);
-  MUST_PARSE(expr, expr);
-  EXPECT(tSEMI);
+  MUST_PARSE(expr_stmt, expr);
   RETURN(return_stmt, {.expr = expr});
 });
 
 PARSER(for_loop, {
   MUST_PARSE(declaration, init);
-  MUST_PARSE(expr, cond);
+  MUST_PARSE(expr_stmt, cond);
   MUST_PARSE(assign, step);
   MUST_PARSE_BLOCK;
 
@@ -360,7 +358,7 @@ PARSER(for_loop, {
 });
 
 PARSER(declaration_value, {
-  TRY_PARSE(expr);
+  TRY_PARSE(expr_stmt);
   TRY_PARSE(function);
   OK;
 });
@@ -372,7 +370,6 @@ PARSER(declaration, {
   bool is_constant = token.kind == tCOLCOL;
 
   MUST_PARSE(declaration_value, value);
-  EXPECT(tSEMI);
 
   RETURN(declaration,
          {.is_constant = is_constant, .name = name, .value = value});
