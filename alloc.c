@@ -17,9 +17,7 @@ void la_shrink(ListAllocator *allocator, size_t new_length) {
   allocator->length = new_length;
 }
 
-void la_free_all(ListAllocator *allocator) {
-  la_shrink(allocator, 0)  ;
-}
+void la_free_all(ListAllocator *allocator) { la_shrink(allocator, 0); }
 
 void *ra_calloc(RandomAllocator *allocator, size_t size) {
   allocator->data =
@@ -33,6 +31,5 @@ void *ra_calloc(RandomAllocator *allocator, size_t size) {
 void ra_free_all(RandomAllocator *allocator) {
   for (size_t i = 0; i < allocator->length; i++) {
     free(allocator->data[i]);
-  }  
+  }
 }
-

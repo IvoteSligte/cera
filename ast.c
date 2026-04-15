@@ -31,7 +31,10 @@ bool type_eq(Type left, Type right) {
   return true;
 }
 
-void free_ast(AST *ast) { la_free_all(&ast->allocator); }
+void free_ast(AST *ast) {
+  la_free_all(&ast->allocator);
+  ast->head = NULL;
+}
 
 #define VISIT(node) ast_visit(node, depth + 1, callback)
 
