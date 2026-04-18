@@ -1,3 +1,5 @@
+#pragma once
+
 #define UPPER_name NAME
 #define UPPER_integer INTEGER
 #define UPPER_string STRING
@@ -37,7 +39,9 @@
     ASTNode *element = first_element;                                          \
     size_t i = 0;                                                              \
     while (element != NULL) {                                                  \
-      __VA_ARGS__;                                                             \
+      {                                                                        \
+        __VA_ARGS__;                                                           \
+      }                                                                        \
       element = element->next_sibling;                                         \
       i++;                                                                     \
     }                                                                          \

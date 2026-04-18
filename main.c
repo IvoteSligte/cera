@@ -58,7 +58,7 @@ int main() {
     free_token_stream(stream);
     free_ast(&ast);
     free(source);
-    panicf("Parse error.\n");
+    panicf("Parse error.");
   }
   free_token_stream(stream);
 

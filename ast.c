@@ -13,7 +13,7 @@ Span join_spans(Span left, Span right) {
 }
 
 bool name_eq(Name left, Name right) {
-  return strncmp(left.text, right.text, MIN(left.length, right.length));
+  return left.length == right.length && strncmp(left.text, right.text, left.length);
 }
 
 bool type_eq(Type left, Type right) {
@@ -80,7 +80,7 @@ void ast_visit(ASTNode *node, size_t depth,
     CASE(return_stmt, { VISIT(return_stmt->expr); });
     CASE(declaration, {
       VISIT(declaration->name);
-      VISIT(declaration->value);
+      VISIT(declaration->expr);
     })
     CASE(module, { VISIT_ARRAY(module->declarations); });
   });
@@ -130,5 +130,5 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(DECLARATION);
     N(MODULE);
   }
-  panicf("Unknown node kind: %d\n", kind)
+  panicf("Unknown node kind: %d", kind)
 }

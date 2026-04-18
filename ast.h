@@ -60,18 +60,55 @@ typedef struct Type {
   };
 } Type;
 
+typedef struct {
+  // owned string, not zero-delimited
+  char *text;
+  size_t length;
+} String;
+
+typedef union {
+  ssize_t integer;
+  String string;
+  Type type;
+} Value;
+
+typedef struct {
+  Name name;
+  Type type;
+  // pointer to the value stored in this declaration
+  Value *target;
+} Symbol;
+
+typedef struct SymbolTable SymbolTable;
+typedef struct SymbolTable {
+  SymbolTable *parent;
+  Symbol *data;
+  size_t length;
+} SymbolTable;
+
+typedef enum {
+  PARSED = 0,
+  TYPED,
+  EVALUATED,
+} Stage;
+
 typedef struct ASTNode {
   Span span;
   // Next sibling in case of an array.
   ASTNode *next_sibling;
-  bool is_analyzed;
+  Stage stage;
   Type type;
+  Value value;
   ASTNodeKind kind;
   union {
-    Name name;
+    struct {
+      Name name;
+      Value *target;
+    } name;
     struct {
       const char *text;
       size_t length;
+      ssize_t value;
     } integer;
     struct {
       const char *text;
@@ -97,15 +134,17 @@ typedef struct ASTNode {
     } param;
     struct {
       ASTNode *params;
-      size_t num_params;      
+      size_t num_params;
       ASTNode *return_type; // nullable
       ASTNode *stmts;
+      SymbolTable table;
     } function;
     struct {
       ASTNode *init;
       ASTNode *cond;
       ASTNode *step;
       ASTNode *stmts;
+      SymbolTable table;
     } for_loop;
     struct {
       TokenKind op;
@@ -117,12 +156,12 @@ typedef struct ASTNode {
     } return_stmt;
     struct {
       bool is_constant;
-      bool is_declared;
       ASTNode *name;
-      ASTNode *value;
+      ASTNode *expr;
     } declaration;
     struct {
       ASTNode *declarations;
+      SymbolTable table;
     } module;
   };
 } ASTNode;
@@ -139,3 +178,8 @@ void ast_visit(ASTNode *node, size_t depth,
                void(callback)(ASTNode *node, size_t depth));
 void ast_print_nodes(ASTNode *node);
 const char *ast_node_name(ASTNodeKind kind);
+
+bool add_symbol(RandomAllocator *allocator, SymbolTable *table, ASTNode *node,
+                Name name, Type type, Value *target);
+bool get_symbol(SymbolTable *table, Name name, Symbol *out);
+SymbolTable get_top_table(SymbolTable table);

@@ -55,7 +55,7 @@ void lexer_init(void) {
     if (result) {
       char errbuf[100];
       regerror(result, &regexes[i], errbuf, 100);
-      panicf("Failed to compile regex `%s`. Error: %s\n", MATCHERS[i].regex,
+      panicf("Failed to compile regex `%s`. Error: %s", MATCHERS[i].regex,
              errbuf);
     }
   }
@@ -80,7 +80,7 @@ int token_precedence(TokenKind kind) {
   case tSLASH:
     return 1;
   default:
-    panicf("Tried to retrieve precedence of non-operator: `%s`\n",
+    panicf("Tried to retrieve precedence of non-operator: `%s`",
            token_display_name(kind));
     break;
   }
@@ -110,7 +110,7 @@ LexResult lex(const char *source, size_t *offset, Token *out) {
     }
     char errbuf[100];
     regerror(result, &regexes[i], errbuf, 100);
-    panicf("Failed to run regex. Error: %s\n", errbuf);
+    panicf("Failed to run regex. Error: %s", errbuf);
   }
   *offset += longest_match;
   if (longest_match == 0) {

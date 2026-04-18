@@ -12,7 +12,7 @@
 #define eprintf(format, ...) fprintf(stderr, format __VA_OPT__(, ) __VA_ARGS__)
 #define panicf(format, ...)                                                    \
   {                                                                            \
-    eprintf("Panic: " format __VA_OPT__(, ) __VA_ARGS__);                      \
+    eprintf("Panic: " format "\n" __VA_OPT__(, ) __VA_ARGS__);                      \
     abort();                                                                   \
   }
 
@@ -41,3 +41,5 @@
 #define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+#define STRINGIFY(a) #a

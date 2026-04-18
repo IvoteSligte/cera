@@ -28,6 +28,19 @@ void *ra_calloc(RandomAllocator *allocator, size_t size) {
   return memory;
 }
 
+void *ra_realloc(RandomAllocator *allocator, void *memory, size_t size) {
+  if (memory == NULL) {
+    return ra_calloc(allocator, size);
+  }
+  for (size_t i = 0; i < allocator->length; i++) {
+    if (allocator->data[i] == memory) {
+      allocator->data[i] = realloc(allocator->data[i], size);
+      return allocator->data[i];
+    }
+  }
+  return NULL;
+}
+
 void ra_free_all(RandomAllocator *allocator) {
   for (size_t i = 0; i < allocator->length; i++) {
     free(allocator->data[i]);

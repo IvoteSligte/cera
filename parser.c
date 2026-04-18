@@ -6,9 +6,10 @@
 #include <stdarg.h>
 
 typedef ListAllocator Allocator;
+typedef ASTNode Node;
 
-void yield(Allocator *allocator, ASTNode node) {
-  ASTNode *dest = la_calloc(allocator, sizeof(ASTNode));
+void yield(Allocator *allocator, Node node) {
+  Node *dest = la_calloc(allocator, sizeof(Node));
   *dest = node;
 }
 
@@ -48,10 +49,10 @@ void error_data_add(ParseError *data, size_t token_index,
               _ERROR_DATA_ADD_1)(__VA_ARGS__)}
 
 #define YIELD(KIND, $kind, ...)                                                \
-  yield(allocator, (ASTNode){.span = span,                                     \
-                             .next_sibling = NULL,                             \
-                             .kind = KIND,                                     \
-                             .$kind = __VA_ARGS__})
+  yield(allocator, (Node){.span = span,                                        \
+                          .next_sibling = NULL,                                \
+                          .kind = KIND,                                        \
+                          .$kind = __VA_ARGS__})
 
 #define RETURN($kind, ...)                                                     \
   YIELD(UPPER_##$kind, $kind, __VA_ARGS__);                                    \
@@ -146,14 +147,14 @@ int log_indent = 0;
 #define MUST_PARSE(name, node)                                                 \
   if (!PARSE(name))                                                            \
     FAIL;                                                                      \
-  ASTNode *node = allocator->data[allocator->length - 1];                      \
+  Node *node = allocator->data[allocator->length - 1];                         \
   UNUSED(node);
 
 // Try to parse and continue on success.
 // Declares has_##out indicating whether it succeeded.
 // TODO: is it possible to differentiate between 'not found' and error?
 #define MAY_PARSE(name, node)                                                  \
-  ASTNode *node = PARSE(name) ? allocator->data[allocator->length] : NULL;
+  Node *node = PARSE(name) ? allocator->data[allocator->length] : NULL;
 
 // Try to parse and return on success.
 #define TRY_PARSE(name)                                                        \
@@ -161,9 +162,9 @@ int log_indent = 0;
     OK;
 
 #define ZERO_OR_MORE(element, node)                                            \
-  ASTNode *first_##node = NULL;                                                \
+  Node *first_##node = NULL;                                                   \
   {                                                                            \
-    ASTNode *last_##node = NULL;                                               \
+    Node *last_##node = NULL;                                                  \
     while (PARSE(element)) {                                                   \
       last_##node = allocator->data[allocator->length - 1];                    \
       if (first_##node == NULL) {                                              \
@@ -177,10 +178,10 @@ int log_indent = 0;
   }
 
 #define ZERO_OR_MORE_SEPARATED(element, node, ...)                             \
-  ASTNode *first_##node = NULL;                                                \
+  Node *first_##node = NULL;                                                   \
   size_t num_##node##s = 0;                                                    \
   {                                                                            \
-    ASTNode *last_##node = NULL;                                               \
+    Node *last_##node = NULL;                                                  \
     while (PARSE(element)) {                                                   \
       last_##node = allocator->data[allocator->length - 1];                    \
       num_##node##s++;                                                         \
@@ -203,7 +204,7 @@ int log_indent = 0;
 PARSER_PROTOTYPE(expr);
 PARSER_PROTOTYPE(stmt);
 
-bool parse_block(PARSER_PARAMS, ASTNode **out_first_stmt, Span *out_span) {
+bool parse_block(PARSER_PARAMS, Node **out_first_stmt, Span *out_span) {
   BEGIN(block);
   EXPECT(tLBRACE);
 
@@ -216,7 +217,7 @@ bool parse_block(PARSER_PARAMS, ASTNode **out_first_stmt, Span *out_span) {
 }
 
 #define MUST_PARSE_BLOCK                                                       \
-  ASTNode *first_stmt = NULL;                                                  \
+  Node *first_stmt = NULL;                                                     \
   Span block_span = {0};                                                       \
   if (!parse_block(allocator, stream, token_index, error_data, &first_stmt,    \
                    &block_span))                                               \
@@ -225,17 +226,18 @@ bool parse_block(PARSER_PARAMS, ASTNode **out_first_stmt, Span *out_span) {
 
 PARSER(name, {
   EXPECT(tIDENT);
-  RETURN(name, {token.text, token.length});
+  RETURN(name, {.name = {.text = token.text, .length = token.length},
+                .target = NULL});
 });
 
 PARSER(integer, {
   EXPECT(tNUMBER);
-  RETURN(integer, {token.text, token.length});
+  RETURN(integer, {.text = token.text, .length = token.length});
 });
 
 PARSER(string, {
   EXPECT(tSTRING);
-  RETURN(string, {token.text + 1, token.length - 2});
+  RETURN(string, {.text = token.text + 1, .length = token.length - 2});
 });
 
 PARSER(function_call, {
@@ -271,7 +273,7 @@ PARSER(unary, {
   RETURN(unary, {.op = op, .expr = expr});
 });
 
-void fix_precedence(ASTNode *node) {
+void fix_precedence(Node *node) {
   assert(node->kind == BINARY);
   __auto_type binary = &node->binary;
   assert(binary->left->kind != BINARY);
@@ -281,7 +283,7 @@ void fix_precedence(ASTNode *node) {
 
     if (!right->has_parens &&
         token_precedence(right->op) < token_precedence(binary->op)) {
-      ASTNode *binary_right = binary->right;
+      Node *binary_right = binary->right;
       // performs a left-rotation on the tree
       // NOTE: this does not preserve order of nodes
       binary->right = right->left;
@@ -359,7 +361,7 @@ PARSER(for_loop, {
          {.init = init, .cond = cond, .step = step, .stmts = first_stmt});
 });
 
-PARSER(declaration_value, {
+PARSER(declaration_expr, {
   TRY_PARSE(expr_stmt);
   TRY_PARSE(function);
   OK;
@@ -371,10 +373,9 @@ PARSER(declaration, {
   EXPECT(tCOLCOL, tCOLEQ);
   bool is_constant = token.kind == tCOLCOL;
 
-  MUST_PARSE(declaration_value, value);
+  MUST_PARSE(declaration_expr, expr);
 
-  RETURN(declaration,
-         {.is_constant = is_constant, .name = name, .value = value});
+  RETURN(declaration, {.is_constant = is_constant, .name = name, .expr = expr});
 });
 
 PARSER(stmt, {
