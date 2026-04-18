@@ -1,4 +1,5 @@
 
+#include "evaluator.h"
 #include "analyzer_shared.h"
 #include "ast_macro.h"
 
@@ -7,68 +8,64 @@ typedef enum {
   cRETURN,
 } ControlFlow;
 
-#define EVALUATE(node, name)                                                   \
-  Value name##_value = {0};                                                    \
-  ControlFlow name##_control_flow = evaluate_node(node, &name##_value);
-
-#define EVALUATOR_SIGNATURE
-
-#define OK                                                                     \
+#define OK(control_flow)                                                       \
   {                                                                            \
-    node->stage = EVALUATED;                                                   \
-    return;                                                                    \
+    return control_flow;                                                       \
   }
 
-void evaluate_global_node(Node *node) {
-  assert(node->stage >= TYPED);
+#define EVALUATE(node, name) Value name##_value = evaluate_expr(node);
+
+ControlFlow evaluate_stmt(Node *node, Value *function_out) {
   SWITCH(node, {
-    CASE(declaration, { // TODO
-      OK;
+    CASE(name);
+    CASE(integer);
+    CASE(string);
+    CASE(unary);
+    CASE(binary);
+    CASE(function_call);
+    CASE(function);
+    CASE(param);
+    CASE(for_loop, {
+      panicf("TODO");
+      OK(cNEXT);
     });
-    CASE(function, { OK; });
-  } default:);
-  panicf("not a global node kind: %s", ast_node_name(node->kind));
+    CASE(assign, {
+      panicf("TODO");
+      OK(cNEXT);
+    });
+    CASE(return_stmt, {
+      EVALUATE(return_stmt->expr, expr);
+      *function_out = expr_value;
+      OK(cRETURN);
+    });
+    CASE(declaration, {
+      if (!declaration->is_constant) {
+        EVALUATE(declaration->expr, value);
+        node->value = value_value;
+      }
+      OK(cNEXT);
+    });
+    CASE(module);
+  });
+  panicf("not a statement: %s", ast_node_name(node->kind));
 }
 #undef OK
 
-#define OK(control_flow, value...)                                             \
+#define OK(value...)                                                           \
   {                                                                            \
-    node->stage = EVALUATED;                                                   \
-    *out = value;                                                              \
-    return control_flow;                                                       \
+    return value;                                                              \
   }
-#define OK_VOID OK(cNEXT, (Value){0})
-#define OK_INT($integer) OK(cNEXT, (Value){.integer = $integer})
-#define OK_STR($text, $length)                                                 \
-  OK(cNEXT, (Value){.string = {.text = $text, .length = $length}})
+#define OK_INT($integer) OK((Value){.integer = $integer})
 
-ControlFlow evaluate_node(Node *node, Value *out);
-
-void evaluate_function(Node *function_node, Value *function_args, Value *out) {
-  assert(function_node->kind == FUNCTION);
-  __auto_type function = &function_node->function;
-
-  ITER_ARRAY(function->params, param, { param->value = function_args[i]; });
-  ITER_ARRAY(function->stmts, stmt, {
-    EVALUATE(stmt, stmt);
-    switch (stmt_control_flow) {
-    case cNEXT:
-      break; // break switch
-    case cRETURN:
-      return;
-    }
-  });
-}
-
-ControlFlow evaluate_node(Node *node, Value *out) {
-  assert(node->stage >= TYPED);
+Value evaluate_expr(Node *node) {
   SWITCH(node, {
-    CASE(name, { OK(cNEXT, *name->target); });
+    CASE(name, { OK(*name->target); });
     CASE(integer, { OK_INT(integer->value); });
     CASE(string, {
       // the string value is immutable, only typed as mutable as it
       // is normally owned
-      OK_STR((char *)string->text, string->length);
+      OK((Value){
+          .string = {.text = (char *)string->text, .length = string->length}});
     });
     CASE(unary, {
       EVALUATE(unary->expr, expr);
@@ -96,37 +93,44 @@ ControlFlow evaluate_node(Node *node, Value *out) {
       OK_INT(value);
     });
     CASE(function_call, {
-      Value function_args[MAX_NUM_PARAMS] = {0};
-      ITER_ARRAY(function_call->args, arg,
-                 { evaluate_node(arg, &function_args[i]); });
-      evaluate_function(function_call->function, function_args, out);
-      OK(cNEXT, (*out));
-    });
-    CASE(function, { panicf("local functions should not exist"); });
-    CASE(param, { panicf("param should not be evaluated"); });
-    CASE(for_loop, {
-      panicf("TODO");
-      OK_VOID;
-    });
-    CASE(assign, {
-      panicf("TODO");
-      OK_VOID;
-    });
-    CASE(return_stmt, {
-      EVALUATE(return_stmt->expr, expr);
-      OK(cRETURN, expr_value);
-    });
-    CASE(declaration, {
-      if (!declaration->is_constant) {
-        EVALUATE(declaration->expr, value);
-        node->value = value_value;
+      assert(function_call->function->kind == FUNCTION);
+      __auto_type function = &function_call->function->function;
+
+      ASTNode *arg = function_call->args;
+      ASTNode *param = function->params;
+      while (arg != NULL) {
+        param->value = evaluate_expr(arg);
+        arg = arg->next_sibling;
+        param = param->next_sibling;
       }
-      OK_VOID;
+      OK(evaluate_expr(function_call->function));
     });
-    CASE(module, {
-      ITER_ARRAY(module->declarations, declaration,
-                 { evaluate_global_node(declaration); });
-      OK_VOID;
+    CASE(function, {
+      // assumes that parameter values have been set
+      Value function_out = {0};
+      ITER_ARRAY(function->stmts, stmt, {
+        ControlFlow control = evaluate_stmt(stmt, &function_out);
+        switch (control) {
+        case cNEXT:
+          break; // break switch
+        case cRETURN:
+          OK(function_out);
+        }
+      });
     });
+    CASE(param);
+    CASE(for_loop);
+    CASE(assign);
+    CASE(return_stmt);
+    CASE(declaration);
+    CASE(module);
   });
+  panicf("not an expression: %s", ast_node_name(node->kind));
+}
+
+void evaluate_module(Node *node) {
+  assert(node->kind == MODULE);
+  __auto_type module = &node->module;
+  ITER_ARRAY(module->declarations, declaration,
+             { evaluate_stmt(declaration, NULL); });
 }

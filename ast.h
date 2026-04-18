@@ -77,6 +77,7 @@ typedef struct {
   Type type;
   // pointer to the value stored in this declaration
   Value *target;
+  bool is_static;
 } Symbol;
 
 typedef struct SymbolTable SymbolTable;
@@ -86,17 +87,11 @@ typedef struct SymbolTable {
   size_t length;
 } SymbolTable;
 
-typedef enum {
-  PARSED = 0,
-  TYPED,
-  EVALUATED,
-} Stage;
-
 typedef struct ASTNode {
   Span span;
   // Next sibling in case of an array.
   ASTNode *next_sibling;
-  Stage stage;
+  bool is_analyzed;
   Type type;
   Value value;
   ASTNodeKind kind;
@@ -179,7 +174,7 @@ void ast_visit(ASTNode *node, size_t depth,
 void ast_print_nodes(ASTNode *node);
 const char *ast_node_name(ASTNodeKind kind);
 
-bool add_symbol(RandomAllocator *allocator, SymbolTable *table, ASTNode *node,
-                Name name, Type type, Value *target);
+bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
+                Type type, Value *target, bool is_static);
 bool get_symbol(SymbolTable *table, Name name, Symbol *out);
 SymbolTable get_top_table(SymbolTable table);

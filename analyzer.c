@@ -2,10 +2,10 @@
 #include "analyzer.h"
 #include "analyzer_shared.h"
 #include "ast_macro.h"
+#include "evaluator.h"
 
 #include <stdarg.h>
 #include <string.h>
-
 
 // Creates a string like sprintf, but panics on failure.
 char *ssprintf(const char *fmt, ...) {
@@ -22,18 +22,18 @@ char *ssprintf(const char *fmt, ...) {
     return false;                                                              \
   }
 
-#define ANALYZE(node, name)                                          \
-  if (!analyze_node(allocator, node, table, return_type, error_data,      \
-                         is_second_pass))                                      \
+#define ANALYZE(node, name)                                                    \
+  if (!analyze_node(allocator, node, table, return_type, error_data,           \
+                    is_static, is_second_pass))                                \
     FAIL;                                                                      \
   Type name##_type = node->type;                                               \
   UNUSED(name##_type);
 
-#define ANALYZE_TYPE(node, name)                                     \
-  ANALYZE(node, name);                                               \
+#define ANALYZE_TYPE(node, name)                                               \
+  ANALYZE(node, name);                                                         \
   EXPECT((name##_type.kind == tyTYPE), node, strdup("not a type"))
 
-#define ANALYZE_ARRAY(array)                                         \
+#define ANALYZE_ARRAY(array)                                                   \
   ITER_ARRAY(array, element, { ANALYZE(element, element); });
 
 void add_error(TypeErrorArray *error_data, Span span, char *message) {
@@ -56,10 +56,16 @@ typedef enum {
   rOK,
 } Result;
 
-#define OK($type...)                                                           \
+// explicitly takes 0 parameters to prevent confusion with OK_EXPR
+#define OK()                                                                   \
+  {                                                                            \
+    node->is_analyzed = true;                                                  \
+    return true;                                                               \
+  }
+#define OK_EXPR($type...)                                                      \
   {                                                                            \
     node->type = $type;                                                        \
-    node->stage = TYPED;                                                       \
+    node->is_analyzed = true;                                                  \
     return true;                                                               \
   }
 
@@ -69,9 +75,9 @@ typedef enum {
   (Type) { .kind = type_kind, .name = {0} }
 
 Result analyze_node(Allocator *allocator, Node *node, Table *table,
-                         Type return_type, TypeErrorArray *error_data,
-                         bool is_second_pass) {
-  if (node->stage >= TYPED)
+                    Type return_type, TypeErrorArray *error_data,
+                    bool is_static, bool is_second_pass) {
+  if (node->is_analyzed)
     return rOK;
   SWITCH(node, {
     CASE(name, {
@@ -85,20 +91,20 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
         }
       }
       name->target = symbol.target;
-      OK(symbol.type);
+      OK_EXPR(symbol.type);
     });
     CASE(integer, {
       EXPECT((sscanf(integer->text, "%zd", &integer->value) == 1), node,
              strdup("integer is too large"));
-      OK(PRIM(tyINT));
+      OK_EXPR(PRIM(tyINT));
     });
-    CASE(string, { OK(PRIM(tySTRING)); });
+    CASE(string, { OK_EXPR(PRIM(tySTRING)); });
     CASE(unary, {
       ANALYZE(unary->expr, expr);
       if (unary->op == tMINUS) {
         EXPECT((expr_type.kind != tyINT), unary->expr,
                strdup("cannot apply unary operator `-` to non-numeric type"));
-        OK(expr_type);
+        OK_EXPR(expr_type);
       }
       panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
     });
@@ -106,22 +112,19 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
       ANALYZE(binary->left, left);
       ANALYZE(binary->right, right);
       if (IS_ONE_OF(binary->op, tPLUS, tMINUS, tSTAR, tSLASH)) {
-        EXPECT(
-            (left_type.kind == tyINT), binary->left,
-            strdup(
-                "cannot apply arithmetic operator to non-numeric type"));
-        EXPECT(
-            (right_type.kind == tyINT), binary->right,
-            strdup(
-                "cannot apply arithmetic operator to non-numeric type"));
+        EXPECT((left_type.kind == tyINT), binary->left,
+               strdup("cannot apply arithmetic operator to non-numeric type"));
+        EXPECT((right_type.kind == tyINT), binary->right,
+               strdup("cannot apply arithmetic operator to non-numeric type"));
         EXPECT((left_type.kind == right_type.kind), node,
                strdup("types on both sides of the binary arithmetic operator "
                       "must be the same"));
-        OK(left_type);
+        OK_EXPR(left_type);
       }
       panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
     });
     CASE(function_call, {
+      EXPECT((!is_static), node, strdup("cannot call function in static code"));
       ANALYZE(function_call->function, function);
       ANALYZE_ARRAY(function_call->args);
       EXPECT((function_type.kind == tyFUNCTION), function_call->function,
@@ -145,81 +148,81 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
           function_return_type = *function._return;
         }
       }
-      OK(function_return_type);
+      OK_EXPR(function_return_type);
     });
     CASE(function, {
       EXPECT((!IS_GLOBAL), node,
              strdup("functions can only be defined in the global scope"));
-
-      function->table = (Table){.parent = table, .data = NULL, .length = 0};
+      // function params and return_type are analyzed by declaration
       Table *table = &function->table;
-      Type type = {.kind = tyFUNCTION, .function = {0}};
-      type.function.params =
-          ra_calloc(allocator, sizeof(Type) * function->num_params);
-
-      ITER_ARRAY(function->params, param, {
-        ANALYZE(param, param);
-        type.function.params[i] = param_type;
-      });
-      ANALYZE_ARRAY(function->params);
-      EXPECT((function->num_params < MAX_NUM_PARAMS), node,
-             strdup("function may only have " STRINGIFY(
-                 MAX_NUM_PARAMS) " parameters"));
-
-      Type return_type = PRIM(tyVOID);
-      if (function->return_type != NULL) {
-        ANALYZE_TYPE(function->return_type, declared);
-        type.function._return = ra_calloc(allocator, sizeof(Type));
-        *type.function._return = declared_type;
-      }
-      OK(type);
+      ANALYZE_ARRAY(function->stmts);
+      OK();
     });
     CASE(param, {
       ANALYZE_TYPE(param->type, type);
-      OK(type_type);
+      OK_EXPR(type_type);
     });
     CASE(for_loop, {
       panicf("TODO");
-      OK((Type){0});
+      OK();
     });
     CASE(assign, {
       panicf("TODO");
-      OK((Type){0});
+      OK();
     });
     CASE(return_stmt, {
       ANALYZE(return_stmt->expr, expr);
       EXPECT(type_eq(expr_type, return_type), return_stmt->expr,
-             strdup("unexpected type"));
-      OK(PRIM(tyVOID));
+             strdup("return type mismatch"));
+      OK();
     });
     CASE(declaration, {
       assert(declaration->name->kind == NAME);
       Name name = declaration->name->name.name;
-      if (declaration->expr->kind == FUNCTION) {
-        
-        EXPECT(add_symbol(allocator, table, node, name, value_type, &node->value),
-               node, strdup("duplicate declaration"));
-        ANALYZE(declaration->expr, value);
-      } else {
-        ANALYZE(declaration->expr, value);
-        EXPECT(add_symbol(allocator, table, node, name, value_type, &node->value),
-               node, strdup("duplicate declaration"));
-      }
+      bool is_static = IS_GLOBAL || declaration->is_constant;
 
-      
-      if (IS_GLOBAL || declaration->is_constant) {
-        // TODO: if this is a constant or global, ensure lack of side-effects
+      if (declaration->expr->kind == FUNCTION) {
+        // a function's type needs to be determined before its
+        // body is analyzed to prevent issues with recursion
+        __auto_type function = &declaration->expr->function;
+        function->table = (Table){.parent = table, .data = NULL, .length = 0};
+        Table *table = &function->table;
+        Type type = {.kind = tyFUNCTION, .function = {0}};
+        EXPECT((function->num_params < MAX_NUM_PARAMS), declaration->expr,
+               strdup("functions may only have " STRINGIFY(
+                   MAX_NUM_PARAMS) " parameters"));
+        type.function.params =
+            ra_calloc(allocator, sizeof(Type) * function->num_params);
+        ITER_ARRAY(function->params, param, {
+          ANALYZE(param, param);
+          type.function.params[i] = param_type;
+        });
+        if (function->return_type != NULL) {
+          ANALYZE_TYPE(function->return_type, declared);
+          type.function._return = ra_calloc(allocator, sizeof(Type));
+          *type.function._return = declared_type;
+        }
+
+        EXPECT(add_symbol(allocator, table, name, type, &node->value, true),
+               node, strdup("duplicate declaration"));
+        ANALYZE(declaration->expr, value); // uses is_static override
+      } else {
+        ANALYZE(declaration->expr, value); // uses is_static override
+        EXPECT(add_symbol(allocator, table, name, value_type, &node->value,
+                          is_static),
+               node, strdup("duplicate declaration"));
       }
-      EXPECT(add_symbol(allocator, table, node, name, value_type, &node->value),
-             node, strdup("duplicate declaration"));
+      if (is_static) {
+        node->value = evaluate_expr(declaration->expr);
+      }
       // TODO: check if this is a constant that refers to a runtime declaration
       // (in a function)
-      OK(value_type);
+      OK();
     });
     CASE(module, {
       Table *table = &module->table;
       ANALYZE_ARRAY(module->declarations);
-      OK(PRIM(tyVOID));
+      OK();
     });
   });
 }
@@ -231,7 +234,7 @@ bool analyze(AST *ast, TypeErrorArray *error_data) {
   // needs two passes so that forward references are also resolved
   for (bool is_second_pass = false; !is_second_pass; is_second_pass = true) {
     Result result = analyze_node(&allocator, ast->head, &table, (Type){0},
-                                      error_data, is_second_pass);
+                                 error_data, true, is_second_pass);
     if (result == rERROR)
       break;
   }

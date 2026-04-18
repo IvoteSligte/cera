@@ -89,7 +89,7 @@ void ast_visit(ASTNode *node, size_t depth,
 static void print_node(ASTNode *node, size_t depth) {
   printf("%*.*s", (int)depth, (int)depth, " ");
   SWITCH(node, {
-    CASE(name, { printf("name: `%.*s`\n", (int)name->length, name->text); });
+    CASE(name, { printf("name: `%.*s`\n", (int)name->name.length, name->name.text); });
     CASE(integer,
          { printf("integer: `%.*s`\n", (int)integer->length, integer->text); });
     CASE(string,

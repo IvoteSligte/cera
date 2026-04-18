@@ -22,8 +22,8 @@ bool get_builtin(Name name, Symbol *out) {
 
 // Adds a symbol to the table, returning false if the key was already in the
 // table.
-bool add_symbol(RandomAllocator *allocator, SymbolTable *table, ASTNode *node, Name name,
-                Type type, Value *target) {
+bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
+                Type type, Value *target, bool is_static) {
   Symbol builtin;
   if (get_builtin(name, &builtin))
     return false;
@@ -36,7 +36,7 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, ASTNode *node, N
   table->data =
       ra_realloc(allocator, table->data, sizeof(Symbol) * (table->length + 1));
   table->data[table->length] =
-      (Symbol){.name = name, .type = type, .target = target};
+    (Symbol){.name = name, .type = type, .target = target, .is_static = is_static};
   table->length++;
   return true;
 }
