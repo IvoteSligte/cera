@@ -23,11 +23,10 @@ char *ssprintf(const char *fmt, ...) {
   }
 
 #define ANALYZE(node, name)                                                    \
-  if (!analyze_node(allocator, node, table, return_type, error_data,           \
-                    is_static, is_second_pass))                                \
-    FAIL;                                                                      \
-  Type name##_type = node->type;                                               \
-  UNUSED(name##_type);
+  Type name##_type = {0};                                                      \
+  if (!analyze_node(allocator, node, table, return_type, &name##_type,         \
+                    error_data, is_static, is_second_pass))                    \
+    FAIL;
 
 #define ANALYZE_TYPE(node, name)                                               \
   ANALYZE(node, name);                                                         \
@@ -64,7 +63,7 @@ typedef enum {
   }
 #define OK_EXPR($type...)                                                      \
   {                                                                            \
-    node->type = $type;                                                        \
+    *out_type = $type;                                                         \
     node->is_analyzed = true;                                                  \
     return true;                                                               \
   }
@@ -75,8 +74,9 @@ typedef enum {
   (Type) { .kind = type_kind, .name = {0} }
 
 Result analyze_node(Allocator *allocator, Node *node, Table *table,
-                    Type return_type, TypeErrorArray *error_data,
-                    bool is_static, bool is_second_pass) {
+                    Type return_type, Type *out_type,
+                    TypeErrorArray *error_data, bool is_static,
+                    bool is_second_pass) {
   if (node->is_analyzed)
     return rOK;
   SWITCH(node, {
@@ -90,7 +90,7 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
           return rBLOCKED;
         }
       }
-      name->target = symbol.target;
+      name->target = symbol.value_ptr;
       OK_EXPR(symbol.type);
     });
     CASE(integer, {
@@ -126,7 +126,6 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
     CASE(function_call, {
       EXPECT((!is_static), node, strdup("cannot call function in static code"));
       ANALYZE(function_call->function, function);
-      ANALYZE_ARRAY(function_call->args);
       EXPECT((function_type.kind == tyFUNCTION), function_call->function,
              strdup("not a function"));
       Type function_return_type = {0};
@@ -137,9 +136,10 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
         Type *param_type = function.params;
         size_t i = 0;
         while (arg != NULL || i < function.num_params) {
+          ANALYZE(arg, arg);
           EXPECT((arg != NULL && param_type != NULL), node,
                  strdup("argument count mismatch"));
-          EXPECT((type_eq(arg->type, *param_type)), arg,
+          EXPECT((type_eq(arg_type, *param_type)), arg,
                  strdup("argument type mismatch"));
           arg = arg->next_sibling;
           i++;
@@ -180,6 +180,7 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
       assert(declaration->name->kind == NAME);
       Name name = declaration->name->name.name;
       bool is_static = IS_GLOBAL || declaration->is_constant;
+      Value *value_ptr = ra_calloc(allocator, sizeof(Value));
 
       if (declaration->expr->kind == FUNCTION) {
         // a function's type needs to be determined before its
@@ -203,17 +204,18 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
           *type.function._return = declared_type;
         }
 
-        EXPECT(add_symbol(allocator, table, name, type, &node->value, true),
-               node, strdup("duplicate declaration"));
+        EXPECT(add_symbol(allocator, table, name, type, value_ptr, true), node,
+               strdup("duplicate declaration"));
+        // NOTE: should the function analysis just be inlined here?
         ANALYZE(declaration->expr, value); // uses is_static override
       } else {
         ANALYZE(declaration->expr, value); // uses is_static override
-        EXPECT(add_symbol(allocator, table, name, value_type, &node->value,
+        EXPECT(add_symbol(allocator, table, name, value_type, value_ptr,
                           is_static),
                node, strdup("duplicate declaration"));
       }
       if (is_static) {
-        node->value = evaluate_expr(declaration->expr);
+        *value_ptr = evaluate_expr(declaration->expr);
       }
       // TODO: check if this is a constant that refers to a runtime declaration
       // (in a function)
@@ -233,7 +235,7 @@ bool analyze(AST *ast, TypeErrorArray *error_data) {
   Result result = 0;
   // needs two passes so that forward references are also resolved
   for (bool is_second_pass = false; !is_second_pass; is_second_pass = true) {
-    Result result = analyze_node(&allocator, ast->head, &table, (Type){0},
+    Result result = analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
                                  error_data, true, is_second_pass);
     if (result == rERROR)
       break;

@@ -70,13 +70,14 @@ typedef union {
   ssize_t integer;
   String string;
   Type type;
+  ASTNode* function;
 } Value;
 
 typedef struct {
   Name name;
   Type type;
   // pointer to the value stored in this declaration
-  Value *target;
+  Value *value_ptr;
   bool is_static;
 } Symbol;
 
@@ -92,8 +93,6 @@ typedef struct ASTNode {
   // Next sibling in case of an array.
   ASTNode *next_sibling;
   bool is_analyzed;
-  Type type;
-  Value value;
   ASTNodeKind kind;
   union {
     struct {
@@ -175,6 +174,6 @@ void ast_print_nodes(ASTNode *node);
 const char *ast_node_name(ASTNodeKind kind);
 
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
-                Type type, Value *target, bool is_static);
+                Type type, Value *value_ptr, bool is_static);
 bool get_symbol(SymbolTable *table, Name name, Symbol *out);
 SymbolTable get_top_table(SymbolTable table);

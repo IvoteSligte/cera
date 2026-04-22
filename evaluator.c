@@ -93,8 +93,9 @@ Value evaluate_expr(Node *node) {
       OK_INT(value);
     });
     CASE(function_call, {
-      assert(function_call->function->kind == FUNCTION);
-      __auto_type function = &function_call->function->function;
+      EVALUATE(function_call->function, function);
+      assert(function_value.function->kind == FUNCTION);
+      __auto_type function = &function_value.function->function;
 
       ASTNode *arg = function_call->args;
       ASTNode *param = function->params;
@@ -103,7 +104,7 @@ Value evaluate_expr(Node *node) {
         arg = arg->next_sibling;
         param = param->next_sibling;
       }
-      OK(evaluate_expr(function_call->function));
+      OK(evaluate_expr(function_value.function));
     });
     CASE(function, {
       // assumes that parameter values have been set
