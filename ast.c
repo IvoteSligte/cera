@@ -32,6 +32,25 @@ bool type_eq(Type left, Type right) {
   return true;
 }
 
+#define N(name)                                                                \
+  case (ty##name):                                                             \
+    return #name;
+
+const char *type_name(TypeKind kind) {
+  switch (kind) {
+    N(VOID);
+    N(INT);
+    N(BOOL);
+    N(STRING);
+    N(FUNCTION);
+    N(STRUCT);
+    N(UNION);
+    N(ALIAS);
+    N(TYPE);
+  }
+}
+#undef N
+
 void free_ast(AST *ast) {
   la_free_all(&ast->allocator);
   ast->head = NULL;
@@ -141,3 +160,4 @@ const char *ast_node_name(ASTNodeKind kind) {
   }
   panicf("Unknown node kind: %d", kind)
 }
+#undef N

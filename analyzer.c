@@ -43,7 +43,7 @@ char *ssprintf(const char *fmt, ...) {
 
 #define ANALYZE_TYPE($node, $name)                                             \
   ANALYZE($node, $name);                                                       \
-  EXPECT(($name##_type.kind == tyTYPE), $node, strdup("not a type"))
+  EXPECT(($name##_type.kind == tyTYPE), $node, strdup("not a type"));
 
 #define ANALYZE_ARRAY($array, $table)                                          \
   ITER_ARRAY($array, element, {                                                \
@@ -104,8 +104,8 @@ ANALYZER_SIGNATURE(node);
 ANALYZER(name, {
   SymbolData *symbol_data = NULL;
   if (!get_symbol(table, name->name, &symbol_data)) {
-    printf("INFO: compilation blocked by undefined symbol %.*s\n",
-           (int)name->name.length, name->name.text);
+    eprintf("INFO: compilation blocked by undefined symbol `%.*s` \n",
+            (int)name->name.length, name->name.text);
     return rBLOCKED;
   }
   EXPECT((!is_static || symbol_data->is_static), node,
@@ -204,6 +204,7 @@ ANALYZER(function, {
     }
     node->stage = sTYPED;
   }
+  bool is_static = false;
   ANALYZE_ARRAY(function->stmts, &function->table);
   OK;
 });

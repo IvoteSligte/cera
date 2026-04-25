@@ -175,6 +175,8 @@ Span join_spans(Span left, Span right);
 bool name_eq(Name left, Name right);
 bool type_eq(Type left, Type right);
 
+const char* type_name(TypeKind kind);
+
 void free_ast(AST *ast);
 
 void ast_visit(ASTNode *node, size_t depth,

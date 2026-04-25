@@ -14,6 +14,7 @@ OffsetInfo get_offset_info(const char *source, size_t offset) {
     if (source[i] == '\n') {
       info.line = &source[i + 1];
       info.line_number++;
+      info.column_number = 0;
     } else {
       info.column_number++;
     }

@@ -5,7 +5,7 @@
   (Type) { .kind = type_kind, .name = {0} }
 
 #define PRIM_DATA($name)                                                       \
-  static SymbolData $name##_DATA = {.type = PRIM_TYPE(ty##$name),              \
+  static SymbolData $name##_DATA = {.type = {.kind = tyTYPE, .name = {0}},     \
                                     .value = {.type = PRIM_TYPE(ty##$name)},   \
                                     .is_static = true};
 
@@ -16,7 +16,7 @@ PRIM_DATA(STRING);
 
 #define MATCH_PRIMITIVE($name, $NAME)                                          \
   if (name.length == strlen(#$name) &&                                         \
-      strncmp(name.text, #$name, name.length)) {                               \
+      strncmp(name.text, #$name, name.length) == 0) {                          \
     *out_data_ptr = &$NAME##_DATA;                                             \
     return true;                                                               \
   }
@@ -40,7 +40,7 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
   for (size_t i = 0; i < table->length; i++) {
     Symbol symbol = table->data[i];
     if (name_eq(symbol.name, name)) {
-      return false;      
+      return false;
     }
   }
   table->data =
