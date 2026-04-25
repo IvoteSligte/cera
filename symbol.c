@@ -1,11 +1,9 @@
 
 #include "ast.h"
-
-#define PRIM_TYPE(type_kind)                                                   \
-  (Type) { .kind = type_kind, .name = {0} }
+#include "ast_macro.h"
 
 #define PRIM_DATA($name)                                                       \
-  static SymbolData $name##_DATA = {.type = {.kind = tyTYPE, .name = {0}},     \
+  static SymbolData $name##_DATA = {.type = PRIM_TYPE(tyTYPE),                  \
                                     .value = {.type = PRIM_TYPE(ty##$name)},   \
                                     .is_static = true};
 

@@ -52,4 +52,7 @@
     }                                                                          \
   }
 
+#define PRIM_TYPE(type_kind)                                                   \
+  (Type) { .kind = type_kind, .is_constant = true }
+
 #define USE_AST_MACRO_HEADER

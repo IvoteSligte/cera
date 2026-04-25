@@ -81,9 +81,6 @@ typedef enum {
 
 #define IS_GLOBAL (table->parent == NULL)
 
-#define PRIM(type_kind)                                                        \
-  (Type) { .kind = type_kind, .name = {0} }
-
 #define ANALYZER_SIGNATURE($name)                                              \
   Result analyze_##$name(Allocator *allocator, Node *node, Table *table,       \
                          Type return_type, Type *out_type,                     \
@@ -117,19 +114,20 @@ ANALYZER(name, {
          strdup("static declaration refers to runtime variable"));
   name->value_ptr = &symbol_data->value;
   *out_type = symbol_data->type;
+  out_type->is_bound = true;
   OK;
 });
 
 ANALYZER(integer, {
   EXPECT((sscanf(integer->text, "%zd", &integer->value) == 1), node,
          strdup("integer is too large"));
-  *out_type = PRIM(tyINT);
+  *out_type = PRIM_TYPE(tyINT);
   OK;
 });
 
 ANALYZER(string, {
   UNUSED(string);
-  *out_type = PRIM(tySTRING);
+  *out_type = PRIM_TYPE(tySTRING);
   OK;
 });
 
@@ -195,7 +193,7 @@ ANALYZER(function, {
   if (node->stage < sTYPED) {
     function->table = (Table){.parent = table, .data = NULL, .length = 0};
     Table *table = &function->table;
-    *out_type = (Type){.kind = tyFUNCTION, .function = {0}};
+    *out_type = (Type){.kind = tyFUNCTION, .is_constant = true};
     out_type->function.params =
         ra_calloc(allocator, sizeof(Type) * function->num_params);
     ITER_ARRAY(function->params, param, {
@@ -241,6 +239,9 @@ ANALYZER(assign, {
   ANALYZE(assign->target, target);
   ANALYZE(assign->expr, expr);
   EXPECT((type_eq(target_type, expr_type)), node, strdup("type mismatch"));
+  EXPECT(target_type.is_bound, node,
+         strdup("cannot assign to temporary value"));
+  EXPECT(target_type.is_constant, node, strdup("cannot assign to constant"));
   OK;
 });
 
@@ -330,7 +331,7 @@ bool analyze(AST *ast, TypeErrorArray *error_data) {
   Result result = 0;
   bool error_on_block = false;
   for (size_t i = 0;; i++) {
-    eprintf("INFO: analyze iteration: %zu\n", i);
+    eprintf("INFO: analysis iteration: %zu\n", i);
     bool anything_changed = false;
     result = analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
                           error_data, true, &anything_changed, error_on_block);

@@ -51,6 +51,9 @@ typedef enum {
 typedef struct Type Type;
 typedef struct Type {
   TypeKind kind;
+  bool is_constant;
+  // true if bound to a fixed location in memory
+  bool is_bound;
   union {
     Name name;
     struct {
