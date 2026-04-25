@@ -1,31 +1,34 @@
 #pragma once
 
-#define UPPER_name NAME
-#define UPPER_integer INTEGER
-#define UPPER_string STRING
-#define UPPER_unary UNARY
-#define UPPER_binary BINARY
-#define UPPER_function_call FUNCTION_CALL
-#define UPPER_function FUNCTION
-#define UPPER_param PARAM
-#define UPPER_for_loop FOR_LOOP
-#define UPPER_assign ASSIGN
-#define UPPER_return_stmt RETURN_STMT
-#define UPPER_declaration DECLARATION
-#define UPPER_module MODULE
+#define NODE_name aNAME
+#define NODE_int aINT
+#define NODE_bool aBOOL
+#define NODE_void aVOID
+#define NODE_integer aINTEGER
+#define NODE_string aSTRING
+#define NODE_unary aUNARY
+#define NODE_binary aBINARY
+#define NODE_function_call aFUNCTION_CALL
+#define NODE_function aFUNCTION
+#define NODE_param aPARAM
+#define NODE_for_loop aFOR_LOOP
+#define NODE_assign aASSIGN
+#define NODE_return_stmt aRETURN_STMT
+#define NODE_declaration aDECLARATION
+#define NODE_module aMODULE
 
 #define SWITCH(node, cases)                                                    \
   {                                                                            \
     ASTNode *__node = node;                                                    \
     switch (__node->kind) {                                                    \
-    case INVALID:                                                              \
+    case aINVALID:                                                             \
       panicf("matched INVALID AST node");                                      \
       cases;                                                                   \
     }                                                                          \
   }
 
 #define CASE(name, ...)                                                        \
-  case UPPER_##name: {                                                         \
+  case NODE_##name: {                                                          \
     __auto_type name = &__node->name;                                          \
     UNUSED(name);                                                              \
     {                                                                          \
@@ -46,3 +49,5 @@
       i++;                                                                     \
     }                                                                          \
   }
+
+#define USE_AST_MACRO_HEADER

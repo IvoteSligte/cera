@@ -15,7 +15,8 @@ void *la_calloc(ListAllocator *allocator, size_t size);
 void la_shrink(ListAllocator *allocator, size_t new_length);
 void la_free_all(ListAllocator *allocator);
 
-// Guarantees that the allocated data is never moved (unless ra_realloc is called).
+// Guarantees that the allocated data is never moved (unless ra_realloc is
+// called).
 typedef struct {
   void **data;
   size_t length;

@@ -36,7 +36,7 @@ char *read_file(const char *path) {
 int main() {
   char *source = read_file("test.ex");
   if (source == NULL) {
-    return 1;    
+    return 1;
   }
 
   lexer_init();

@@ -1,31 +1,39 @@
 
 #include "ast.h"
 
-#define PRIM(type_kind)                                                        \
+#define PRIM_TYPE(type_kind)                                                   \
   (Type) { .kind = type_kind, .name = {0} }
 
-#define MATCH_PRIMITIVE(primitive, type_kind)                                  \
-  if (strncmp(name.text, #primitive, name.length)) {                           \
-    const char *text = #primitive;                                             \
-    Type type = PRIM(type_kind);                                               \
-    *out = (Symbol){.name = {.text = text, .length = strlen(text)},            \
-                    .type = type};                                             \
+#define PRIM_DATA($name)                                                       \
+  static SymbolData $name##_DATA = {.type = PRIM_TYPE(ty##$name),              \
+                                    .value = {.type = PRIM_TYPE(ty##$name)},   \
+                                    .is_static = true};
+
+PRIM_DATA(VOID);
+PRIM_DATA(INT);
+PRIM_DATA(BOOL);
+PRIM_DATA(STRING);
+
+#define MATCH_PRIMITIVE($name, $NAME)                                          \
+  if (strncmp(name.text, #$name, name.length)) {                               \
+    const char *text = #$name;                                                 \
+    *out_data_ptr = &$NAME##_DATA;                                             \
     return true;                                                               \
   }
 
-bool get_builtin(Name name, Symbol *out) {
-  MATCH_PRIMITIVE(void, tyTYPE);
-  MATCH_PRIMITIVE(int, tyTYPE);
-  MATCH_PRIMITIVE(string, tyTYPE);
+bool get_builtin(Name name, SymbolData **out_data_ptr) {
+  MATCH_PRIMITIVE(void, VOID);
+  MATCH_PRIMITIVE(int, INT);
+  MATCH_PRIMITIVE(bool, BOOL);
+  MATCH_PRIMITIVE(string, STRING);
   return false;
 }
 
 // Adds a symbol to the table, returning false if the key was already in the
 // table.
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
-                Type type, Value *target, bool is_static) {
-  Symbol builtin;
-  if (get_builtin(name, &builtin))
+                SymbolData **out_data_ptr) {
+  if (get_builtin(name, out_data_ptr))
     return false;
 
   for (size_t i = 0; i < table->length; i++) {
@@ -35,26 +43,25 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
   }
   table->data =
       ra_realloc(allocator, table->data, sizeof(Symbol) * (table->length + 1));
-  table->data[table->length] =
-    (Symbol){.name = name, .type = type, .target = target, .is_static = is_static};
+  *out_data_ptr = ra_calloc(allocator, sizeof(SymbolData));
+  table->data[table->length] = (Symbol){.name = name, .data = *out_data_ptr};
   table->length++;
   return true;
 }
 
-bool get_symbol(SymbolTable *table, Name name, Symbol *out) {
-  if (get_builtin(name, out)) {
+bool get_symbol(SymbolTable *table, Name name, SymbolData **out_data_ptr) {
+  if (get_builtin(name, out_data_ptr)) {
     return true;
   }
   for (size_t i = 0; i < table->length; i++) {
-    Symbol *symbol = &table->data[i];
-    if (name_eq(symbol->name, name)) {
-      return symbol;
+    if (name_eq(table->data[i].name, name)) {
+      *out_data_ptr = table->data[i].data;
     }
   }
   if (table->parent == NULL) {
     return NULL;
   }
-  return get_symbol(table->parent, name, out);
+  return get_symbol(table->parent, name, out_data_ptr);
 }
 
 SymbolTable get_top_table(SymbolTable table) {

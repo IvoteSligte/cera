@@ -12,7 +12,7 @@
 #define eprintf(format, ...) fprintf(stderr, format __VA_OPT__(, ) __VA_ARGS__)
 #define panicf(format, ...)                                                    \
   {                                                                            \
-    eprintf("Panic: " format "\n" __VA_OPT__(, ) __VA_ARGS__);                      \
+    eprintf("Panic: " format "\n" __VA_OPT__(, ) __VA_ARGS__);                 \
     abort();                                                                   \
   }
 
@@ -35,7 +35,7 @@
   {                                                                            \
     __auto_type t = *a;                                                        \
     *a = *b;                                                                   \
-    *b = t;                                                                   \
+    *b = t;                                                                    \
   }
 
 #define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))

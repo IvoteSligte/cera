@@ -3,7 +3,7 @@
 #include "ast.h"
 
 typedef struct {
-  Span span;  
+  Span span;
   char *message;
 } TypeError;
 

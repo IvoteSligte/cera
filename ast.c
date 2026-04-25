@@ -13,7 +13,8 @@ Span join_spans(Span left, Span right) {
 }
 
 bool name_eq(Name left, Name right) {
-  return left.length == right.length && strncmp(left.text, right.text, left.length);
+  return left.length == right.length &&
+         strncmp(left.text, right.text, left.length);
 }
 
 bool type_eq(Type left, Type right) {
@@ -89,7 +90,9 @@ void ast_visit(ASTNode *node, size_t depth,
 static void print_node(ASTNode *node, size_t depth) {
   printf("%*.*s", (int)depth, (int)depth, " ");
   SWITCH(node, {
-    CASE(name, { printf("name: `%.*s`\n", (int)name->name.length, name->name.text); });
+    CASE(name, {
+      printf("name: `%.*s`\n", (int)name->name.length, name->name.text);
+    });
     CASE(integer,
          { printf("integer: `%.*s`\n", (int)integer->length, integer->text); });
     CASE(string,

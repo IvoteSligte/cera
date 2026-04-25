@@ -34,13 +34,13 @@ typedef enum {
   tSTRUCT,
   tUNION,
   tENUM,
-  tRETURN,  
+  tRETURN,
 } TokenKind;
 
 typedef struct {
   size_t offset;
   const char *text;
-  size_t length;  
+  size_t length;
   TokenKind kind;
 } Token;
 
@@ -63,7 +63,7 @@ typedef struct {
   Token *data;
   size_t length;
 } TokenStream;
-    
+
 void lexer_print_token_stream(TokenStream stream);
 bool fill_token_stream(const char *source, TokenStream *out);
 void free_token_stream(TokenStream stream);

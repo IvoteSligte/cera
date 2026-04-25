@@ -1,6 +1,7 @@
 
 #include "analyzer.h"
 #include "analyzer_shared.h"
+#include "ast.h"
 #include "ast_macro.h"
 #include "evaluator.h"
 
@@ -14,26 +15,37 @@ char *ssprintf(const char *fmt, ...) {
   char *out = NULL;
   // TODO: non-GNU alternative to asprintf
   if (vasprintf(&out, fmt, args) < 0)
-    panicf("Failed to ssprintf.") return out;
+    panicf("Failed to ssprintf.");
+  return out;
 }
+
+#define NAME_OF($declaration)                                                  \
+  assert(($declaration)->name->kind == aNAME);                                 \
+  Name name = ($declaration)->name->name.name;
 
 #define FAIL                                                                   \
   {                                                                            \
     return false;                                                              \
   }
 
-#define ANALYZE(node, name)                                                    \
-  Type name##_type = {0};                                                      \
-  if (!analyze_node(allocator, node, table, return_type, &name##_type,         \
-                    error_data, is_static, is_second_pass))                    \
+#define ANALYZE_NODE($node, $name, $out_type)                                  \
+  analyze_node(allocator, $node, table, return_type, $out_type, error_data,    \
+               is_static)
+
+#define ANALYZE($node, $name)                                                  \
+  Type $name##_type = {0};                                                     \
+  if (!ANALYZE_NODE($node, $name, &$name##_type))                              \
     FAIL;
 
-#define ANALYZE_TYPE(node, name)                                               \
-  ANALYZE(node, name);                                                         \
-  EXPECT((name##_type.kind == tyTYPE), node, strdup("not a type"))
+#define ANALYZE_TYPE($node, $name)                                             \
+  ANALYZE($node, $name);                                                       \
+  EXPECT(($name##_type.kind == tyTYPE), $node, strdup("not a type"))
 
-#define ANALYZE_ARRAY(array)                                                   \
-  ITER_ARRAY(array, element, { ANALYZE(element, element); });
+#define ANALYZE_ARRAY($array, $table)                                          \
+  ITER_ARRAY($array, element, {                                                \
+    Table *table = $table;                                                     \
+    ANALYZE(element, element);                                                 \
+  });
 
 void add_error(TypeErrorArray *error_data, Span span, char *message) {
   TypeError error = {.span = span, .message = message};
@@ -50,21 +62,14 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
   }
 
 typedef enum {
+  rDONE = 0,
   rERROR,
   rBLOCKED,
-  rOK,
 } Result;
 
-// explicitly takes 0 parameters to prevent confusion with OK_EXPR
-#define OK()                                                                   \
+#define OK                                                                     \
   {                                                                            \
-    node->is_analyzed = true;                                                  \
-    return true;                                                               \
-  }
-#define OK_EXPR($type...)                                                      \
-  {                                                                            \
-    *out_type = $type;                                                         \
-    node->is_analyzed = true;                                                  \
+    node->stage = sANALYZED;                                                   \
     return true;                                                               \
   }
 
@@ -75,36 +80,38 @@ typedef enum {
 
 Result analyze_node(Allocator *allocator, Node *node, Table *table,
                     Type return_type, Type *out_type,
-                    TypeErrorArray *error_data, bool is_static,
-                    bool is_second_pass) {
-  if (node->is_analyzed)
-    return rOK;
+                    TypeErrorArray *error_data, bool is_static) {
+  if (node->stage >= sANALYZED)
+    return rDONE;
   SWITCH(node, {
     CASE(name, {
-      Symbol symbol = {0};
-      if (!get_symbol(table, name->name, &symbol)) {
-        if (is_second_pass) {
-          add_error(error_data, node->span, strdup("undefined variable"));
-          FAIL;
-        } else {
-          return rBLOCKED;
-        }
+      SymbolData *symbol_data = NULL;
+      if (!get_symbol(table, name->name, &symbol_data)) {
+        return rBLOCKED;
       }
-      name->target = symbol.value_ptr;
-      OK_EXPR(symbol.type);
+      EXPECT((!is_static || symbol_data->is_static), node,
+             strdup("static declaration refers to runtime variable"));
+      name->value_ptr = &symbol_data->value;
+      *out_type = symbol_data->type;
+      OK;
     });
     CASE(integer, {
       EXPECT((sscanf(integer->text, "%zd", &integer->value) == 1), node,
              strdup("integer is too large"));
-      OK_EXPR(PRIM(tyINT));
+      *out_type = PRIM(tyINT);
+      OK;
     });
-    CASE(string, { OK_EXPR(PRIM(tySTRING)); });
+    CASE(string, {
+      *out_type = PRIM(tySTRING);
+      OK;
+    });
     CASE(unary, {
       ANALYZE(unary->expr, expr);
       if (unary->op == tMINUS) {
         EXPECT((expr_type.kind != tyINT), unary->expr,
                strdup("cannot apply unary operator `-` to non-numeric type"));
-        OK_EXPR(expr_type);
+        *out_type = expr_type;
+        OK;
       }
       panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
     });
@@ -119,7 +126,8 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
         EXPECT((left_type.kind == right_type.kind), node,
                strdup("types on both sides of the binary arithmetic operator "
                       "must be the same"));
-        OK_EXPR(left_type);
+        *out_type = left_type;
+        OK;
       }
       panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
     });
@@ -128,9 +136,11 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
       ANALYZE(function_call->function, function);
       EXPECT((function_type.kind == tyFUNCTION), function_call->function,
              strdup("not a function"));
-      Type function_return_type = {0};
       {
         __auto_type function = function_type.function;
+        if (function._return != NULL) {
+          *out_type = *function._return;
+        }
 
         Node *arg = function_call->args;
         Type *param_type = function.params;
@@ -144,87 +154,84 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
           arg = arg->next_sibling;
           i++;
         }
-        if (function._return != NULL) {
-          function_return_type = *function._return;
-        }
       }
-      OK_EXPR(function_return_type);
+      OK;
     });
     CASE(function, {
       EXPECT((!IS_GLOBAL), node,
              strdup("functions can only be defined in the global scope"));
-      // function params and return_type are analyzed by declaration
-      Table *table = &function->table;
-      ANALYZE_ARRAY(function->stmts);
-      OK();
+
+      if (node->stage < sTYPED) {
+        function->table = (Table){.parent = table, .data = NULL, .length = 0};
+        Table *table = &function->table;
+        *out_type = (Type){.kind = tyFUNCTION, .function = {0}};
+        out_type->function.params =
+            ra_calloc(allocator, sizeof(Type) * function->num_params);
+        ITER_ARRAY(function->params, param, {
+          ANALYZE(param, param);
+          out_type->function.params[i] = param_type;
+        });
+        if (function->return_type != NULL) {
+          ANALYZE_TYPE(function->return_type, declared);
+          out_type->function._return = ra_calloc(allocator, sizeof(Type));
+          *out_type->function._return = declared_type;
+        }
+        node->stage = sTYPED;
+      }
+      ANALYZE_ARRAY(function->stmts, &function->table);
+      OK;
     });
     CASE(param, {
-      ANALYZE_TYPE(param->type, type);
-      OK_EXPR(type_type);
+      ANALYZE_TYPE(param->type, param);
+      NAME_OF(param);
+      SymbolData *symbol_data = NULL;
+      EXPECT(add_symbol(allocator, table, name, &symbol_data), node,
+             strdup("duplicate parameter"));
+      symbol_data->type = param_type;
+      OK;
     });
     CASE(for_loop, {
-      panicf("TODO");
-      OK();
+      ANALYZE(for_loop->init, init);
+      ANALYZE(for_loop->cond, cond);
+      ANALYZE(for_loop->step, step);
+      EXPECT((cond_type.kind == tyBOOL), node,
+             strdup("expected boolean type for for-loop condition"));
+      for_loop->table.parent = table;
+
+      ANALYZE_ARRAY(for_loop->stmts, &for_loop->table);
+      OK;
     });
     CASE(assign, {
-      panicf("TODO");
-      OK();
+      ANALYZE(assign->target, target);
+      ANALYZE(assign->value, value);
+      EXPECT((type_eq(target_type, value_type)), node, strdup("type mismatch"));
+      OK;
     });
     CASE(return_stmt, {
       ANALYZE(return_stmt->expr, expr);
       EXPECT(type_eq(expr_type, return_type), return_stmt->expr,
              strdup("return type mismatch"));
-      OK();
+      OK;
     });
     CASE(declaration, {
-      assert(declaration->name->kind == NAME);
-      Name name = declaration->name->name.name;
+      NAME_OF(declaration);
       bool is_static = IS_GLOBAL || declaration->is_constant;
-      Value *value_ptr = ra_calloc(allocator, sizeof(Value));
 
-      if (declaration->expr->kind == FUNCTION) {
-        // a function's type needs to be determined before its
-        // body is analyzed to prevent issues with recursion
-        __auto_type function = &declaration->expr->function;
-        function->table = (Table){.parent = table, .data = NULL, .length = 0};
-        Table *table = &function->table;
-        Type type = {.kind = tyFUNCTION, .function = {0}};
-        EXPECT((function->num_params < MAX_NUM_PARAMS), declaration->expr,
-               strdup("functions may only have " STRINGIFY(
-                   MAX_NUM_PARAMS) " parameters"));
-        type.function.params =
-            ra_calloc(allocator, sizeof(Type) * function->num_params);
-        ITER_ARRAY(function->params, param, {
-          ANALYZE(param, param);
-          type.function.params[i] = param_type;
-        });
-        if (function->return_type != NULL) {
-          ANALYZE_TYPE(function->return_type, declared);
-          type.function._return = ra_calloc(allocator, sizeof(Type));
-          *type.function._return = declared_type;
-        }
+      SymbolData *symbol_data = NULL;
+      EXPECT(add_symbol(allocator, table, name, &symbol_data), node,
+             strdup("duplicate declaration"));
+      symbol_data->is_static = is_static;
 
-        EXPECT(add_symbol(allocator, table, name, type, value_ptr, true), node,
-               strdup("duplicate declaration"));
-        // NOTE: should the function analysis just be inlined here?
-        ANALYZE(declaration->expr, value); // uses is_static override
-      } else {
-        ANALYZE(declaration->expr, value); // uses is_static override
-        EXPECT(add_symbol(allocator, table, name, value_type, value_ptr,
-                          is_static),
-               node, strdup("duplicate declaration"));
-      }
+      if (!ANALYZE_NODE(declaration->expr, value, &symbol_data->type))
+        FAIL;
       if (is_static) {
-        *value_ptr = evaluate_expr(declaration->expr);
+        symbol_data->value = evaluate_expr(declaration->expr);
       }
-      // TODO: check if this is a constant that refers to a runtime declaration
-      // (in a function)
-      OK();
+      OK;
     });
     CASE(module, {
-      Table *table = &module->table;
-      ANALYZE_ARRAY(module->declarations);
-      OK();
+      ANALYZE_ARRAY(module->declarations, &module->table);
+      OK;
     });
   });
 }
@@ -233,10 +240,9 @@ bool analyze(AST *ast, TypeErrorArray *error_data) {
   Allocator allocator = {0};
   Table table = {0};
   Result result = 0;
-  // needs two passes so that forward references are also resolved
-  for (bool is_second_pass = false; !is_second_pass; is_second_pass = true) {
+  while (true) {
     Result result = analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
-                                 error_data, true, is_second_pass);
+                                 error_data, true);
     if (result == rERROR)
       break;
   }
@@ -246,5 +252,5 @@ bool analyze(AST *ast, TypeErrorArray *error_data) {
   // should the allocator be passed along without freeing
   // or should types be zeroed?
   ra_free_all(&allocator);
-  return result == rOK;
+  return result == rDONE;
 }

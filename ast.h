@@ -8,20 +8,20 @@ typedef struct {
 } Span;
 
 typedef enum {
-  INVALID = 0,
-  NAME,
-  INTEGER,
-  STRING,
-  UNARY,
-  BINARY,
-  FUNCTION_CALL,
-  FUNCTION,
-  PARAM,
-  FOR_LOOP,
-  ASSIGN,
-  RETURN_STMT,
-  DECLARATION, // variable declaration
-  MODULE,
+  aINVALID = 0,
+  aNAME,
+  aINTEGER,
+  aSTRING,
+  aUNARY,
+  aBINARY,
+  aFUNCTION_CALL,
+  aFUNCTION,
+  aPARAM,
+  aFOR_LOOP,
+  aASSIGN,
+  aRETURN_STMT,
+  aDECLARATION, // variable declaration
+  aMODULE,
 } ASTNodeKind;
 
 typedef struct {
@@ -39,6 +39,7 @@ typedef struct {
 typedef enum {
   tyVOID = 0,
   tyINT,
+  tyBOOL,
   tySTRING,
   tyFUNCTION,
   tySTRUCT,
@@ -70,15 +71,20 @@ typedef union {
   ssize_t integer;
   String string;
   Type type;
-  ASTNode* function;
+  ASTNode *function;
 } Value;
 
 typedef struct {
-  Name name;
   Type type;
-  // pointer to the value stored in this declaration
-  Value *value_ptr;
+  Value value;
   bool is_static;
+} SymbolData;
+
+typedef struct {
+  Name name;
+  // storing data separately to keep pointers to it valid when the symbol table
+  // is reallocated
+  SymbolData *data;
 } Symbol;
 
 typedef struct SymbolTable SymbolTable;
@@ -92,12 +98,12 @@ typedef struct ASTNode {
   Span span;
   // Next sibling in case of an array.
   ASTNode *next_sibling;
-  bool is_analyzed;
+  enum { sPARSED = 0, sTYPED, sANALYZED } stage;
   ASTNodeKind kind;
   union {
     struct {
       Name name;
-      Value *target;
+      Value *value_ptr;
     } name;
     struct {
       const char *text;
@@ -142,7 +148,7 @@ typedef struct ASTNode {
     } for_loop;
     struct {
       TokenKind op;
-      ASTNode *name;
+      ASTNode *target;
       ASTNode *value;
     } assign;
     struct {
@@ -174,6 +180,6 @@ void ast_print_nodes(ASTNode *node);
 const char *ast_node_name(ASTNodeKind kind);
 
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
-                Type type, Value *value_ptr, bool is_static);
-bool get_symbol(SymbolTable *table, Name name, Symbol *out);
+                SymbolData **out_data_ptr);
+bool get_symbol(SymbolTable *table, Name name, SymbolData **out_data_ptr);
 SymbolTable get_top_table(SymbolTable table);

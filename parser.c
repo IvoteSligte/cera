@@ -3,6 +3,8 @@
 #include "ast.h"
 #include "ast_macro.h"
 
+USE_AST_MACRO_HEADER; // silence unused ast_macro.h warning
+
 #include <stdarg.h>
 
 typedef ListAllocator Allocator;
@@ -48,14 +50,14 @@ void error_data_add(ParseError *data, size_t token_index,
               _ERROR_DATA_ADD_3, _ERROR_DATA_ADD_2,                            \
               _ERROR_DATA_ADD_1)(__VA_ARGS__)}
 
-#define YIELD(KIND, $kind, ...)                                                \
+#define YIELD($kind, ...)                                                      \
   yield(allocator, (Node){.span = span,                                        \
                           .next_sibling = NULL,                                \
-                          .kind = KIND,                                        \
+                          .kind = NODE_##$kind,                                \
                           .$kind = __VA_ARGS__})
 
 #define RETURN($kind, ...)                                                     \
-  YIELD(UPPER_##$kind, $kind, __VA_ARGS__);                                    \
+  YIELD($kind, __VA_ARGS__);                                                   \
   OK;
 
 int log_indent = 0;
@@ -227,7 +229,7 @@ bool parse_block(PARSER_PARAMS, Node **out_first_stmt, Span *out_span) {
 PARSER(name, {
   EXPECT(tIDENT);
   RETURN(name, {.name = {.text = token.text, .length = token.length},
-                .target = NULL});
+                .value_ptr = NULL});
 });
 
 PARSER(integer, {
@@ -274,11 +276,11 @@ PARSER(unary, {
 });
 
 void fix_precedence(Node *node) {
-  assert(node->kind == BINARY);
+  assert(node->kind == aBINARY);
   __auto_type binary = &node->binary;
-  assert(binary->left->kind != BINARY);
+  assert(binary->left->kind != aBINARY);
 
-  if (binary->right->kind == BINARY) {
+  if (binary->right->kind == aBINARY) {
     __auto_type right = &binary->right->binary;
 
     if (!right->has_parens &&
@@ -300,8 +302,7 @@ PARSER(binary, {
   EXPECT_OP(tPLUS, tMINUS, tSTAR, tSLASH);
   MUST_PARSE(expr, right);
 
-  YIELD(BINARY, binary,
-        {.op = op, .has_parens = false, .left = left, .right = right});
+  YIELD(binary, {.op = op, .has_parens = false, .left = left, .right = right});
   fix_precedence(allocator->data[allocator->length - 1]);
   OK;
 });
@@ -342,7 +343,7 @@ PARSER(assign, {
   MUST_PARSE(name, name);
   EXPECT_OP(tEQ);
   MUST_PARSE(expr_stmt, value);
-  RETURN(assign, {.op = op, .name = name, .value = value});
+  RETURN(assign, {.op = op, .target = name, .value = value});
 });
 
 PARSER(return_stmt, {
