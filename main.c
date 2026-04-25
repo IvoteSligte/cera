@@ -1,5 +1,6 @@
 
 #include "analyzer.h"
+#include "evaluator.h"
 #include "lexer.h"
 #include "parser.h"
 
@@ -74,6 +75,7 @@ int main() {
     free(source);
     panicf("Analyze error(s).");
   }
+  evaluate_module(ast.head);
   free_ast(&ast);
   free(source);
   return 0;

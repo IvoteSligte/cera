@@ -168,9 +168,17 @@ Value evaluate_expr(Node *node) {
   });
 }
 
+static const Name MAIN_NAME = (Name){.text = "main", .length = 4};
+
 void evaluate_module(Node *node) {
   assert(node->kind == aMODULE);
   __auto_type module = &node->module;
-  ITER_ARRAY(module->declarations, declaration,
-             { evaluate_stmt(declaration, NULL); });
+  ITER_ARRAY(module->declarations, declaration, {
+    if (name_eq(declaration->name.name, MAIN_NAME)) {
+      // FIXME: this evaluates the declaration, not the function in the
+      // declaration
+      // there is also no check that `main` has the correct signature
+      evaluate_stmt(declaration, NULL);
+    }
+  });
 }

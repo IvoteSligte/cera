@@ -1,5 +1,9 @@
 
+main :: () {
+  doStuff(10, 20);
+}
 
-lexerDoStuff :: (a: int, b: int) {
+doStuff :: (a: int, b: int) {
   print_string("Hello, World!");
 }
+
