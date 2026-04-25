@@ -1,4 +1,5 @@
 
+#include "analyzer.h"
 #include "lexer.h"
 #include "parser.h"
 
@@ -52,9 +53,9 @@ int main() {
   lexer_print_token_stream(stream);
 
   AST ast = {0};
-  ParseError error_data;
-  if (!parse(stream, &ast, &error_data)) {
-    print_parse_error(source, stream, error_data);
+  ParseError parse_error;
+  if (!parse(stream, &ast, &parse_error)) {
+    print_parse_error(source, stream, parse_error);
     free_token_stream(stream);
     free_ast(&ast);
     free(source);
@@ -65,6 +66,14 @@ int main() {
   printf("Parse success.\n");
   ast_print_nodes(ast.head);
 
+  TypeErrorArray type_errors = {0};
+  if (!analyze(&ast, &type_errors)) {
+    print_analyze_errors(source, type_errors);
+    free_analyze_errors(&type_errors);
+    free_ast(&ast);
+    free(source);
+    panicf("Analyze error(s).");
+  }
   free_ast(&ast);
   free(source);
   return 0;

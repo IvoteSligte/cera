@@ -4,6 +4,7 @@
 #include "ast.h"
 #include "ast_macro.h"
 #include "evaluator.h"
+#include "offset.h"
 
 #include <stdarg.h>
 #include <string.h>
@@ -253,17 +254,40 @@ bool analyze(AST *ast, TypeErrorArray *error_data) {
   Allocator allocator = {0};
   Table table = {0};
   Result result = 0;
-  while (true) {
+  for (size_t i = 0;; i++) {
+    printf("Iteration: %zu\n", i);
     Result result = analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
                                  error_data, true);
-    if (result == rERROR)
+    if (result != rBLOCKED)
       break;
   }
-  assert(result != rBLOCKED); // should be finished after 2 passes
-  free(table.data);
-  // NOTE: this leaves the type in an undefined state
-  // should the allocator be passed along without freeing
-  // or should types be zeroed?
+  // NOTE: this leaves modified values in the AST.
+  // Should these be zeroed after analysis or should the allocator be passed
+  // along? Or should they simply be in a strange state?
   ra_free_all(&allocator);
   return result == rDONE;
+}
+
+void print_analyze_errors(const char *source, TypeErrorArray type_errors) {
+  for (size_t i = 0; i < type_errors.length; i++) {
+    TypeError error = type_errors.data[i];
+    eprintf("Error: %s\n", error.message);
+
+    OffsetInfo oi = get_offset_info(source, error.span.offset);
+    eprintf(">>> line %zu, column %d\n", oi.line_number, oi.column_number);
+    eprintf(" | %.*s\n", oi.line_length, oi.line);
+    eprintf(" | %*s", oi.column_number, " ");
+    for (size_t i = 0; i < error.span.length; i++)
+      eprintf("~");
+    eprintf("\n");
+  }
+}
+
+void free_analyze_errors(TypeErrorArray *type_errors) {
+  for (size_t i = 0; i < type_errors->length; i++) {
+    TypeError error = type_errors->data[i];
+    free(error.message);
+  }
+  free(type_errors->data);
+  type_errors->data = NULL;
 }

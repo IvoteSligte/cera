@@ -2,6 +2,7 @@
 #include "alloc.h"
 #include "ast.h"
 #include "ast_macro.h"
+#include "offset.h"
 
 USE_AST_MACRO_HEADER; // silence unused ast_macro.h warning
 
@@ -392,32 +393,6 @@ PARSER(module, {
   ZERO_OR_MORE(declaration, declaration);
   RETURN(module, {.declarations = first_declaration});
 });
-
-typedef struct {
-  const char *line;
-  int line_length;
-  int column_number;
-  size_t line_number;
-} OffsetInfo;
-
-OffsetInfo get_offset_info(const char *source, size_t offset) {
-  OffsetInfo info = {0};
-  info.line = source;
-
-  for (size_t i = 0; i < offset; i++) {
-    if (source[i] == '\n') {
-      info.line = &source[i];
-      info.line_number++;
-    } else {
-      info.column_number++;
-    }
-  }
-  info.line_length = info.column_number;
-  for (size_t i = offset; source[i] != '\n' && source[i] != '\0'; i++) {
-    info.line_length++;
-  }
-  return info;
-}
 
 void print_parse_error(const char *source, TokenStream stream,
                        ParseError error_data) {

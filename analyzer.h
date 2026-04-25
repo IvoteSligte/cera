@@ -13,3 +13,6 @@ typedef struct {
 } TypeErrorArray;
 
 bool analyze(AST *ast, TypeErrorArray *error_data);
+
+void print_analyze_errors(const char* source, TypeErrorArray type_errors);
+void free_analyze_errors(TypeErrorArray *type_errors);
