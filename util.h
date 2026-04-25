@@ -9,11 +9,14 @@
 
 #include "alloc.h"
 
+__attribute__((noreturn))
+void backtrace_abort(void);
+
 #define eprintf(format, ...) fprintf(stderr, format __VA_OPT__(, ) __VA_ARGS__)
 #define panicf(format, ...)                                                    \
   {                                                                            \
     eprintf("Panic: " format "\n" __VA_OPT__(, ) __VA_ARGS__);                 \
-    abort();                                                                   \
+    backtrace_abort();                                                         \
   }
 
 #define UNUSED(x) (void)(x)

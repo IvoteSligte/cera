@@ -15,7 +15,8 @@ PRIM_DATA(BOOL);
 PRIM_DATA(STRING);
 
 #define MATCH_PRIMITIVE($name, $NAME)                                          \
-  if (strncmp(name.text, #$name, name.length)) {                               \
+  if (name.length == strlen(#$name) &&                                         \
+      strncmp(name.text, #$name, name.length)) {                               \
     *out_data_ptr = &$NAME##_DATA;                                             \
     return true;                                                               \
   }
@@ -32,13 +33,15 @@ bool get_builtin(Name name, SymbolData **out_data_ptr) {
 // table.
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
                 SymbolData **out_data_ptr) {
-  if (get_builtin(name, out_data_ptr))
+  if (get_builtin(name, out_data_ptr)) {
     return false;
+  }
 
   for (size_t i = 0; i < table->length; i++) {
     Symbol symbol = table->data[i];
-    if (name_eq(symbol.name, name))
-      return false;
+    if (name_eq(symbol.name, name)) {
+      return false;      
+    }
   }
   table->data =
       ra_recalloc(allocator, table->data, sizeof(Symbol) * (table->length + 1));

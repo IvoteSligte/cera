@@ -145,6 +145,7 @@ Value evaluate_expr(Node *node) {
       evaluate_stmts(function->stmts, &function_out);
       OK(function_out);
     });
+    CASE(function, { panicf("unimplemented: function"); });
   });
 }
 

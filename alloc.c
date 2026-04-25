@@ -25,7 +25,7 @@ void la_free_all(ListAllocator *allocator) {
 
 void *ra_calloc(RandomAllocator *allocator, size_t size) {
   allocator->data =
-      realloc(allocator->data, sizeof(Memory *) * (allocator->length + 1));
+      realloc(allocator->data, sizeof(Memory) * (allocator->length + 1));
   Memory memory = {.ptr = calloc(1, size), .size = size};
   allocator->data[allocator->length] = memory;
   allocator->length++;

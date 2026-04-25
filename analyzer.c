@@ -59,7 +59,7 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
 #define EXPECT(condition, node, $message)                                      \
   if (!(condition)) {                                                          \
     add_error(error_data, node->span, $message);                               \
-    return false;                                                              \
+    return rERROR;                                                              \
   }
 
 typedef enum {
@@ -71,7 +71,7 @@ typedef enum {
 #define OK                                                                     \
   {                                                                            \
     node->stage = sANALYZED;                                                   \
-    return true;                                                               \
+    return rDONE;                                                               \
   }
 
 #define IS_GLOBAL (table->parent == NULL)
@@ -82,6 +82,8 @@ typedef enum {
 Result analyze_node(Allocator *allocator, Node *node, Table *table,
                     Type return_type, Type *out_type,
                     TypeErrorArray *error_data, bool is_static) {
+  eprintf("INFO: analyze %s\n", ast_node_name(node->kind));
+  
   if (node->stage >= sANALYZED)
     return rDONE;
   SWITCH(
@@ -168,7 +170,7 @@ Result analyze_node(Allocator *allocator, Node *node, Table *table,
           OK;
         });
         CASE(function, {
-          EXPECT((!IS_GLOBAL), node,
+          EXPECT(!IS_GLOBAL, node,
                  strdup("functions can only be defined in the global scope"));
 
           if (node->stage < sTYPED) {

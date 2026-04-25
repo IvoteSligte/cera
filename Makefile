@@ -1,8 +1,8 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -fsanitize=address,undefined -g
+CFLAGS = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic
 
 SRC = $(wildcard *.c)
-OBJ = $(SRC:src/%.c=build/%.o)
+OBJ = $(SRC:%.c=build/%.o)
 
 build/%.o: %.c
 	mkdir -p build/
