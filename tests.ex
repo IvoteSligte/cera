@@ -1,0 +1,9 @@
+
+// cannot assign to temporary
+f() = 0;
+
+// cannot assign to constant
+N :: 10;
+main :: () {
+    N = 0;
+}
