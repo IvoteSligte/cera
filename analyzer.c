@@ -24,11 +24,6 @@ char *ssprintf(const char *fmt, ...) {
   assert(($declaration)->name->kind == aNAME);                                 \
   Name name = ($declaration)->name->name.name;
 
-#define FAIL                                                                   \
-  {                                                                            \
-    return rERROR;                                                             \
-  }
-
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
     return analyze_##$name(allocator, node, table, return_type, out_type,      \
@@ -40,8 +35,11 @@ char *ssprintf(const char *fmt, ...) {
                is_static)
 #define ANALYZE($node, $name)                                                  \
   Type $name##_type = {0};                                                     \
-  if (!ANALYZE_NODE($node, $name, &$name##_type))                              \
-    FAIL;
+  {                                                                            \
+    Result __result = ANALYZE_NODE($node, $name, &$name##_type);               \
+    if (__result != rDONE)                                                     \
+      return __result;                                                         \
+  }
 
 #define ANALYZE_TYPE($node, $name)                                             \
   ANALYZE($node, $name);                                                       \
@@ -64,7 +62,7 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
 #define EXPECT(condition, node, $message)                                      \
   if (!(condition)) {                                                          \
     add_error(error_data, node->span, $message);                               \
-    FAIL;                                                                      \
+    return rERROR;                                                             \
   }
 
 typedef enum {
@@ -106,6 +104,8 @@ ANALYZER_SIGNATURE(node);
 ANALYZER(name, {
   SymbolData *symbol_data = NULL;
   if (!get_symbol(table, name->name, &symbol_data)) {
+    printf("INFO: compilation blocked by undefined symbol %.*s\n",
+           (int)name->name.length, name->name.text);
     return rBLOCKED;
   }
   EXPECT((!is_static || symbol_data->is_static), node,
@@ -255,8 +255,10 @@ ANALYZER(declaration, {
   symbol_data->is_static = is_static;
   declaration->value_ptr = &symbol_data->value;
 
-  if (!ANALYZE_NODE(declaration->expr, value, &symbol_data->type))
-    FAIL;
+  Result result = ANALYZE_NODE(declaration->expr, value, &symbol_data->type);
+  if (result != rDONE) {
+    return result;
+  }
   if (is_static) {
     symbol_data->value = evaluate_expr(declaration->expr);
   }
