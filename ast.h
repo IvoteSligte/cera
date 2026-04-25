@@ -131,6 +131,7 @@ typedef struct ASTNode {
     struct {
       ASTNode *name;
       ASTNode *type;
+      Value* value_ptr;      
     } param;
     struct {
       ASTNode *params;
@@ -158,6 +159,7 @@ typedef struct ASTNode {
       bool is_constant;
       ASTNode *name;
       ASTNode *expr;
+      Value* value_ptr;
     } declaration;
     struct {
       ASTNode *declarations;

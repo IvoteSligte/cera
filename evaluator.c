@@ -41,7 +41,7 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
     CASE(declaration, {
       if (!declaration->is_constant) {
         EVALUATE(declaration->expr, value);
-        node->value = value_value;
+        *declaration->value_ptr = value_value;
       }
       OK(cNEXT);
     });
@@ -59,7 +59,7 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
 
 Value evaluate_expr(Node *node) {
   SWITCH(node, {
-    CASE(name, { OK(*name->target); });
+    CASE(name, { OK(*name->value_ptr); });
     CASE(integer, { OK_INT(integer->value); });
     CASE(string, {
       // the string value is immutable, only typed as mutable as it
@@ -94,13 +94,14 @@ Value evaluate_expr(Node *node) {
     });
     CASE(function_call, {
       EVALUATE(function_call->function, function);
-      assert(function_value.function->kind == FUNCTION);
+      assert(function_value.function->kind == aFUNCTION);
       __auto_type function = &function_value.function->function;
 
       ASTNode *arg = function_call->args;
       ASTNode *param = function->params;
       while (arg != NULL) {
-        param->value = evaluate_expr(arg);
+        assert(param->kind == aPARAM);
+        *param->param.value_ptr = evaluate_expr(arg);
         arg = arg->next_sibling;
         param = param->next_sibling;
       }
@@ -130,7 +131,7 @@ Value evaluate_expr(Node *node) {
 }
 
 void evaluate_module(Node *node) {
-  assert(node->kind == MODULE);
+  assert(node->kind == aMODULE);
   __auto_type module = &node->module;
   ITER_ARRAY(module->declarations, declaration,
              { evaluate_stmt(declaration, NULL); });
