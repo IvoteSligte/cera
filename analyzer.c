@@ -27,16 +27,17 @@ char *ssprintf(const char *fmt, ...) {
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
     return analyze_##$name(allocator, node, table, return_type, out_type,      \
-                           error_data, is_static);                             \
+                           error_data, is_static, anything_changed,            \
+                           error_on_block);                                    \
   })
 
-#define ANALYZE_NODE($node, $name, $out_type)                                  \
-  analyze_node(allocator, $node, table, return_type, $out_type, error_data,    \
-               is_static)
+#define ANALYZE_NODE($name, $node, $out_type)                                  \
+  analyze_##$name(allocator, $node, table, return_type, $out_type, error_data, \
+                  is_static, anything_changed, error_on_block)
 #define ANALYZE($node, $name)                                                  \
   Type $name##_type = {0};                                                     \
   {                                                                            \
-    Result __result = ANALYZE_NODE($node, $name, &$name##_type);               \
+    Result __result = ANALYZE_NODE(node, $node, &$name##_type);                \
     if (__result != rDONE)                                                     \
       return __result;                                                         \
   }
@@ -74,6 +75,7 @@ typedef enum {
 #define OK                                                                     \
   {                                                                            \
     node->stage = sANALYZED;                                                   \
+    *anything_changed = true;                                                  \
     return rDONE;                                                              \
   }
 
@@ -85,7 +87,8 @@ typedef enum {
 #define ANALYZER_SIGNATURE($name)                                              \
   Result analyze_##$name(Allocator *allocator, Node *node, Table *table,       \
                          Type return_type, Type *out_type,                     \
-                         TypeErrorArray *error_data, bool is_static)
+                         TypeErrorArray *error_data, bool is_static,           \
+                         bool *anything_changed, bool error_on_block)
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
@@ -97,6 +100,7 @@ typedef enum {
     UNUSED(error_data);                                                        \
     UNUSED(is_static);                                                         \
     UNUSED(allocator);                                                         \
+    UNUSED(error_on_block);                                                    \
   }
 
 ANALYZER_SIGNATURE(node);
@@ -106,6 +110,7 @@ ANALYZER(name, {
   if (!get_symbol(table, name->name, &symbol_data)) {
     eprintf("INFO: compilation blocked by undefined symbol `%.*s` \n",
             (int)name->name.length, name->name.text);
+    EXPECT((!error_on_block), node, strdup("undefined symbol"));
     return rBLOCKED;
   }
   EXPECT((!is_static || symbol_data->is_static), node,
@@ -256,7 +261,7 @@ ANALYZER(declaration, {
   symbol_data->is_static = is_static;
   declaration->value_ptr = &symbol_data->value;
 
-  Result result = ANALYZE_NODE(declaration->expr, value, &symbol_data->type);
+  Result result = ANALYZE_NODE(node, declaration->expr, &symbol_data->type);
   if (result != rDONE) {
     return result;
   }
@@ -323,12 +328,15 @@ bool analyze(AST *ast, TypeErrorArray *error_data) {
   Allocator allocator = {0};
   Table table = {0};
   Result result = 0;
+  bool error_on_block = false;
   for (size_t i = 0;; i++) {
     eprintf("INFO: analyze iteration: %zu\n", i);
+    bool anything_changed = false;
     result = analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
-                          error_data, true);
+                          error_data, true, &anything_changed, error_on_block);
     if (result != rBLOCKED)
       break;
+    error_on_block = !anything_changed;
   }
   // NOTE: this leaves modified values in the AST.
   // Should these be zeroed after analysis or should the allocator be passed
