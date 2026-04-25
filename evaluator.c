@@ -112,12 +112,16 @@ Value evaluate_expr(Node *node) {
       switch (binary->op) {
       case tPLUS:
         value = left_value.integer + right_value.integer;
+        break;
       case tMINUS:
         value = left_value.integer - right_value.integer;
+        break;
       case tSTAR:
         value = left_value.integer * right_value.integer;
+        break;
       case tSLASH:
         value = left_value.integer / right_value.integer;
+        break;
       default:
         panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
       }
