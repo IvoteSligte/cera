@@ -1,5 +1,5 @@
 
 
 lexerDoStuff :: (a: int, b: int) {
-  printf("hi %s", "name");
+  print_string("Hello, World!");
 }

@@ -3,7 +3,7 @@
 #include "ast_macro.h"
 
 #define PRIM_DATA($name)                                                       \
-  static SymbolData $name##_DATA = {.type = PRIM_TYPE(tyTYPE),                  \
+  static SymbolData $name##_DATA = {.type = PRIM_TYPE(tyTYPE),                 \
                                     .value = {.type = PRIM_TYPE(ty##$name)},   \
                                     .is_static = true};
 
@@ -12,18 +12,30 @@ PRIM_DATA(INT);
 PRIM_DATA(BOOL);
 PRIM_DATA(STRING);
 
-#define MATCH_PRIMITIVE($name, $NAME)                                          \
+static SymbolData PRINT_STRING_DATA =
+    (SymbolData){.type = {.kind = tyFUNCTION,
+                          .is_constant = true,
+                          .function = {.params = &STRING_DATA.value.type,
+                                       .num_params = 1,
+                                       ._return = &VOID_DATA.value.type}},
+                 .value = { .builtin_id = PRINT_STRING },
+                 .is_static = true};
+
+#define MATCH($name, $NAME)                                                    \
   if (name.length == strlen(#$name) &&                                         \
       strncmp(name.text, #$name, name.length) == 0) {                          \
     *out_data_ptr = &$NAME##_DATA;                                             \
     return true;                                                               \
   }
 
+// NOTE: this currently prevents naming shadowing builtins, even as local
+// variables
 bool get_builtin(Name name, SymbolData **out_data_ptr) {
-  MATCH_PRIMITIVE(void, VOID);
-  MATCH_PRIMITIVE(int, INT);
-  MATCH_PRIMITIVE(bool, BOOL);
-  MATCH_PRIMITIVE(string, STRING);
+  MATCH(void, VOID);
+  MATCH(int, INT);
+  MATCH(bool, BOOL);
+  MATCH(string, STRING);
+  MATCH(print_string, PRINT_STRING);
   return false;
 }
 
@@ -34,7 +46,6 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
   if (get_builtin(name, out_data_ptr)) {
     return false;
   }
-
   for (size_t i = 0; i < table->length; i++) {
     Symbol symbol = table->data[i];
     if (name_eq(symbol.name, name)) {

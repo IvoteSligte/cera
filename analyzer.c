@@ -164,24 +164,23 @@ ANALYZER(function_call, {
   ANALYZE(function_call->function, function);
   EXPECT((function_type.kind == tyFUNCTION), function_call->function,
          strdup("not a function"));
-  {
-    __auto_type function = function_type.function;
-    if (function._return != NULL) {
-      *out_type = *function._return;
-    }
 
-    Node *arg = function_call->args;
-    Type *param_type = function.params;
-    size_t i = 0;
-    while (arg != NULL || i < function.num_params) {
-      ANALYZE(arg, arg);
-      EXPECT((arg != NULL && param_type != NULL), node,
-             strdup("argument count mismatch"));
-      EXPECT((type_eq(arg_type, *param_type)), arg,
-             strdup("argument type mismatch"));
-      arg = arg->next_sibling;
-      i++;
-    }
+  __auto_type function = function_type.function;
+  if (function._return != NULL) {
+    *out_type = *function._return;
+  }
+
+  Node *arg = function_call->args;
+  Type *param_type = function.params;
+  size_t i = 0;
+  while (arg != NULL || i < function.num_params) {
+    ANALYZE(arg, arg);
+    EXPECT((arg != NULL && param_type != NULL), node,
+           strdup("argument count mismatch"));
+    EXPECT((type_eq(arg_type, *param_type)), arg,
+           strdup("argument type mismatch"));
+    arg = arg->next_sibling;
+    i++;
   }
   OK;
 });

@@ -48,6 +48,11 @@ typedef enum {
   tyTYPE,
 } TypeKind;
 
+typedef enum {
+  NOT_BUILTIN = 0,
+  PRINT_STRING,
+} BuiltinID;
+
 typedef struct Type Type;
 typedef struct Type {
   TypeKind kind;
@@ -75,7 +80,11 @@ typedef union {
   ssize_t integer;
   String string;
   Type type;
-  ASTNode *function;
+  struct {
+    // non-zero if this is a builtin function
+    BuiltinID builtin_id;
+    ASTNode *function;
+  };
 } Value;
 
 typedef struct {
@@ -135,7 +144,7 @@ typedef struct ASTNode {
     struct {
       ASTNode *name;
       ASTNode *type;
-      Value* value_ptr;      
+      Value *value_ptr;
     } param;
     struct {
       ASTNode *params;
@@ -163,7 +172,7 @@ typedef struct ASTNode {
       bool is_constant;
       ASTNode *name;
       ASTNode *expr;
-      Value* value_ptr;
+      Value *value_ptr;
     } declaration;
     struct {
       ASTNode *declarations;
@@ -178,7 +187,7 @@ Span join_spans(Span left, Span right);
 bool name_eq(Name left, Name right);
 bool type_eq(Type left, Type right);
 
-const char* type_name(TypeKind kind);
+const char *type_name(TypeKind kind);
 
 void free_ast(AST *ast);
 

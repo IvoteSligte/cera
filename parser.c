@@ -416,9 +416,9 @@ void print_parse_error(const char *source, TokenStream stream,
 
   if (error_data.first_unparsed_token != stream.length) {
     OffsetInfo oi = get_offset_info(source, token.offset);
-    eprintf(">>> line %zu, column %d\n", oi.line_number, oi.column_number);
-    eprintf(" | %.*s\n", oi.line_length, oi.line);
-    eprintf(" | %*s", oi.column_number, " ");
+    eprintf(">>> line %zu, column %zu\n", oi.line_number, oi.column_number);
+    eprintf(" | %.*s\n", (int)oi.line_length, oi.line);
+    eprintf(" | %*s", (int)oi.column_number, " ");
     for (size_t i = 0; i < token.length; i++)
       eprintf("~");
     eprintf("\n");

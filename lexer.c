@@ -15,7 +15,7 @@ const Matcher MATCHERS[] = {
     M(WHITESPACE, "whitespace", "[\n\t ]+"),
     M(COMMENT, "comment", "// .*\n"),
     // words
-    M(IDENT, "identifier", "[a-zA-Z][a-zA-Z0-9]*"),
+    M(IDENT, "identifier", "[a-zA-Z_][a-zA-Z_0-9]*"),
     M(NUMBER, "number", "[0-9]+"),
     M(STRING, "string", "\"[^\"]*\""),
     // symbols

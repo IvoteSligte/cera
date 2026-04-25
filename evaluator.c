@@ -82,11 +82,25 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
 }
 #undef OK
 
-#define OK(value...)                                                           \
-  {                                                                            \
-    return value;                                                              \
-  }
+#define OK(value...) return value;
+
 #define OK_INT($integer) OK((Value){.integer = $integer})
+
+Value evaluate_builtin(ASTNode *arg, BuiltinID id) {
+  switch (id) {
+  case NOT_BUILTIN:
+    panicf("unreachable");
+  case PRINT_STRING: {
+    EVALUATE(&arg[0], arg);
+    // fwrite instead of printf because printf can only print non-zero-delimited
+    // strings of up to INT_MAX characters in length
+    fwrite(arg_value.string.text, arg_value.string.length, 1, stdout);
+    return (Value){0};
+  }
+  default:
+    panicf("unimplemented builtin: %d", id);
+  }
+}
 
 Value evaluate_expr(Node *node) {
   SWITCH(node, panicf("not an expression: %s", ast_node_name(node->kind)), {
@@ -129,6 +143,11 @@ Value evaluate_expr(Node *node) {
     });
     CASE(function_call, {
       EVALUATE(function_call->function, function);
+
+      if (function_value.builtin_id != NOT_BUILTIN) {
+        OK(evaluate_builtin(function_call->args, function_value.builtin_id));
+      }
+
       assert(function_value.function->kind == aFUNCTION);
       __auto_type function = &function_value.function->function;
 
