@@ -68,6 +68,7 @@ typedef struct {
 } String;
 
 typedef union {
+  bool boolean;
   ssize_t integer;
   String string;
   Type type;
@@ -150,7 +151,7 @@ typedef struct ASTNode {
     struct {
       TokenKind op;
       ASTNode *target;
-      ASTNode *value;
+      ASTNode *expr;
     } assign;
     struct {
       ASTNode *expr;

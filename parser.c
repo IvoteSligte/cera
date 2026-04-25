@@ -342,8 +342,8 @@ PARSER_PROTOTYPE(declaration);
 PARSER(assign, {
   MUST_PARSE(name, name);
   EXPECT_OP(tEQ);
-  MUST_PARSE(expr_stmt, value);
-  RETURN(assign, {.op = op, .target = name, .value = value});
+  MUST_PARSE(expr_stmt, expr);
+  RETURN(assign, {.op = op, .target = name, .expr = expr});
 });
 
 PARSER(return_stmt, {

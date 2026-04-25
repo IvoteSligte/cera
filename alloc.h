@@ -15,19 +15,24 @@ void *la_calloc(ListAllocator *allocator, size_t size);
 void la_shrink(ListAllocator *allocator, size_t new_length);
 void la_free_all(ListAllocator *allocator);
 
+typedef struct {
+    void *ptr;
+    size_t size;
+} Memory;
+
 // Guarantees that the allocated data is never moved (unless ra_realloc is
 // called).
 typedef struct {
-  void **data;
+  Memory *data;
   size_t length;
 } RandomAllocator;
 
 void *ra_calloc(RandomAllocator *allocator, size_t size);
 
-// Resizes the memory associated with MEMORY to SIZE bytes.
+// Resizes the memory associated with PTR to SIZE bytes.
 // May move the memory.
-// Calls ra_calloc if MEMORY == NULL.
-// Returns NULL if MEMORY was not allocated by this allocator.
-void *ra_realloc(RandomAllocator *allocator, void *memory, size_t size);
+// Calls ra_calloc if PTR == NULL.
+// Returns NULL if PTR was not allocated by this allocator.
+void *ra_recalloc(RandomAllocator *allocator, void *ptr, size_t new_size);
 
 void ra_free_all(RandomAllocator *allocator);

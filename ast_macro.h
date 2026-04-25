@@ -17,20 +17,22 @@
 #define NODE_declaration aDECLARATION
 #define NODE_module aMODULE
 
-#define SWITCH(node, cases)                                                    \
+#define SWITCH($node, $default, $cases)                                        \
   {                                                                            \
-    ASTNode *__node = node;                                                    \
+    ASTNode *__node = $node;                                                   \
     switch (__node->kind) {                                                    \
     case aINVALID:                                                             \
       panicf("matched INVALID AST node");                                      \
-      cases;                                                                   \
+      $cases;                                                                  \
+    default:                                                                   \
+      $default;                                                                \
     }                                                                          \
   }
 
-#define CASE(name, ...)                                                        \
-  case NODE_##name: {                                                          \
-    __auto_type name = &__node->name;                                          \
-    UNUSED(name);                                                              \
+#define CASE($name, ...)                                                       \
+  case NODE_##$name: {                                                         \
+    __auto_type $name = &__node->$name;                                        \
+    UNUSED($name);                                                             \
     {                                                                          \
       __VA_ARGS__;                                                             \
     }                                                                          \

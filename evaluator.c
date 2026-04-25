@@ -13,40 +13,71 @@ typedef enum {
     return control_flow;                                                       \
   }
 
-#define EVALUATE(node, name) Value name##_value = evaluate_expr(node);
+#define EVALUATE(node, name)                                                   \
+  Value name##_value = evaluate_expr(node);                                    \
+  UNUSED(name##_value);
+
+#define EVALUATE_ARRAY($array)                                                 \
+  ITER_ARRAY($array, element, { EVALUATE(element, element); });
+
+ControlFlow evaluate_stmt(Node *node, Value *function_out);
+
+ControlFlow evaluate_stmts(Node *stmts, Value *function_out) {
+  ITER_ARRAY(stmts, stmt, {
+    ControlFlow control = evaluate_stmt(stmt, function_out);
+    if (control == cRETURN)
+      return cRETURN;
+  });
+  return cNEXT;
+}
+
+Value *evaluate_target(Node *node) {
+  SWITCH(node, panicf("not a target: %s", ast_node_name(node->kind)),
+         { CASE(name, { return name->value_ptr; }); });
+}
 
 ControlFlow evaluate_stmt(Node *node, Value *function_out) {
-  SWITCH(node, {
-    CASE(name);
-    CASE(integer);
-    CASE(string);
-    CASE(unary);
-    CASE(binary);
-    CASE(function_call);
-    CASE(function);
-    CASE(param);
-    CASE(for_loop, {
-      panicf("TODO");
-      OK(cNEXT);
-    });
-    CASE(assign, {
-      panicf("TODO");
-      OK(cNEXT);
-    });
-    CASE(return_stmt, {
-      EVALUATE(return_stmt->expr, expr);
-      *function_out = expr_value;
-      OK(cRETURN);
-    });
-    CASE(declaration, {
-      if (!declaration->is_constant) {
-        EVALUATE(declaration->expr, value);
-        *declaration->value_ptr = value_value;
-      }
-      OK(cNEXT);
-    });
-    CASE(module);
-  });
+  SWITCH(
+      node,
+      {
+        evaluate_expr(node);
+        OK(cNEXT);
+      },
+      {
+        CASE(param);
+        CASE(for_loop, {
+          EVALUATE(for_loop->init, init);
+          while (true) {
+            EVALUATE(for_loop->cond, cond);
+            if (!cond_value.boolean)
+              break;
+            ControlFlow control = evaluate_stmts(for_loop->stmts, function_out);
+            if (control == cRETURN)
+              OK(cRETURN);
+            EVALUATE(for_loop->step, step);
+          }
+          OK(cNEXT);
+        });
+        CASE(assign, {
+          Value *target = evaluate_target(assign->target);
+          EVALUATE(assign->expr, expr);
+          *target = expr_value;
+          OK(cNEXT);
+        });
+        CASE(return_stmt, {
+          EVALUATE(return_stmt->expr, expr);
+          *function_out = expr_value;
+          OK(cRETURN);
+        });
+        CASE(declaration, {
+          if (!declaration->is_constant) {
+            EVALUATE(declaration->expr, value);
+            *declaration->value_ptr = value_value;
+          }
+          OK(cNEXT);
+        });
+        CASE(module);
+      });
   panicf("not a statement: %s", ast_node_name(node->kind));
 }
 #undef OK
@@ -58,7 +89,7 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
 #define OK_INT($integer) OK((Value){.integer = $integer})
 
 Value evaluate_expr(Node *node) {
-  SWITCH(node, {
+  SWITCH(node, panicf("not an expression: %s", ast_node_name(node->kind)), {
     CASE(name, { OK(*name->value_ptr); });
     CASE(integer, { OK_INT(integer->value); });
     CASE(string, {
@@ -105,29 +136,12 @@ Value evaluate_expr(Node *node) {
         arg = arg->next_sibling;
         param = param->next_sibling;
       }
-      OK(evaluate_expr(function_value.function));
-    });
-    CASE(function, {
       // assumes that parameter values have been set
       Value function_out = {0};
-      ITER_ARRAY(function->stmts, stmt, {
-        ControlFlow control = evaluate_stmt(stmt, &function_out);
-        switch (control) {
-        case cNEXT:
-          break; // break switch
-        case cRETURN:
-          OK(function_out);
-        }
-      });
+      evaluate_stmts(function->stmts, &function_out);
+      OK(function_out);
     });
-    CASE(param);
-    CASE(for_loop);
-    CASE(assign);
-    CASE(return_stmt);
-    CASE(declaration);
-    CASE(module);
   });
-  panicf("not an expression: %s", ast_node_name(node->kind));
 }
 
 void evaluate_module(Node *node) {

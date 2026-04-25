@@ -21,21 +21,27 @@ void la_free_all(ListAllocator *allocator) { la_shrink(allocator, 0); }
 
 void *ra_calloc(RandomAllocator *allocator, size_t size) {
   allocator->data =
-      realloc(allocator->data, sizeof(void *) * (allocator->length + 1));
-  void *memory = calloc(1, size);
+      realloc(allocator->data, sizeof(Memory *) * (allocator->length + 1));
+  Memory memory = {.ptr = calloc(1, size), .size = size};
   allocator->data[allocator->length] = memory;
   allocator->length++;
-  return memory;
+  return memory.ptr;
 }
 
-void *ra_realloc(RandomAllocator *allocator, void *memory, size_t size) {
-  if (memory == NULL) {
-    return ra_calloc(allocator, size);
+void *ra_recalloc(RandomAllocator *allocator, void *ptr, size_t new_size) {
+  if (ptr == NULL) {
+    return ra_calloc(allocator, new_size);
   }
   for (size_t i = 0; i < allocator->length; i++) {
-    if (allocator->data[i] == memory) {
-      allocator->data[i] = realloc(allocator->data[i], size);
-      return allocator->data[i];
+    Memory* memory = &allocator->data[i];
+    if (memory->ptr == ptr) {
+      size_t old_size = memory->size;
+      ptr = realloc(ptr, new_size);
+      *memory = (Memory){.ptr = ptr, .size = new_size};
+      if (new_size > old_size) {
+        memset(ptr + old_size, 0, new_size - old_size);
+      }
+      return ptr;
     }
   }
   return NULL;
@@ -43,6 +49,6 @@ void *ra_realloc(RandomAllocator *allocator, void *memory, size_t size) {
 
 void ra_free_all(RandomAllocator *allocator) {
   for (size_t i = 0; i < allocator->length; i++) {
-    free(allocator->data[i]);
+    free(allocator->data[i].ptr);
   }
 }

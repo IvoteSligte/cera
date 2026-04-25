@@ -16,7 +16,6 @@ PRIM_DATA(STRING);
 
 #define MATCH_PRIMITIVE($name, $NAME)                                          \
   if (strncmp(name.text, #$name, name.length)) {                               \
-    const char *text = #$name;                                                 \
     *out_data_ptr = &$NAME##_DATA;                                             \
     return true;                                                               \
   }
@@ -42,7 +41,7 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
       return false;
   }
   table->data =
-      ra_realloc(allocator, table->data, sizeof(Symbol) * (table->length + 1));
+      ra_recalloc(allocator, table->data, sizeof(Symbol) * (table->length + 1));
   *out_data_ptr = ra_calloc(allocator, sizeof(SymbolData));
   table->data[table->length] = (Symbol){.name = name, .data = *out_data_ptr};
   table->length++;
