@@ -12,14 +12,14 @@ PRIM_DATA(INT);
 PRIM_DATA(BOOL);
 PRIM_DATA(STRING);
 
-static SymbolData PRINT_STRING_DATA =
-    (SymbolData){.type = {.kind = tyFUNCTION,
-                          .is_constant = true,
-                          .function = {.params = &STRING_DATA.value.type,
-                                       .num_params = 1,
-                                       ._return = &VOID_DATA.value.type}},
-                 .value = { .builtin_id = PRINT_STRING },
-                 .is_static = true};
+static SymbolData PRINT_STRING_DATA = (SymbolData){
+    .type = {.kind = tyFUNCTION,
+             .is_constant = true,
+             .function = {.params = {.data = &STRING_DATA.value.type,
+                                     .length = 1},
+                          ._return = &VOID_DATA.value.type}},
+    .value = {.builtin_id = PRINT_STRING},
+    .is_static = true};
 
 #define MATCH($name, $NAME)                                                    \
   if (name.length == strlen(#$name) &&                                         \

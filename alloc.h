@@ -12,7 +12,14 @@ typedef struct {
 } ListAllocator;
 
 void *la_calloc(ListAllocator *allocator, size_t size);
+
+// Resizes the memory associated with PTR to SIZE bytes.
+// Does not fill added space with zeroes.
+// Returns NULL if the memory associated with PTR was not allocated with this allocator.
+void *la_realloc(ListAllocator *allocator, void *ptr, size_t new_size);
+
 void la_shrink(ListAllocator *allocator, size_t new_length);
+
 void la_free_all(ListAllocator *allocator);
 
 typedef struct {

@@ -21,10 +21,10 @@ bool type_eq(Type left, Type right) {
   if (left.kind != right.kind)
     return false;
   if (left.kind == tyFUNCTION) {
-    if (left.function.num_params != right.function.num_params)
+    if (left.function.params.length != right.function.params.length)
       return false;
-    for (size_t i = 0; i < left.function.num_params; i++) {
-      if (!type_eq(left.function.params[i], right.function.params[i]))
+    for (size_t i = 0; i < left.function.params.length; i++) {
+      if (!type_eq(left.function.params.data[i], right.function.params.data[i]))
         return false;
     }
     return type_eq(*left.function._return, *right.function._return);

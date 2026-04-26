@@ -45,4 +45,3 @@ void backtrace_abort(void);
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-#define STRINGIFY(a) #a

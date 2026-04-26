@@ -3,6 +3,8 @@
 #include "analyzer_shared.h"
 #include "ast_macro.h"
 
+typedef ASTNodeArray NodeArray;
+
 typedef enum {
   cNEXT = 0,
   cRETURN,
@@ -22,7 +24,7 @@ typedef enum {
 
 ControlFlow evaluate_stmt(Node *node, Value *function_out);
 
-ControlFlow evaluate_stmts(Node *stmts, Value *function_out) {
+ControlFlow evaluate_stmts(NodeArray stmts, Value *function_out) {
   ITER_ARRAY(stmts, stmt, {
     ControlFlow control = evaluate_stmt(stmt, function_out);
     if (control == cRETURN)
@@ -86,12 +88,13 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
 
 #define OK_INT($integer) OK((Value){.integer = $integer})
 
-Value evaluate_builtin(ASTNode *arg, BuiltinID id) {
+Value evaluate_builtin(NodeArray args, BuiltinID id) {
   switch (id) {
   case NOT_BUILTIN:
     panicf("unreachable");
   case PRINT_STRING: {
-    EVALUATE(&arg[0], arg);
+    assert(args.length == 1);
+    EVALUATE(args.data[0], arg);
     // fwrite instead of printf because printf can only print non-zero-delimited
     // strings of up to INT_MAX characters in length
     fwrite(arg_value.string.text, arg_value.string.length, 1, stdout);
@@ -151,14 +154,10 @@ Value evaluate_expr(Node *node) {
       assert(function_value.function->kind == aFUNCTION);
       __auto_type function = &function_value.function->function;
 
-      ASTNode *arg = function_call->args;
-      ASTNode *param = function->params;
-      while (arg != NULL) {
-        assert(param->kind == aPARAM);
+      ITER_ARRAY(function_call->args, arg, {
+        Node *param = function->params.data[i];
         *param->param.value_ptr = evaluate_expr(arg);
-        arg = arg->next_sibling;
-        param = param->next_sibling;
-      }
+      });
       // assumes that parameter values have been set
       Value function_out = {0};
       evaluate_stmts(function->stmts, &function_out);

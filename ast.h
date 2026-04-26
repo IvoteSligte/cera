@@ -36,6 +36,11 @@ typedef struct {
   ASTNode *head;
 } AST;
 
+typedef struct {
+  ASTNode **data;
+  size_t length;
+} ASTNodeArray;
+
 typedef enum {
   tyVOID = 0,
   tyINT,
@@ -54,6 +59,12 @@ typedef enum {
 } BuiltinID;
 
 typedef struct Type Type;
+
+typedef struct {
+  Type *data;
+  size_t length;
+} TypeArray;
+
 typedef struct Type {
   TypeKind kind;
   bool is_constant;
@@ -62,8 +73,7 @@ typedef struct Type {
   union {
     Name name;
     struct {
-      Type *params;
-      size_t num_params;
+      TypeArray params;
       Type *_return;
     } function;
   };
@@ -109,8 +119,6 @@ typedef struct SymbolTable {
 
 typedef struct ASTNode {
   Span span;
-  // Next sibling in case of an array.
-  ASTNode *next_sibling;
   enum { sPARSED = 0, sTYPED, sANALYZED } stage;
   ASTNodeKind kind;
   union {
@@ -139,7 +147,7 @@ typedef struct ASTNode {
     } binary;
     struct {
       ASTNode *function;
-      ASTNode *args;
+      ASTNodeArray args;
     } function_call;
     struct {
       ASTNode *name;
@@ -147,17 +155,16 @@ typedef struct ASTNode {
       Value *value_ptr;
     } param;
     struct {
-      ASTNode *params;
-      size_t num_params;
+      ASTNodeArray params;
       ASTNode *return_type; // nullable
-      ASTNode *stmts;
+      ASTNodeArray stmts;
       SymbolTable table;
     } function;
     struct {
       ASTNode *init;
       ASTNode *cond;
       ASTNode *step;
-      ASTNode *stmts;
+      ASTNodeArray stmts;
       SymbolTable table;
     } for_loop;
     struct {
@@ -175,7 +182,7 @@ typedef struct ASTNode {
       Value *value_ptr;
     } declaration;
     struct {
-      ASTNode *declarations;
+      ASTNodeArray declarations;
       SymbolTable table;
     } module;
   };

@@ -169,19 +169,16 @@ ANALYZER(function_call, {
   if (function._return != NULL) {
     *out_type = *function._return;
   }
+  TypeArray param_types = function.params;
 
-  Node *arg = function_call->args;
-  Type *param_type = function.params;
-  size_t i = 0;
-  while (arg != NULL || i < function.num_params) {
+  EXPECT((function_call->args.length == param_types.length), node,
+         strdup("argument count mismatch"));
+
+  ITER_ARRAY(function_call->args, arg, {
     ANALYZE(arg, arg);
-    EXPECT((arg != NULL && param_type != NULL), node,
-           strdup("argument count mismatch"));
-    EXPECT((type_eq(arg_type, *param_type)), arg,
+    EXPECT((type_eq(arg_type, param_types.data[i])), arg,
            strdup("argument type mismatch"));
-    arg = arg->next_sibling;
-    i++;
-  }
+  });
   OK;
 });
 
@@ -192,12 +189,14 @@ ANALYZER(function, {
   if (node->stage < sTYPED) {
     function->table = (Table){.parent = table, .data = NULL, .length = 0};
     Table *table = &function->table;
+
     *out_type = (Type){.kind = tyFUNCTION, .is_constant = true};
-    out_type->function.params =
-        ra_calloc(allocator, sizeof(Type) * function->num_params);
+    out_type->function.params = (TypeArray){
+        .data = ra_calloc(allocator, sizeof(Type) * function->params.length),
+        .length = function->params.length};
     ITER_ARRAY(function->params, param, {
       ANALYZE(param, param);
-      out_type->function.params[i] = param_type;
+      out_type->function.params.data[i] = param_type;
     });
     if (function->return_type != NULL) {
       ANALYZE_TYPE(function->return_type, declared);

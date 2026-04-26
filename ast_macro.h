@@ -39,16 +39,11 @@
     break;                                                                     \
   }
 
-#define ITER_ARRAY(first_element, element, ...)                                \
-  {                                                                            \
-    ASTNode *element = first_element;                                          \
-    size_t i = 0;                                                              \
-    while (element != NULL) {                                                  \
-      {                                                                        \
-        __VA_ARGS__;                                                           \
-      }                                                                        \
-      element = element->next_sibling;                                         \
-      i++;                                                                     \
+#define ITER_ARRAY($array, $element, ...)                                      \
+  for (size_t i = 0; i < ($array).length; i++) {                               \
+    ASTNode *$element = ($array).data[i];                                      \
+    {                                                                          \
+      __VA_ARGS__;                                                             \
     }                                                                          \
   }
 

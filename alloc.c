@@ -9,6 +9,20 @@ void *la_calloc(ListAllocator *allocator, size_t size) {
   return memory;
 }
 
+void *la_realloc(ListAllocator *allocator, void *ptr, size_t new_size) {
+  if (ptr == NULL) {
+    return la_calloc(allocator, new_size);
+  }
+  for (size_t i = 0; i < allocator->length; i++) {
+    if (allocator->data[i] == ptr) {
+      ptr = realloc(ptr, new_size);
+      allocator->data[i] = ptr;
+      return ptr;      
+    }
+  }
+  return NULL;  
+}
+
 void la_shrink(ListAllocator *allocator, size_t new_length) {
   assert(new_length <= allocator->length);
   for (size_t i = new_length; i < allocator->length; i++) {
