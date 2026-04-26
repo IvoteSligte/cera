@@ -45,3 +45,4 @@ void backtrace_abort(void);
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+#define FMT($string) (int)($string).length, ($string).text

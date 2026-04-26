@@ -27,29 +27,33 @@ char *ssprintf(const char *fmt, ...) {
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
     return analyze_##$name(allocator, node, table, return_type, out_type,      \
-                           error_data, is_static, anything_changed,            \
-                           error_on_block);                                    \
+                           error_data, is_static, flags);                      \
   })
 
-#define ANALYZE_NODE($name, $node, $out_type)                                  \
-  analyze_##$name(allocator, $node, table, return_type, $out_type, error_data, \
-                  is_static, anything_changed, error_on_block)
-#define ANALYZE($node, $name)                                                  \
+// analyze a node, only returning on error
+#define MAYBE_ANALYZE($node, $name)                                            \
   Type $name##_type = {0};                                                     \
-  {                                                                            \
-    Result __result = ANALYZE_NODE(node, $node, &$name##_type);                \
-    if (__result != rDONE)                                                     \
-      return __result;                                                         \
-  }
+  if (!analyze_node(allocator, $node, table, return_type, &$name##_type,       \
+                    error_data, is_static, flags))                             \
+    FAIL;
+
+// analyze a node, returning on error or UNKNOWN type
+#define ANALYZE($node, $name)                                                  \
+  MAYBE_ANALYZE($node, $name);                                                 \
+  if ($name##_type.kind == tyUNKNOWN)                                          \
+    return true;
+
+#define ANALYZE_STMT MAYBE_ANALYZE
 
 #define ANALYZE_TYPE($node, $name)                                             \
   ANALYZE($node, $name);                                                       \
-  EXPECT(($name##_type.kind == tyTYPE), $node, strdup("not a type"));
+  EXPECT(($name##_type.kind == tyTYPE), $node,                                 \
+         ssprintf("not a type: %s", type_name($name##_type.kind)));
 
 #define ANALYZE_ARRAY($array, $table)                                          \
   ITER_ARRAY($array, element, {                                                \
     Table *table = $table;                                                     \
-    ANALYZE(element, element);                                                 \
+    ANALYZE_STMT(element, element);                                            \
   });
 
 void add_error(TypeErrorArray *error_data, Span span, char *message) {
@@ -63,29 +67,31 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
 #define EXPECT(condition, node, $message)                                      \
   if (!(condition)) {                                                          \
     add_error(error_data, node->span, $message);                               \
-    return rERROR;                                                             \
+    return false;                                                              \
   }
 
 typedef enum {
-  rDONE = 0,
-  rERROR,
-  rBLOCKED,
-} Result;
+  ANYTHING_CHANGED = 1 << 0,
+  BLOCKED = 1 << 1,
+  ERROR_ON_BLOCK = 1 << 2,
+  FINISHED = 1 << 3,
+} Flags;
 
 #define OK                                                                     \
   {                                                                            \
     node->stage = sANALYZED;                                                   \
-    *anything_changed = true;                                                  \
-    return rDONE;                                                              \
+    *flags |= ANYTHING_CHANGED;                                                \
+    return true;                                                               \
   }
+#define FAIL return false
 
 #define IS_GLOBAL (table->parent == NULL)
 
 #define ANALYZER_SIGNATURE($name)                                              \
-  Result analyze_##$name(Allocator *allocator, Node *node, Table *table,       \
-                         Type return_type, Type *out_type,                     \
-                         TypeErrorArray *error_data, bool is_static,           \
-                         bool *anything_changed, bool error_on_block)
+  bool analyze_##$name(Allocator *allocator, Node *node, Table *table,         \
+                       Type return_type, Type *out_type,                       \
+                       TypeErrorArray *error_data, bool is_static,             \
+                       Flags *flags)
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
@@ -97,7 +103,6 @@ typedef enum {
     UNUSED(error_data);                                                        \
     UNUSED(is_static);                                                         \
     UNUSED(allocator);                                                         \
-    UNUSED(error_on_block);                                                    \
   }
 
 ANALYZER_SIGNATURE(node);
@@ -107,13 +112,15 @@ ANALYZER(name, {
   if (!get_symbol(table, name->name, &symbol_data)) {
     eprintf("INFO: compilation blocked by undefined symbol `%.*s` \n",
             (int)name->name.length, name->name.text);
-    EXPECT((!error_on_block), node, strdup("undefined symbol"));
-    return rBLOCKED;
+    EXPECT(((*flags & ERROR_ON_BLOCK) == 0), node, strdup("undefined symbol"));
+    *flags &= ~FINISHED;
+    return true;
   }
   EXPECT((!is_static || symbol_data->is_static), node,
          strdup("static declaration refers to runtime variable"));
   name->value_ptr = &symbol_data->value;
-  *out_type = symbol_data->type;
+  *out_type =
+      symbol_data->type; // FIXME: symbol type may not be set at this point
   out_type->is_bound = true;
   OK;
 });
@@ -182,6 +189,10 @@ ANALYZER(function_call, {
   OK;
 });
 
+// FIXME: in order to make this whole analyze function resumable, I
+// need to store the types of parameters and such that have been analyzed
+// maybe just store them in the AST? typed AST information can also be
+// useful for other things
 ANALYZER(function, {
   EXPECT(IS_GLOBAL, node,
          strdup("functions can only be defined in the global scope"));
@@ -190,12 +201,14 @@ ANALYZER(function, {
     function->table = (Table){.parent = table, .data = NULL, .length = 0};
     Table *table = &function->table;
 
-    *out_type = (Type){.kind = tyFUNCTION, .is_constant = true};
-    out_type->function.params = (TypeArray){
-        .data = ra_calloc(allocator, sizeof(Type) * function->params.length),
-        .length = function->params.length};
+    if (out_type->kind != tyFUNCTION) {
+      *out_type = (Type){.kind = tyFUNCTION, .is_constant = true};
+      out_type->function.params = (TypeArray){
+          .data = ra_calloc(allocator, sizeof(Type) * function->params.length),
+          .length = function->params.length};
+    }
     ITER_ARRAY(function->params, param, {
-      ANALYZE(param, param);
+      ANALYZE_STMT(param, param);
       out_type->function.params.data[i] = param_type;
     });
     if (function->return_type != NULL) {
@@ -211,20 +224,21 @@ ANALYZER(function, {
 });
 
 ANALYZER(param, {
-  ANALYZE_TYPE(param->type, param);
   NAME_OF(param);
-  SymbolData *symbol_data = NULL;
-  EXPECT(add_symbol(allocator, table, name, &symbol_data), node,
-         strdup("duplicate parameter"));
-  symbol_data->type = param_type;
-  param->value_ptr = &symbol_data->value;
+  if (param->symbol_data == NULL) {
+    EXPECT(
+        add_symbol(allocator, table, name, &param->symbol_data), node,
+        ssprintf("duplicate parameter: `%.*s`", (int)name.length, name.text));
+  }
+  ANALYZE_TYPE(param->type, param);
+  param->symbol_data->type = evaluate_expr(param->type).type;
   OK;
 });
 
 ANALYZER(for_loop, {
-  ANALYZE(for_loop->init, init);
+  ANALYZE_STMT(for_loop->init, init);
   ANALYZE(for_loop->cond, cond);
-  ANALYZE(for_loop->step, step);
+  ANALYZE_STMT(for_loop->step, step);
   EXPECT((cond_type.kind == tyBOOL), node,
          strdup("expected boolean type for for-loop condition"));
   for_loop->table.parent = table;
@@ -259,12 +273,8 @@ ANALYZER(declaration, {
            strdup("duplicate declaration"));
     declaration->symbol_data->is_static = is_static;
   }
-
-  Result result =
-      ANALYZE_NODE(node, declaration->expr, &declaration->symbol_data->type);
-  if (result != rDONE) {
-    return result;
-  }
+  ANALYZE(declaration->expr, expr);
+  declaration->symbol_data->type = expr_type;
   if (is_static) {
     declaration->symbol_data->value = evaluate_expr(declaration->expr);
   }
@@ -278,7 +288,7 @@ ANALYZER(module, {
 
 ANALYZER_SIGNATURE(node) {
   if (node->stage >= sANALYZED)
-    return rDONE;
+    return true;
   SWITCH(
       node,
       panicf("analyze not implemented for node: %s", ast_node_name(node->kind)),
@@ -327,20 +337,26 @@ void free_analyze_errors(TypeErrorArray *type_errors) {
 bool analyze(AST *ast, TypeErrorArray *error_data) {
   Allocator allocator = {0};
   Table table = {0};
-  Result result = 0;
-  bool error_on_block = false;
+  Flags flags = 0;
+  bool result = false;
   for (size_t i = 0;; i++) {
     eprintf("INFO: analysis iteration: %zu\n", i);
-    bool anything_changed = false;
-    result = analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
-                          error_data, true, &anything_changed, error_on_block);
-    if (result != rBLOCKED)
+    if (!analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
+                      error_data, true, &flags)) {
       break;
-    error_on_block = !anything_changed;
+    }
+    if ((flags & FINISHED) != 0) {
+      result = true;
+      break;
+    }
+    flags = (flags & ANYTHING_CHANGED) != 0 ? ERROR_ON_BLOCK : 0;
+    flags |= FINISHED;
   }
   // NOTE: this leaves modified values in the AST.
   // Should these be zeroed after analysis or should the allocator be passed
   // along? Or should they simply be in a strange state?
+  // FIXME: this also frees memory where values are stored, making evaluation
+  // impossible
   ra_free_all(&allocator);
-  return result == rDONE;
+  return result;
 }

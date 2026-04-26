@@ -42,7 +42,6 @@ bool get_builtin(Name name, SymbolData **out_data_ptr) {
 // Adds a symbol to the table, returning false if NAME was already in the table.
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
                 SymbolData **out_data_ptr) {
-  printf("adding: %.*s\n", (int)name.length, name.text);
   if (get_builtin(name, out_data_ptr)) {
     return false;
   }

@@ -25,8 +25,8 @@ typedef enum {
 ControlFlow evaluate_stmt(Node *node, Value *function_out);
 
 ControlFlow evaluate_stmts(NodeArray stmts, Value *function_out) {
-  ITER_ARRAY(stmts, stmt, {
-    ControlFlow control = evaluate_stmt(stmt, function_out);
+  ITER_ARRAY(stmts, stmt_node, {
+    ControlFlow control = evaluate_stmt(stmt_node, function_out);
     if (control == cRETURN)
       return cRETURN;
   });
@@ -74,7 +74,7 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
         CASE(declaration, {
           if (!declaration->is_constant) {
             EVALUATE(declaration->expr, value);
-            *declaration->value_ptr = value_value;
+            declaration->symbol_data->value = value_value;
           }
           OK(cNEXT);
         });
@@ -156,7 +156,7 @@ Value evaluate_expr(Node *node) {
 
       ITER_ARRAY(function_call->args, arg, {
         Node *param = function->params.data[i];
-        *param->param.value_ptr = evaluate_expr(arg);
+        param->param.symbol_data->value = evaluate_expr(arg);
       });
       // assumes that parameter values have been set
       Value function_out = {0};
@@ -172,12 +172,15 @@ static const Name MAIN_NAME = (Name){.text = "main", .length = 4};
 void evaluate_module(Node *node) {
   assert(node->kind == aMODULE);
   __auto_type module = &node->module;
-  ITER_ARRAY(module->declarations, declaration, {
-    if (name_eq(declaration->name.name, MAIN_NAME)) {
+  ITER_ARRAY(module->declarations, declaration_node, {
+    __auto_type declaration = &declaration_node->declaration;
+    if (name_eq(declaration->name->name.name, MAIN_NAME)) {
       // FIXME: this evaluates the declaration, not the function in the
       // declaration
       // there is also no check that `main` has the correct signature
-      evaluate_stmt(declaration, NULL);
+      evaluate_stmt(declaration_node, NULL);
+      return;
     }
   });
+  eprintf("`main` function not found.\n");
 }

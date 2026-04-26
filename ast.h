@@ -42,7 +42,8 @@ typedef struct {
 } ASTNodeArray;
 
 typedef enum {
-  tyVOID = 0,
+  tyUNKNOWN = 0,
+  tyVOID,
   tyINT,
   tyBOOL,
   tySTRING,
@@ -152,7 +153,7 @@ typedef struct ASTNode {
     struct {
       ASTNode *name;
       ASTNode *type;
-      Value *value_ptr;
+      SymbolData *symbol_data;
     } param;
     struct {
       ASTNodeArray params;

@@ -14,7 +14,7 @@ Span join_spans(Span left, Span right) {
 
 bool name_eq(Name left, Name right) {
   return left.length == right.length &&
-         strncmp(left.text, right.text, left.length);
+         strncmp(left.text, right.text, left.length) == 0;
 }
 
 bool type_eq(Type left, Type right) {
