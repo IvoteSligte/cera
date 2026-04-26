@@ -61,22 +61,37 @@ void error_data_add(ParseError *data, size_t token_index,
   YIELD($kind, __VA_ARGS__);                                                   \
   OK;
 
+#ifdef DEBUG_PARSER
 int log_indent = 0;
 
+// prints token index, number of nodes, depth
 #define LOG(format, ...)                                                       \
-  eprintf("%-4zu %-3zu %*.*s" format "\n", *token_index, allocator->length,    \
-          log_indent, log_indent, " " __VA_OPT__(, ) __VA_ARGS__)
+  eprintf("%-3zu %-3zu %-2d %*.*s" format "\n", *token_index,                  \
+          allocator->length, log_indent, log_indent, log_indent,               \
+          " " __VA_OPT__(, ) __VA_ARGS__)
 
 #define LOG_ENTER                                                              \
   {                                                                            \
-    LOG("Enter: %s", parser_name);                                             \
+    LOG("Enter: %s", __parser_name);                                           \
     log_indent++;                                                              \
   }
+
 #define LOG_EXIT(status)                                                       \
   {                                                                            \
     log_indent--;                                                              \
-    LOG("Exit " status ": %s", parser_name);                                   \
+    LOG("Exit " status ": %s", __parser_name);                                 \
   }
+
+#define BEGIN_LOG(name)                                                              \
+  const char *__parser_name = #name;                                           \
+  LOG_ENTER;
+
+#else
+#define LOG(format, ...)
+#define LOG_ENTER
+#define LOG_EXIT(status)
+#define BEGIN_LOG(name)
+#endif
 
 #define PARSER_PARAMS                                                          \
   Allocator *allocator, TokenStream stream, size_t *token_index,               \
@@ -84,8 +99,7 @@ int log_indent = 0;
 #define PARSER_PROTOTYPE(name) bool parse_##name(PARSER_PARAMS)
 
 #define BEGIN(name)                                                            \
-  const char *parser_name = #name;                                             \
-  LOG_ENTER;                                                                   \
+  BEGIN_LOG(name);                                                                   \
   size_t start_token_index = *token_index;                                     \
   size_t start_allocator_length = allocator->length;                           \
   Token token;                                                                 \
@@ -364,8 +378,8 @@ PARSER(for_loop, {
 });
 
 PARSER(declaration_expr, {
-  TRY_PARSE(expr_stmt);
   TRY_PARSE(function);
+  TRY_PARSE(expr_stmt);
   OK;
 });
 

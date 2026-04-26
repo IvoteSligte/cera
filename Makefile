@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic
+CFLAGS = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DDEBUG_PARSER
 
 SRC = $(wildcard *.c)
 OBJ = $(SRC:%.c=build/%.o)

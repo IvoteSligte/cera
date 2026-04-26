@@ -47,6 +47,8 @@ const char *type_name(TypeKind kind) {
     N(UNION);
     N(ALIAS);
     N(TYPE);
+  default:
+    panicf("Unknown type kind: %d", kind);
   }
 }
 #undef N
