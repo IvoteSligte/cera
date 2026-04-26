@@ -60,7 +60,7 @@ int main() {
     free_token_stream(stream);
     free_ast(&ast);
     free(source);
-    panicf("Parse error.");
+    return 1;
   }
   free_token_stream(stream);
 
@@ -73,7 +73,7 @@ int main() {
     free_analyze_errors(&type_errors);
     free_ast(&ast);
     free(source);
-    panicf("Analyze error(s).");
+    return 1;
   }
   evaluate_module(ast.head);
   free_ast(&ast);
