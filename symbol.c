@@ -39,10 +39,10 @@ bool get_builtin(Name name, SymbolData **out_data_ptr) {
   return false;
 }
 
-// Adds a symbol to the table, returning false if the key was already in the
-// table.
+// Adds a symbol to the table, returning false if NAME was already in the table.
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
                 SymbolData **out_data_ptr) {
+  printf("adding: %.*s\n", (int)name.length, name.text);
   if (get_builtin(name, out_data_ptr)) {
     return false;
   }
@@ -70,7 +70,7 @@ bool get_symbol(SymbolTable *table, Name name, SymbolData **out_data_ptr) {
     }
   }
   if (table->parent == NULL) {
-    return NULL;
+    return false;
   }
   return get_symbol(table->parent, name, out_data_ptr);
 }

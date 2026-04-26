@@ -116,13 +116,13 @@ static void print_node(ASTNode *node, size_t depth) {
       node,
       panicf("print not implemented for node: %s", ast_node_name(node->kind)), {
         CASE(name, {
-          printf("name: `%.*s`\n", (int)name->name.length, name->name.text);
+          printf("name: %.*s\n", (int)name->name.length, name->name.text);
         });
         CASE(integer, {
-          printf("integer: `%.*s`\n", (int)integer->length, integer->text);
+          printf("integer: %.*s\n", (int)integer->length, integer->text);
         });
         CASE(string, {
-          printf("string: `%.*s`\n", (int)string->length, string->text);
+          printf("string: \"%.*s\"\n", (int)string->length, string->text);
         });
         CASE(unary, { printf("unary: `%s`\n", token_name(unary->op)); });
         CASE(binary, { printf("binary: `%s`\n", token_name(binary->op)); });

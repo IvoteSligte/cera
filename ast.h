@@ -179,7 +179,7 @@ typedef struct ASTNode {
       bool is_constant;
       ASTNode *name;
       ASTNode *expr;
-      Value *value_ptr;
+      SymbolData *symbol_data;
     } declaration;
     struct {
       ASTNodeArray declarations;

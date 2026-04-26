@@ -254,18 +254,19 @@ ANALYZER(declaration, {
   NAME_OF(declaration);
   bool is_static = IS_GLOBAL || declaration->is_constant;
 
-  SymbolData *symbol_data = NULL;
-  EXPECT(add_symbol(allocator, table, name, &symbol_data), node,
-         strdup("duplicate declaration"));
-  symbol_data->is_static = is_static;
-  declaration->value_ptr = &symbol_data->value;
+  if (declaration->symbol_data == NULL) {
+    EXPECT(add_symbol(allocator, table, name, &declaration->symbol_data), node,
+           strdup("duplicate declaration"));
+    declaration->symbol_data->is_static = is_static;
+  }
 
-  Result result = ANALYZE_NODE(node, declaration->expr, &symbol_data->type);
+  Result result =
+      ANALYZE_NODE(node, declaration->expr, &declaration->symbol_data->type);
   if (result != rDONE) {
     return result;
   }
   if (is_static) {
-    symbol_data->value = evaluate_expr(declaration->expr);
+    declaration->symbol_data->value = evaluate_expr(declaration->expr);
   }
   OK;
 });
