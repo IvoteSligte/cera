@@ -7,10 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "alloc.h"
-
 __attribute__((noreturn))
 void backtrace_abort(void);
+
+char* read_file(const char* path);
 
 #define eprintf(format, ...) fprintf(stderr, format __VA_OPT__(, ) __VA_ARGS__)
 #define panicf(format, ...)                                                    \

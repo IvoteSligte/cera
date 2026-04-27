@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util.h"
+#include "alloc.h"
 
 // Allocator that tracks its allocations in a list.
 // Allows shrinking the list to deallocate a number of recent allocations at
