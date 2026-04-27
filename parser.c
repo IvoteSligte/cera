@@ -434,10 +434,9 @@ void print_parse_error(const char *source, TokenStream stream,
 }
 
 bool parse(TokenStream stream, AST *out_ast, ParseError *error_data) {
-  out_ast->allocator = (Allocator){0};
   size_t token_index = 0;
   *error_data = (ParseError){0};
-  bool result = parse_module(&out_ast->allocator, stream, &token_index,
+  bool result = parse_module(&out_ast->list_allocator, stream, &token_index,
                              error_data, &out_ast->head);
   if (token_index < stream.length) {
     return false;

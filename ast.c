@@ -54,7 +54,8 @@ const char *type_name(TypeKind kind) {
 #undef N
 
 void free_ast(AST *ast) {
-  la_free_all(&ast->allocator);
+  la_free_all(&ast->list_allocator);
+  ra_free_all(&ast->random_allocator);
   ast->head = NULL;
 }
 

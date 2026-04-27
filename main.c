@@ -43,7 +43,7 @@ int main() {
 
   lexer_init();
   /* lexer_print_tokens(source); */
-  TokenStream stream;
+  TokenStream stream = {0};
   if (!fill_token_stream(source, &stream)) {
     lexer_free();
     free_token_stream(stream);
@@ -54,7 +54,7 @@ int main() {
   lexer_print_token_stream(stream);
 
   AST ast = {0};
-  ParseError parse_error;
+  ParseError parse_error = {0};
   if (!parse(stream, &ast, &parse_error)) {
     print_parse_error(source, stream, parse_error);
     free_token_stream(stream);

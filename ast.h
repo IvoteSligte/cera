@@ -32,7 +32,8 @@ typedef struct {
 typedef struct ASTNode ASTNode;
 
 typedef struct {
-  ListAllocator allocator;
+  ListAllocator list_allocator;
+  RandomAllocator random_allocator;
   ASTNode *head;
 } AST;
 

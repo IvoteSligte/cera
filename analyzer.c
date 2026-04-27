@@ -354,23 +354,18 @@ void free_analyze_errors(TypeErrorArray *type_errors) {
 }
 
 bool analyze(AST *ast, TypeErrorArray *error_data) {
-  Allocator allocator = {0};
   Table table = {0};
   Flags flags = 0;
   Result result = rBLOCKED;
   for (size_t i = 0;; i++) {
     eprintf("INFO: analysis iteration: %zu\n", i);
-    result = analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
-                          error_data, true, &flags);
+    // TODO: make sure the symbol tables (also allocated using random_allocator)
+    // are freed, but the symbol data is not
+    result = analyze_node(&ast->random_allocator, ast->head, &table, (Type){0},
+                          NULL, error_data, true, &flags);
     if (result != rBLOCKED)
       break;
     flags = (flags & ANYTHING_CHANGED) != 0 ? ERROR_ON_BLOCK : 0;
   }
-  // NOTE: this leaves modified values in the AST.
-  // Should these be zeroed after analysis or should the allocator be passed
-  // along? Or should they simply be in a strange state?
-  // FIXME: this also frees memory where values are stored, making evaluation
-  // impossible
-  ra_free_all(&allocator);
   return result;
 }
