@@ -50,4 +50,6 @@
 #define PRIM_TYPE(type_kind)                                                   \
   (Type) { .kind = type_kind, .is_constant = true }
 
+#define FMT_TYPE($type) type_name(($type).kind)
+
 #define USE_AST_MACRO_HEADER

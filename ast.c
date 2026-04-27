@@ -38,6 +38,7 @@ bool type_eq(Type left, Type right) {
 
 const char *type_name(TypeKind kind) {
   switch (kind) {
+    N(UNKNOWN);
     N(VOID);
     N(INT);
     N(BOOL);
@@ -47,9 +48,8 @@ const char *type_name(TypeKind kind) {
     N(UNION);
     N(ALIAS);
     N(TYPE);
-  default:
-    panicf("Unknown type kind: %d", kind);
   }
+  panicf("Unknown type kind: %d", kind);
 }
 #undef N
 

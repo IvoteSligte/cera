@@ -66,6 +66,7 @@ bool get_symbol(SymbolTable *table, Name name, SymbolData **out_data_ptr) {
   for (size_t i = 0; i < table->length; i++) {
     if (name_eq(table->data[i].name, name)) {
       *out_data_ptr = table->data[i].data;
+      return true;
     }
   }
   if (table->parent == NULL) {

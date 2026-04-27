@@ -31,19 +31,21 @@ char *ssprintf(const char *fmt, ...) {
   })
 
 // analyze a node, only returning on error
-#define MAYBE_ANALYZE($node, $name)                                            \
+#define ANALYZE_STMT($node, $name)                                             \
   Type $name##_type = {0};                                                     \
-  if (!analyze_node(allocator, $node, table, return_type, &$name##_type,       \
-                    error_data, is_static, flags))                             \
-    FAIL;
+  {                                                                            \
+    Result result = analyze_node(allocator, $node, table, return_type,         \
+                                 &$name##_type, error_data, is_static, flags); \
+    if (result == rERROR)                                                      \
+      FAIL;                                                                    \
+    blocked |= result == rBLOCKED;                                             \
+  }
 
 // analyze a node, returning on error or UNKNOWN type
 #define ANALYZE($node, $name)                                                  \
-  MAYBE_ANALYZE($node, $name);                                                 \
-  if ($name##_type.kind == tyUNKNOWN)                                          \
-    return true;
-
-#define ANALYZE_STMT MAYBE_ANALYZE
+  ANALYZE_STMT($node, $name);                                                  \
+  if (blocked)                                                                 \
+    BLOCK;
 
 #define ANALYZE_TYPE($node, $name)                                             \
   ANALYZE($node, $name);                                                       \
@@ -67,35 +69,44 @@ void add_error(TypeErrorArray *error_data, Span span, char *message) {
 #define EXPECT(condition, node, $message)                                      \
   if (!(condition)) {                                                          \
     add_error(error_data, node->span, $message);                               \
-    return false;                                                              \
+    return rERROR;                                                             \
   }
+
+typedef enum {
+  rERROR,
+  rBLOCKED,
+  rOK,
+} Result;
 
 typedef enum {
   ANYTHING_CHANGED = 1 << 0,
   BLOCKED = 1 << 1,
   ERROR_ON_BLOCK = 1 << 2,
-  FINISHED = 1 << 3,
 } Flags;
 
 #define OK                                                                     \
   {                                                                            \
+    if (blocked)                                                               \
+      BLOCK;                                                                   \
     node->stage = sANALYZED;                                                   \
     *flags |= ANYTHING_CHANGED;                                                \
-    return true;                                                               \
+    return rOK;                                                                \
   }
-#define FAIL return false
+#define FAIL return rERROR
+#define BLOCK return rBLOCKED
 
 #define IS_GLOBAL (table->parent == NULL)
 
 #define ANALYZER_SIGNATURE($name)                                              \
-  bool analyze_##$name(Allocator *allocator, Node *node, Table *table,         \
-                       Type return_type, Type *out_type,                       \
-                       TypeErrorArray *error_data, bool is_static,             \
-                       Flags *flags)
+  Result analyze_##$name(Allocator *allocator, Node *node, Table *table,       \
+                         Type return_type, Type *out_type,                     \
+                         TypeErrorArray *error_data, bool is_static,           \
+                         Flags *flags)
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
     __auto_type $name = &node->$name;                                          \
+    bool blocked = false;                                                      \
     __VA_ARGS__;                                                               \
     UNUSED(out_type);                                                          \
     UNUSED(table);                                                             \
@@ -103,6 +114,7 @@ typedef enum {
     UNUSED(error_data);                                                        \
     UNUSED(is_static);                                                         \
     UNUSED(allocator);                                                         \
+    UNUSED(blocked);                                                           \
   }
 
 ANALYZER_SIGNATURE(node);
@@ -113,14 +125,14 @@ ANALYZER(name, {
     eprintf("INFO: compilation blocked by undefined symbol `%.*s` \n",
             (int)name->name.length, name->name.text);
     EXPECT(((*flags & ERROR_ON_BLOCK) == 0), node, strdup("undefined symbol"));
-    *flags &= ~FINISHED;
-    return true;
+    BLOCK;
   }
   EXPECT((!is_static || symbol_data->is_static), node,
          strdup("static declaration refers to runtime variable"));
   name->value_ptr = &symbol_data->value;
-  *out_type =
-      symbol_data->type; // FIXME: symbol type may not be set at this point
+  if (symbol_data->type.kind == tyUNKNOWN)
+    BLOCK;
+  *out_type = symbol_data->type;
   out_type->is_bound = true;
   OK;
 });
@@ -178,13 +190,18 @@ ANALYZER(function_call, {
   }
   TypeArray param_types = function.params;
 
-  EXPECT((function_call->args.length == param_types.length), node,
-         strdup("argument count mismatch"));
+  size_t expected_length = param_types.length;
+  size_t found_length = function_call->args.length;
+  EXPECT((expected_length == found_length), node,
+         ssprintf("argument count mismatch: expected %zu, but found %zu",
+                  expected_length, found_length));
 
   ITER_ARRAY(function_call->args, arg, {
     ANALYZE(arg, arg);
-    EXPECT((type_eq(arg_type, param_types.data[i])), arg,
-           strdup("argument type mismatch"));
+    Type param_type = param_types.data[i];
+    EXPECT((type_eq(arg_type, param_type)), arg,
+           ssprintf("argument type mismatch: expected %s, but found %s",
+                    FMT_TYPE(param_type), FMT_TYPE(arg_type)));
   });
   OK;
 });
@@ -207,8 +224,8 @@ ANALYZER(function, {
           .data = ra_calloc(allocator, sizeof(Type) * function->params.length),
           .length = function->params.length};
     }
-    ITER_ARRAY(function->params, param, {
-      ANALYZE_STMT(param, param);
+    ITER_ARRAY(function->params, param_node, {
+      ANALYZE_STMT(param_node, param);
       out_type->function.params.data[i] = param_type;
     });
     if (function->return_type != NULL) {
@@ -231,7 +248,9 @@ ANALYZER(param, {
         ssprintf("duplicate parameter: `%.*s`", (int)name.length, name.text));
   }
   ANALYZE_TYPE(param->type, param);
-  param->symbol_data->type = evaluate_expr(param->type).type;
+  Type type = evaluate_expr(param->type).type;
+  param->symbol_data->type = type;
+  *out_type = type;
   OK;
 });
 
@@ -288,7 +307,7 @@ ANALYZER(module, {
 
 ANALYZER_SIGNATURE(node) {
   if (node->stage >= sANALYZED)
-    return true;
+    return rOK;
   SWITCH(
       node,
       panicf("analyze not implemented for node: %s", ast_node_name(node->kind)),
@@ -338,19 +357,14 @@ bool analyze(AST *ast, TypeErrorArray *error_data) {
   Allocator allocator = {0};
   Table table = {0};
   Flags flags = 0;
-  bool result = false;
+  Result result = rBLOCKED;
   for (size_t i = 0;; i++) {
     eprintf("INFO: analysis iteration: %zu\n", i);
-    if (!analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
-                      error_data, true, &flags)) {
+    result = analyze_node(&allocator, ast->head, &table, (Type){0}, NULL,
+                          error_data, true, &flags);
+    if (result != rBLOCKED)
       break;
-    }
-    if ((flags & FINISHED) != 0) {
-      result = true;
-      break;
-    }
     flags = (flags & ANYTHING_CHANGED) != 0 ? ERROR_ON_BLOCK : 0;
-    flags |= FINISHED;
   }
   // NOTE: this leaves modified values in the AST.
   // Should these be zeroed after analysis or should the allocator be passed
