@@ -14,6 +14,7 @@ int main() {
   LexError lex_error = {0};
   TokenStream stream = {0};
   if (!fill_token_stream(source, &stream, &lex_error)) {
+    print_lex_error(lex_error);
     lexer_free();
     free_token_stream(&stream);
     free(source);

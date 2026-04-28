@@ -1,4 +1,5 @@
 #include "lexer.h"
+#include "offset.h"
 #include "regex.h"
 
 typedef struct {
@@ -110,9 +111,15 @@ LexResult lex(const char *source, size_t *offset, Token *out,
 }
 
 void print_lex_error(LexError error) {
-  // TODO: better error message like in parser.c
-  eprintf("Failed to match token in string: `%.*s`\n", 20,
-          &error.source[error.offset]);
+  OffsetInfo oi = get_offset_info(error.source, error.offset);
+  int length = 0;
+  // find first whitespace after offset
+  for (; !IS_ONE_OF(error.source[error.offset + length], '\0', '\n', ' ');
+       length++)
+    ;
+  eprintf(
+      "Error: Failed to match token at line %zu, column %zu. String: `%.*s`\n",
+      oi.line_number, oi.column_number, length, &error.source[error.offset]);
 }
 
 bool fill_token_stream(const char *source, TokenStream *out,
@@ -129,7 +136,7 @@ bool fill_token_stream(const char *source, TokenStream *out,
     out->length++;
   }
   if (result != LEX_EOF) {
-    print_lex_error(*error_data);
+    error_data->offset = offset;
     return false;
   }
   return true;
