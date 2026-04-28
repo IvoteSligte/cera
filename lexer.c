@@ -11,13 +11,15 @@ typedef struct {
 
 #define M(name, display_name, regex) {t##name, #name, display_name, "^" regex}
 
+// assumes that tokens are in the same order as in the TokenKind definition
 const Matcher MATCHERS[] = {
+    M(EOF, "EOF", "[><]"),
     M(WHITESPACE, "whitespace", "[\n\t ]+"),
     M(COMMENT, "comment", "// .*\n"),
     // words
     M(IDENT, "identifier", "[a-zA-Z_][a-zA-Z_0-9]*"),
     M(NUMBER, "number", "[0-9]+"),
-    M(STRING, "string", "\"[^\"]*\""),
+    M(STRING, "string", "\"([^\\\\\"]|\\\\.)*\""),
     // symbols
     M(LPAREN, "(", "\\("),
     M(RPAREN, ")", "\\)"),
@@ -25,23 +27,39 @@ const Matcher MATCHERS[] = {
     M(RBRACE, "}", "\\}"),
     M(LBRACKET, "[", "\\["),
     M(RBRACKET, "]", "]"),
+    // operators
     M(PLUS, "+", "\\+"),
-    M(MINUS, "-", "\\-"),
+    M(MINUS, "-", "-"),
     M(STAR, "*", "\\*"),
     M(SLASH, "/", "/"),
+    M(PLUS_EQ, "+=", "\\+="),
+    M(MINUS_EQ, "-=", "-="),
+    M(STAR_EQ, "*=", "\\*="),
+    M(SLASH_EQ, "/=", "/="),
+    M(LT, "<", "<"),
+    M(GT, ">", ">"),
+    M(LT_EQ, "<=", "<="),
+    M(GT_EQ, ">=", ">="),
+    M(EQ_EQ, "==", "=="),
+    M(AMP_AMP, "&&", "&&"),
+    M(BAR_BAR, "||", "\\|\\|"),
+    // misc symbols
     M(HASHTAG, "#", "#"),
     M(SEMI, ";", ";"),
     M(COMMA, ",", ","),
     M(DOT, ".", "\\."),
     M(EQ, "=", "="),
     M(COL, ":", ":"),
-    M(COLEQ, ":=", ":="),
-    M(COLCOL, "::", "::"),
+    M(COL_EQ, ":=", ":="),
+    M(COL_COL, "::", "::"),
     // keywords
     M(STRUCT, "struct", "struct"),
     M(UNION, "union", "union"),
     M(ENUM, "enum", "enum"),
     M(RETURN, "return", "return"),
+    M(FOR, "for", "for"),
+    M(IF, "if", "if"),
+    M(WHILE, "while", "while"),
 };
 #undef M
 
@@ -50,6 +68,7 @@ const Matcher MATCHERS[] = {
 regex_t regexes[NUM_MATCHERS];
 
 void lexer_init(void) {
+  assert(tKIND_COUNT == NUM_MATCHERS);
   for (size_t i = 0; i < NUM_MATCHERS; i++)
     compile_regex(MATCHERS[i].regex, &regexes[i]);
 }
@@ -68,12 +87,21 @@ const char *token_display_name(TokenKind kind) {
 
 int token_precedence(TokenKind kind) {
   switch (kind) {
+  case tBAR_BAR:
+    return 0;
+  case tAMP_AMP:
+    return 1;
+  case tLT:
+  case tGT:
+  case tLT_EQ:
+  case tGT_EQ:
+    return 2;
   case tPLUS:
   case tMINUS:
-    return 0;
+    return 3;
   case tSTAR:
   case tSLASH:
-    return 1;
+    return 4;
   default:
     panicf("Tried to retrieve precedence of non-operator: `%s`",
            token_display_name(kind));

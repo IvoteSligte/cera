@@ -7,10 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-__attribute__((noreturn))
-void backtrace_abort(void);
+__attribute__((noreturn)) void backtrace_abort(void);
 
-char* read_file(const char* path);
+char *read_file(const char *path);
 
 #define eprintf(format, ...) fprintf(stderr, format __VA_OPT__(, ) __VA_ARGS__)
 #define panicf(format, ...)                                                    \
@@ -21,18 +20,25 @@ char* read_file(const char* path);
 
 #define UNUSED(x) (void)(x)
 
-// Argument counter (supports up to 5 here)
-#define _GET_MACRO(_1, _2, _3, _4, _5, NAME, ...) NAME
+#define _GET_MACRO(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, NAME, ...) NAME
 
 #define _IS_ONE_OF_1(x, a) ((x) == (a))
 #define _IS_ONE_OF_2(x, a, ...) ((x) == (a) || _IS_ONE_OF_1(x, __VA_ARGS__))
 #define _IS_ONE_OF_3(x, a, ...) ((x) == (a) || _IS_ONE_OF_2(x, __VA_ARGS__))
 #define _IS_ONE_OF_4(x, a, ...) ((x) == (a) || _IS_ONE_OF_3(x, __VA_ARGS__))
 #define _IS_ONE_OF_5(x, a, ...) ((x) == (a) || _IS_ONE_OF_4(x, __VA_ARGS__))
+#define _IS_ONE_OF_6(x, a, ...) ((x) == (a) || _IS_ONE_OF_5(x, __VA_ARGS__))
+#define _IS_ONE_OF_7(x, a, ...) ((x) == (a) || _IS_ONE_OF_6(x, __VA_ARGS__))
+#define _IS_ONE_OF_8(x, a, ...) ((x) == (a) || _IS_ONE_OF_7(x, __VA_ARGS__))
+#define _IS_ONE_OF_9(x, a, ...) ((x) == (a) || _IS_ONE_OF_8(x, __VA_ARGS__))
+#define _IS_ONE_OF_10(x, a, ...) ((x) == (a) || _IS_ONE_OF_9(x, __VA_ARGS__))
+#define _IS_ONE_OF_11(x, a, ...) ((x) == (a) || _IS_ONE_OF_10(x, __VA_ARGS__))
 
 #define IS_ONE_OF(x, ...)                                                      \
-  _GET_MACRO(__VA_ARGS__, _IS_ONE_OF_5, _IS_ONE_OF_4, _IS_ONE_OF_3,            \
-             _IS_ONE_OF_2, _IS_ONE_OF_1)(x, __VA_ARGS__)
+  _GET_MACRO(__VA_ARGS__, _IS_ONE_OF_11, _IS_ONE_OF_10, _IS_ONE_OF_9,          \
+             _IS_ONE_OF_8, _IS_ONE_OF_7, _IS_ONE_OF_6, _IS_ONE_OF_5,           \
+             _IS_ONE_OF_4, _IS_ONE_OF_3, _IS_ONE_OF_2,                         \
+             _IS_ONE_OF_1)(x, __VA_ARGS__)
 
 #define SWAP(a, b)                                                             \
   {                                                                            \

@@ -146,6 +146,31 @@ ANALYZER(integer, {
 
 ANALYZER(string, {
   UNUSED(string);
+  String value = {.text = ra_calloc(allocator, string->length)};
+  for (size_t i = 0; i < string->length; i++) {
+    char c = string->text[i];
+    if (c == '\\') {
+      i++;
+      c = string->text[i];
+      if (c == 'n')
+        c = '\n';
+      else if (c == 'r')
+        c = '\r';
+      else if (c == 't')
+        c = '\t';
+      else if (c == 'f')
+        c = '\f';
+      else if (c == '\\')
+        c = '\\';
+      else if (c == '"')
+        c = '"';
+      else
+        EXPECT(false, node, ssprintf("invalid escape sequence: `\\%c`", c));
+    }
+    value.text[value.length] = c;
+    value.length++;
+  }
+  string->value = value;
   *out_type = PRIM_TYPE(tySTRING);
   OK;
 });
@@ -170,9 +195,35 @@ ANALYZER(binary, {
     EXPECT((right_type.kind == tyINT), binary->right,
            strdup("cannot apply arithmetic operator to non-numeric type"));
     EXPECT((left_type.kind == right_type.kind), node,
-           strdup("types on both sides of the binary arithmetic operator "
+           strdup("types on both sides of an arithmetic operator "
                   "must be the same"));
     *out_type = left_type;
+    OK;
+  }
+  if (IS_ONE_OF(binary->op, tLT, tGT, tLT_EQ, tGT_EQ)) {
+    EXPECT((left_type.kind == tyINT), binary->left,
+           ssprintf("cannot apply operator %s to non-numeric type",
+                    token_name(binary->op)));
+    EXPECT((right_type.kind == tyINT), binary->right,
+           ssprintf("cannot apply operator %s to non-numeric type",
+                    token_name(binary->op)));
+    EXPECT((left_type.kind == right_type.kind), node,
+           strdup("types on both sides of a comparison operator "
+                  "must be the same"));
+    *out_type = PRIM_TYPE(tyBOOL);
+    OK;
+  }
+  if (binary->op == tEQ_EQ) {
+    EXPECT((left_type.kind == tyINT), binary->left,
+           ssprintf("cannot apply operator %s to non-numeric type (currently)",
+                    token_name(binary->op)));
+    EXPECT((right_type.kind == tyINT), binary->right,
+           ssprintf("cannot apply operator %s to non-numeric type (currently)",
+                    token_name(binary->op)));
+    EXPECT((left_type.kind == right_type.kind), node,
+           strdup("types on both sides of a comparison operator "
+                  "must be the same"));
+    *out_type = PRIM_TYPE(tyBOOL);
     OK;
   }
   panicf("Unknown binary operator: `%s`", token_display_name(binary->op));

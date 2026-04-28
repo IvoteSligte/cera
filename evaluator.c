@@ -48,7 +48,7 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
       {
         CASE(param);
         CASE(for_loop, {
-          EVALUATE(for_loop->init, init);
+          evaluate_stmt(for_loop->init, function_out);
           while (true) {
             EVALUATE(for_loop->cond, cond);
             if (!cond_value.boolean)
@@ -56,7 +56,7 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
             ControlFlow control = evaluate_stmts(for_loop->stmts, function_out);
             if (control == cRETURN)
               OK(cRETURN);
-            EVALUATE(for_loop->step, step);
+            evaluate_stmt(for_loop->step, function_out);
           }
           OK(cNEXT);
         });
@@ -119,8 +119,7 @@ EVALUATOR(integer, { OK_INT(integer->value); });
 EVALUATOR(string, {
   // the string value is immutable, only typed as mutable as it
   // is normally owned
-  OK((Value){
-      .string = {.text = (char *)string->text, .length = string->length}});
+  OK((Value){.string = string->value});
 });
 
 EVALUATOR(unary, {
@@ -131,27 +130,37 @@ EVALUATOR(unary, {
   panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
 });
 
+#define BIN($out_member, $member, $op)                                         \
+  value.$out_member = left_value.$member $op right_value.$member;              \
+  break;
+
 EVALUATOR(binary, {
   EVALUATE(binary->left, left);
   EVALUATE(binary->right, right);
-  ssize_t value = 0;
+  Value value = {0};
   switch (binary->op) {
   case tPLUS:
-    value = left_value.integer + right_value.integer;
-    break;
+    BIN(integer, integer, +);
   case tMINUS:
-    value = left_value.integer - right_value.integer;
-    break;
+    BIN(integer, integer, -);
   case tSTAR:
-    value = left_value.integer * right_value.integer;
-    break;
+    BIN(integer, integer, *);
   case tSLASH:
-    value = left_value.integer / right_value.integer;
-    break;
+    BIN(integer, integer, /);
+  case tLT:
+    BIN(boolean, integer, <);
+  case tGT:
+    BIN(boolean, integer, >);
+  case tLT_EQ:
+    BIN(boolean, integer, <=);
+  case tGT_EQ:
+    BIN(boolean, integer, >=);
+  case tEQ_EQ:
+    BIN(boolean, integer, ==);
   default:
     panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
   }
-  OK_INT(value);
+  OK(value);
 });
 EVALUATOR(function_call, {
   EVALUATE(function_call->function, function);

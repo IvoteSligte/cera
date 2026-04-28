@@ -136,6 +136,7 @@ typedef struct ASTNode {
     struct {
       const char *text;
       size_t length;
+      String value;
     } string;
     struct {
       TokenKind op;

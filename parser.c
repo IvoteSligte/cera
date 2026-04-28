@@ -47,9 +47,23 @@ void error_data_add(ParseError *data, size_t token_index,
   _ERROR_DATA_ADD_1(a) _ERROR_DATA_ADD_3(__VA_ARGS__)
 #define _ERROR_DATA_ADD_5(a, ...)                                              \
   _ERROR_DATA_ADD_1(a) _ERROR_DATA_ADD_4(__VA_ARGS__)
+#define _ERROR_DATA_ADD_6(a, ...)                                              \
+  _ERROR_DATA_ADD_1(a) _ERROR_DATA_ADD_5(__VA_ARGS__)
+#define _ERROR_DATA_ADD_7(a, ...)                                              \
+  _ERROR_DATA_ADD_1(a) _ERROR_DATA_ADD_6(__VA_ARGS__)
+#define _ERROR_DATA_ADD_8(a, ...)                                              \
+  _ERROR_DATA_ADD_1(a) _ERROR_DATA_ADD_7(__VA_ARGS__)
+#define _ERROR_DATA_ADD_9(a, ...)                                              \
+  _ERROR_DATA_ADD_1(a) _ERROR_DATA_ADD_8(__VA_ARGS__)
+#define _ERROR_DATA_ADD_10(a, ...)                                             \
+  _ERROR_DATA_ADD_1(a) _ERROR_DATA_ADD_9(__VA_ARGS__)
+#define _ERROR_DATA_ADD_11(a, ...)                                             \
+  _ERROR_DATA_ADD_1(a) _ERROR_DATA_ADD_10(__VA_ARGS__)
 
 #define ERROR_DATA_ADD(...)                                                    \
-  {_GET_MACRO(__VA_ARGS__, _ERROR_DATA_ADD_5, _ERROR_DATA_ADD_4,               \
+  {_GET_MACRO(__VA_ARGS__, _ERROR_DATA_ADD_11, _ERROR_DATA_ADD_10,             \
+              _ERROR_DATA_ADD_9, _ERROR_DATA_ADD_8, _ERROR_DATA_ADD_7,         \
+              _ERROR_DATA_ADD_6, _ERROR_DATA_ADD_5, _ERROR_DATA_ADD_4,         \
               _ERROR_DATA_ADD_3, _ERROR_DATA_ADD_2,                            \
               _ERROR_DATA_ADD_1)(__VA_ARGS__)}
 
@@ -318,7 +332,7 @@ PARSER(binary, {
         *out = left;
         OK;
       },
-      tPLUS, tMINUS, tSTAR, tSLASH);
+      tPLUS, tMINUS, tSTAR, tSLASH, tLT, tGT, tLT_EQ, tGT_EQ, tEQ_EQ);
   MUST_PARSE(expr, right);
 
   YIELD(binary, {.op = op, .has_parens = false, .left = left, .right = right});
@@ -359,7 +373,8 @@ PARSER_PROTOTYPE(declaration);
 
 PARSER(assign, {
   MUST_PARSE(name, name);
-  EXPECT_OP(tEQ);
+  EXPECT_OP(tEQ, tPLUS_EQ, tMINUS_EQ, tSTAR_EQ,
+            tSLASH_EQ); // TODO: handle tPLUS_EQ (and co.) operators
   MUST_PARSE(expr_stmt, expr);
   RETURN(assign, {.op = op, .target = name, .expr = expr});
 });
@@ -371,6 +386,7 @@ PARSER(return_stmt, {
 });
 
 PARSER(for_loop, {
+  EXPECT(tFOR);
   MUST_PARSE(declaration, init);
   MUST_PARSE(expr_stmt, cond);
   MUST_PARSE(assign, step);
@@ -388,8 +404,8 @@ PARSER(declaration_expr, {
 PARSER(declaration, {
   MUST_PARSE(name, name);
 
-  EXPECT(tCOLCOL, tCOLEQ);
-  bool is_constant = token.kind == tCOLCOL;
+  EXPECT(tCOL_COL, tCOL_EQ);
+  bool is_constant = token.kind == tCOL_COL;
 
   MUST_PARSE(declaration_expr, expr);
 

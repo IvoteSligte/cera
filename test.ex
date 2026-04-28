@@ -4,8 +4,8 @@ main :: () {
 }
 
 doStuff :: (a: int, b: int) {
-  for (i: int = a; i < b; i = i + 1) {
-    print_string("Hello, World!");
+  for i := a; i < b; i = i + 1; {
+    print_string("Hello, \"World\"!\n");
   }
 }
 
