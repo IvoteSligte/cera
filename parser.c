@@ -203,6 +203,8 @@ int log_indent = 0;
                                sizeof(ASTNode *) * ($nodes.length + 1));       \
       $nodes.data[$nodes.length] = node;                                       \
       $nodes.length++;                                                         \
+      /*NOTE: should EXTEND_SPAN not be used for every node parsed normally as \
+       * well? */                                                              \
       EXTEND_SPAN(node->span);                                                 \
       if (!peek_token(stream, *token_index, &token) ||                         \
           !IS_ONE_OF(token.kind, separators)) {                                \
