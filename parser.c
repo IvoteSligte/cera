@@ -103,17 +103,18 @@ int log_indent = 0;
   BEGIN_LOG($name);                                                            \
   size_t start_token_index = *token_index;                                     \
   size_t start_allocator_length = allocator->length;                           \
-  Token token;                                                                 \
-  if (!peek_token(stream, *token_index, &token))                               \
-    FAIL;                                                                      \
+  Token token = PEEK;                                                          \
   Span span = (Span){.offset = token.offset, .length = 0};                     \
-  UNUSED(span);
+  UNUSED(span);                                                                \
+  UNUSED(start_allocator_length);                                              \
+  UNUSED(start_token_index);
 
 #define OK                                                                     \
   {                                                                            \
     LOG_EXIT("OK");                                                            \
     return true;                                                               \
   }
+
 #define FAIL                                                                   \
   {                                                                            \
     *token_index = start_token_index;                                          \
@@ -140,23 +141,31 @@ int log_indent = 0;
     EXTEND_SPAN(token);                                                        \
   }
 
-#define EXPECT(...)                                                            \
+#define PEEK get_token(stream, *token_index)
+
+#define UNEXPECTED($expected...)                                               \
   {                                                                            \
-    if (!peek_token(stream, *token_index, &token)) {                           \
-      LOG("Expected: " #__VA_ARGS__ " found EOF");                             \
-      ERROR_DATA_ADD(__VA_ARGS__);                                             \
-      FAIL;                                                                    \
-    }                                                                          \
-    if (!IS_ONE_OF(token.kind, __VA_ARGS__)) {                                 \
-      LOG("Expected: " #__VA_ARGS__ " found %s", token_name(token.kind));      \
-      ERROR_DATA_ADD(__VA_ARGS__);                                             \
-      FAIL;                                                                    \
-    }                                                                          \
-    CONSUME;                                                                   \
+    LOG("Expected: " #$expected " found %s", token_name(token.kind));          \
+    ERROR_DATA_ADD($expected);                                                 \
   }
 
-#define EXPECT_OP(...)                                                         \
-  EXPECT(__VA_ARGS__);                                                         \
+// Tries to match a token, running $on_fail on failure.
+#define TRY_TOKEN($on_fail, $expected...)                                      \
+  token = PEEK;                                                                \
+  if (!IS_ONE_OF(token.kind, $expected)) {                                     \
+    UNEXPECTED($expected);                                                     \
+    $on_fail;                                                                  \
+  }                                                                            \
+  CONSUME;
+
+#define EXPECT($expected...) TRY_TOKEN(FAIL, $expected)
+
+#define EXPECT_OP($ops...)                                                     \
+  EXPECT($ops);                                                                \
+  TokenKind op = token.kind;
+
+#define TRY_OP($on_fail, $ops...)                                              \
+  TRY_TOKEN($on_fail, $ops);                                                   \
   TokenKind op = token.kind;
 
 #define PARSE($name, $node_ptr)                                                \
@@ -168,9 +177,7 @@ int log_indent = 0;
   if (!PARSE($name, &$node))                                                   \
     FAIL;
 
-// Try to parse and continue on success.
-// Declares has_##out indicating whether it succeeded.
-// TODO: is it possible to differentiate between 'not found' and error?
+// Try to parse and continue regardless of failure or success.
 #define MAY_PARSE($name, $node)                                                \
   Node *$node = NULL;                                                          \
   PARSE($name, &$node);
@@ -185,6 +192,7 @@ int log_indent = 0;
   {                                                                            \
     Node *node = NULL;                                                         \
     while (PARSE($element, &node)) {                                           \
+      assert(node != NULL);                                                    \
       $nodes.data = la_realloc(allocator, $nodes.data,                         \
                                sizeof(ASTNode *) * ($nodes.length + 1));       \
       $nodes.data[$nodes.length] = node;                                       \
@@ -194,7 +202,7 @@ int log_indent = 0;
       EXTEND_SPAN($nodes.data[$nodes.length - 1]->span);                       \
   }
 
-#define ZERO_OR_MORE_SEPARATED($element, $nodes, separators...)                \
+#define ZERO_OR_MORE_SEPARATED($element, $nodes, $separators...)               \
   NodeArray $nodes = {0};                                                      \
   {                                                                            \
     Node *node = NULL;                                                         \
@@ -206,12 +214,7 @@ int log_indent = 0;
       /*NOTE: should EXTEND_SPAN not be used for every node parsed normally as \
        * well? */                                                              \
       EXTEND_SPAN(node->span);                                                 \
-      if (!peek_token(stream, *token_index, &token) ||                         \
-          !IS_ONE_OF(token.kind, separators)) {                                \
-        break;                                                                 \
-      }                                                                        \
-      *token_index += 1;                                                       \
-      EXTEND_SPAN(token);                                                      \
+      TRY_TOKEN(break, $separators);                                           \
     }                                                                          \
   }
 
@@ -309,10 +312,13 @@ void fix_precedence(Node *node) {
 }
 
 PARSER(binary, {
-  TRY_PARSE(unary);
-
   MUST_PARSE(unary, left);
-  EXPECT_OP(tPLUS, tMINUS, tSTAR, tSLASH);
+  TRY_OP(
+      {
+        *out = left;
+        OK;
+      },
+      tPLUS, tMINUS, tSTAR, tSLASH);
   MUST_PARSE(expr, right);
 
   YIELD(binary, {.op = op, .has_parens = false, .left = left, .right = right});

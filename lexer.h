@@ -4,6 +4,7 @@
 #include "alloc.h"
 
 typedef enum {
+  tEOF, // returned by peek_token when the end-of-file is reached
   tWHITESPACE,
   tCOMMENT,
   // words
@@ -70,6 +71,7 @@ LexResult lex(const char *source, size_t *offset, Token *out, LexError* error_da
 void print_lex_error(LexError error);
 
 typedef struct {
+  const char* source;
   Token *data;
   size_t length;
 } TokenStream;
@@ -77,4 +79,4 @@ typedef struct {
 bool fill_token_stream(const char* source, TokenStream *out, LexError* error_data);
 void free_token_stream(TokenStream* stream);
 void print_token_stream(TokenStream stream);
-bool peek_token(TokenStream stream, size_t token_index, Token *out);
+Token get_token(TokenStream stream, size_t token_index);

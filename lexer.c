@@ -1,6 +1,5 @@
-#include <regex.h> // TODO: cross-platform
-
 #include "lexer.h"
+#include "regex.h"
 
 typedef struct {
   TokenKind kind;
@@ -50,15 +49,8 @@ const Matcher MATCHERS[] = {
 regex_t regexes[NUM_MATCHERS];
 
 void lexer_init(void) {
-  for (size_t i = 0; i < NUM_MATCHERS; i++) {
-    int result = regcomp(&regexes[i], MATCHERS[i].regex, REG_EXTENDED);
-    if (result) {
-      char errbuf[100];
-      regerror(result, &regexes[i], errbuf, 100);
-      panicf("Failed to compile regex `%s`. Error: %s", MATCHERS[i].regex,
-             errbuf);
-    }
-  }
+  for (size_t i = 0; i < NUM_MATCHERS; i++)
+    compile_regex(MATCHERS[i].regex, &regexes[i]);
 }
 
 void lexer_free(void) {
@@ -88,7 +80,8 @@ int token_precedence(TokenKind kind) {
   }
 }
 
-LexResult lex(const char *source, size_t *offset, Token *out, LexError* error_data) {
+LexResult lex(const char *source, size_t *offset, Token *out,
+              LexError *error_data) {
   size_t longest_match = 0;
 
   if (*offset >= strlen(source)) {
@@ -96,8 +89,7 @@ LexResult lex(const char *source, size_t *offset, Token *out, LexError* error_da
   }
   for (size_t i = 0; i < NUM_MATCHERS; i++) {
     regmatch_t match;
-    int result = regexec(&regexes[i], &source[*offset], 1, &match, 0);
-    if (result == REG_NOERROR) {
+    if (match_regex(&regexes[i], &source[*offset], &match)) {
       *out = (Token){
           .offset = *offset,
           .length = match.rm_eo - match.rm_so, // end - start
@@ -105,14 +97,7 @@ LexResult lex(const char *source, size_t *offset, Token *out, LexError* error_da
           .kind = MATCHERS[i].kind,
       };
       longest_match = out->length;
-      continue;
     }
-    if (result == REG_NOMATCH) {
-      continue;
-    }
-    char errbuf[100];
-    regerror(result, &regexes[i], errbuf, 100);
-    panicf("Failed to run regex. Error: %s", errbuf);
   }
   *offset += longest_match;
   if (longest_match == 0) {
@@ -130,11 +115,13 @@ void print_lex_error(LexError error) {
           &error.source[error.offset]);
 }
 
-bool fill_token_stream(const char* source, TokenStream *out, LexError* error_data) {
+bool fill_token_stream(const char *source, TokenStream *out,
+                       LexError *error_data) {
   size_t offset = 0;
   Token token = {0};
   LexResult result = {0};
-  *error_data = (LexError) { .source = source };
+  *out = (TokenStream){.source = source};
+  *error_data = (LexError){.source = source};
 
   while ((result = lex(source, &offset, &token, error_data)) == LEX_OK) {
     out->data = realloc(out->data, sizeof(Token) * (out->length + 1));
@@ -161,10 +148,9 @@ void print_token_stream(TokenStream stream) {
   }
 }
 
-bool peek_token(TokenStream stream, size_t token_index, Token *out) {
+Token get_token(TokenStream stream, size_t token_index) {
   if (token_index >= stream.length) {
-    return false;
+    return (Token){.kind = tEOF};
   }
-  *out = stream.data[token_index];
-  return true;
+  return stream.data[token_index];
 }

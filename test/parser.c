@@ -3,14 +3,21 @@
 #include <stdio.h>
 
 #include "../parser.h"
+#include "../regex.h"
 
 #define TEST($name, $source)                                                   \
-  num_tests++;                                                                 \
-  if (test($source)) {                                                         \
-    num_succeeded++;                                                           \
-    printf("- test " #$name " succeeded\n");                                     \
-  } else {                                                                     \
-    printf("- test " #$name " failed\n");                                 \
+  {                                                                            \
+    regmatch_t match;                                                          \
+    if (!has_regex || match_regex(&regex, #$name, &match)) {                   \
+      num_tests++;                                                             \
+      printf("- running test " #$name " \n");                                  \
+      if (test($source)) {                                                     \
+        num_succeeded++;                                                       \
+        printf("- test " #$name " succeeded\n");                               \
+      } else {                                                                 \
+        printf("- test " #$name " failed\n");                                  \
+      }                                                                        \
+    }                                                                          \
   }
 
 typedef enum {
@@ -48,16 +55,27 @@ end:
   return result;
 }
 
-int main() {
+// The first argument is an optional regex pattern that matches test names to run.
+int main(int argc, const char *argv[]) {
   size_t num_tests = 0;
   size_t num_succeeded = 0;
-
+  regex_t regex = {0};
+  bool has_regex = false;
+  if (argc > 1) {
+    const char *pattern = argv[1];
+    compile_regex(pattern, &regex);
+    has_regex = true;
+  }
   lexer_init();
+
   TEST(empty_main, "main :: () {}");
   TEST(literals, "main :: () { 0; 100; 592391; \"a string literal\"; }");
   TEST(binary_exprs, "main :: () { 5 + 6; 9 - 1 * 4 / 2; }");
-  lexer_free();
   printf("[%zu/%zu] tests succeeded\n", num_succeeded, num_tests);
 
+  lexer_free();
+  if (has_regex) {
+    free_regex(&regex);
+  }
   return num_succeeded < num_tests ? 1 : 0;
 }

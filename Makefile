@@ -1,9 +1,11 @@
 CC = gcc
-CFLAGS_debug = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DDEBUG_PARSER
-CFLAGS_test = -Wall -Wextra -fsanitize=address,undefined
 
-# set via CLI
+# set via CLI/justfile
 BUILD ?= debug
+
+CFLAGS_debug = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DDEBUG_PARSER
+CFLAGS_test = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic
+CFLAGS = $(CFLAGS_$(BUILD))
 
 LIB_SRC = $(filter-out main.c, $(wildcard *.c))
 SRC_debug = $(LIB_SRC) main.c
