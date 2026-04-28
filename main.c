@@ -11,27 +11,27 @@ int main() {
   }
 
   lexer_init();
-  /* lexer_print_tokens(source); */
+  LexError lex_error = {0};
   TokenStream stream = {0};
-  if (!fill_token_stream(source, &stream)) {
+  if (!fill_token_stream(source, &stream, &lex_error)) {
     lexer_free();
-    free_token_stream(stream);
+    free_token_stream(&stream);
     free(source);
     return 1;
   }
   lexer_free();
-  lexer_print_token_stream(stream);
+  print_token_stream(stream);
 
   AST ast = {0};
   ParseError parse_error = {0};
-  if (!parse(stream, &ast, &parse_error)) {
+  if (!parse_token_stream(stream, &ast, &parse_error)) {
     print_parse_error(source, stream, parse_error);
-    free_token_stream(stream);
+    free_token_stream(&stream);
     free_ast(&ast);
     free(source);
     return 1;
   }
-  free_token_stream(stream);
+  free_token_stream(&stream);
 
   printf("Parse success.\n");
   ast_print_nodes(ast.head);

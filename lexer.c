@@ -68,9 +68,11 @@ void lexer_free(void) {
 }
 
 const char *token_name(TokenKind kind) { return MATCHERS[kind].name; }
+
 const char *token_display_name(TokenKind kind) {
   return MATCHERS[kind].display_name;
 }
+
 int token_precedence(TokenKind kind) {
   switch (kind) {
   case tPLUS:
@@ -86,7 +88,7 @@ int token_precedence(TokenKind kind) {
   }
 }
 
-LexResult lex(const char *source, size_t *offset, Token *out) {
+LexResult lex(const char *source, size_t *offset, Token *out, LexError* error_data) {
   size_t longest_match = 0;
 
   if (*offset >= strlen(source)) {
@@ -116,52 +118,42 @@ LexResult lex(const char *source, size_t *offset, Token *out) {
   if (longest_match == 0) {
     return LEX_NO_MATCH;
   } else if (out->kind == tWHITESPACE || out->kind == tCOMMENT) {
-    return lex(source, offset, out); // skip whitespace and comments
+    return lex(source, offset, out, error_data); // skip whitespace and comments
   } else {
     return LEX_OK;
   }
 }
 
-static void print_error(const char *source, size_t offset) {
+void print_lex_error(LexError error) {
   // TODO: better error message like in parser.c
-  eprintf("Failed to match token in string: `%.*s`\n", 20, &source[offset]);
+  eprintf("Failed to match token in string: `%.*s`\n", 20,
+          &error.source[error.offset]);
 }
 
-bool fill_token_stream(const char *source, TokenStream *out) {
+bool fill_token_stream(const char* source, TokenStream *out, LexError* error_data) {
   size_t offset = 0;
-  Token token;
-  LexResult result;
-  *out = (TokenStream){0};
+  Token token = {0};
+  LexResult result = {0};
+  *error_data = (LexError) { .source = source };
 
-  while ((result = lex(source, &offset, &token)) == LEX_OK) {
+  while ((result = lex(source, &offset, &token, error_data)) == LEX_OK) {
     out->data = realloc(out->data, sizeof(Token) * (out->length + 1));
     out->data[out->length] = token;
     out->length++;
   }
   if (result != LEX_EOF) {
-    print_error(source, offset);
+    print_lex_error(*error_data);
     return false;
   }
   return true;
 }
 
-void free_token_stream(TokenStream stream) { free(stream.data); }
-
-void lexer_print_tokens(const char *source) {
-  size_t offset = 0;
-  Token token;
-  LexResult result;
-
-  while ((result = lex(source, &offset, &token)) == LEX_OK) {
-    printf("%-3zu %-10s `%.*s`\n", token.offset, token_name(token.kind),
-           (int)token.length, token.text);
-  }
-  if (result != LEX_EOF) {
-    print_error(source, offset);
-  }
+void free_token_stream(TokenStream *stream) {
+  free(stream->data);
+  stream->length = 0;
 }
 
-void lexer_print_token_stream(TokenStream stream) {
+void print_token_stream(TokenStream stream) {
   for (size_t i = 0; i < stream.length; i++) {
     Token token = stream.data[i];
     printf("%-3zu %-10s `%.*s`\n", token.offset, token_name(token.kind),

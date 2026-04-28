@@ -54,9 +54,9 @@ void error_data_add(ParseError *data, size_t token_index,
               _ERROR_DATA_ADD_1)(__VA_ARGS__)}
 
 #define YIELD($kind, ...)                                                      \
-  *out = yield(allocator, (Node){.span = span,                                 \
-                                 .kind = NODE_##$kind,                         \
-                                 .$kind = __VA_ARGS__});
+  *out =                                                                       \
+      yield(allocator,                                                         \
+            (Node){.span = span, .kind = NODE_##$kind, .$kind = __VA_ARGS__});
 
 #define RETURN($kind, ...)                                                     \
   YIELD($kind, __VA_ARGS__);                                                   \
@@ -342,7 +342,7 @@ PARSER(expr, {
 
 PARSER(expr_stmt, {
   MUST_PARSE(expr, expr);
-  *out = expr;  
+  *out = expr;
   EXPECT(tSEMI);
   OK;
 });
@@ -410,9 +410,8 @@ void print_parse_error(const char *source, TokenStream stream,
             "Expected one of [");
   } else {
     token = stream.data[error_data.first_unparsed_token];
-    eprintf("Parse error: unexpected token `%.*s` at offset %zu. "
-            "Expected one of [",
-            (int)token.length, token.text, token.offset);
+    eprintf("Parse error: unexpected token `%.*s`. Expected one of [",
+            (int)token.length, token.text);
   }
   for (size_t i = 0; i < error_data.num_expected; i++) {
     TokenKind expected = error_data.expected[i];
@@ -433,9 +432,11 @@ void print_parse_error(const char *source, TokenStream stream,
   }
 }
 
-bool parse(TokenStream stream, AST *out_ast, ParseError *error_data) {
-  size_t token_index = 0;
+bool parse_token_stream(TokenStream stream, AST *out_ast,
+                        ParseError *error_data) {
+  *out_ast = (AST){0};
   *error_data = (ParseError){0};
+  size_t token_index = 0;
   bool result = parse_module(&out_ast->list_allocator, stream, &token_index,
                              error_data, &out_ast->head);
   if (token_index < stream.length) {
