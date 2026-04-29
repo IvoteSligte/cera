@@ -18,6 +18,12 @@ char *read_file(const char *path);
     eprintf("Panic: " format "\n" __VA_OPT__(, ) __VA_ARGS__);                 \
     backtrace_abort();                                                         \
   }
+// Prints a message to stderr followed by a system error message.
+#define pprintf($format, $args...)                                             \
+  {                                                                            \
+    eprintf($format, $args);                                                   \
+    perror("");                                                                \
+  }
 
 #define UNUSED(x) (void)(x)
 

@@ -3,6 +3,10 @@
 #include "analyzer_shared.h"
 #include "ast_macro.h"
 
+#ifdef TEST
+extern void print_string(const char *text, size_t length);
+#endif
+
 typedef ASTNodeArray NodeArray;
 
 typedef enum {
@@ -127,9 +131,13 @@ Value evaluate_builtin(NodeArray args, BuiltinID id) {
   case PRINT_STRING: {
     assert(args.length == 1);
     EVALUATE(args.data[0], arg);
-    // fwrite instead of printf because printf can only print non-zero-delimited
-    // strings of up to INT_MAX characters in length
+#ifdef TEST
+    print_string(arg_value.string.text, arg_value.string.length);
+#else
+    // Using fwrite instead of printf because printf can only print non-zero-delimited
+    // strings of up to INT_MAX characters in length.
     fwrite(arg_value.string.text, arg_value.string.length, 1, stdout);
+#endif    
     return (Value){0};
   }
   default:

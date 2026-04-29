@@ -47,13 +47,6 @@ void backtrace_abort(void) { abort(); }
 
 #endif
 
-// Prints a message to stderr followed by a system error message.
-#define pprintf($format, $args...)                                             \
-  {                                                                            \
-    eprintf($format, $args);                                                   \
-    perror("");                                                                \
-  }
-
 char *read_file(const char *path) {
   FILE *fptr = fopen(path, "r");
 

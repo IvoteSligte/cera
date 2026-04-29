@@ -10,6 +10,17 @@
 #include "lib/regexp.h"
 #include "lib/util.h"
 
+// Buffer for capturing program stdout.
+char *stdout_buffer = NULL;
+size_t stdout_size = 0;
+
+// Used by lib/evaluator.c to capture stdout.
+void print_string(const char *text, size_t length) {
+  stdout_buffer = realloc(stdout_buffer, stdout_size + length);
+  memcpy(&stdout_buffer[stdout_size], text, length);
+  stdout_size += length;
+}
+
 typedef enum {
   LEXING,
   PARSING,
@@ -50,6 +61,23 @@ bool test(const char *source, const char *expected_output) {
     return false;
   }
   evaluate_module(ast.head); // TODO: compare output with expected_output
+
+  if (stdout_size != strlen(expected_output) ||
+      (stdout_buffer != NULL &&
+       strncmp(stdout_buffer, expected_output, stdout_size) != 0)) {
+    eprintf("Expected output does not match actual output.\n");
+    eprintf("Expected (%zu bytes): `%s`\n", strlen(expected_output),
+            expected_output);
+    eprintf("Actual   (%zu bytes): `%.*s`\n", stdout_size, (int)stdout_size,
+            stdout_buffer);
+    free(stdout_buffer);
+    free_token_stream(&stream);
+    free_ast(&ast);
+    return false;
+  }
+  free(stdout_buffer);
+  stdout_buffer = NULL;
+  stdout_size = 0;
 
   free_token_stream(&stream);
   free_ast(&ast);
@@ -97,7 +125,7 @@ int main(int argc, const char *argv[]) {
       char *separator = strstr(source, "===");
       const char *expected_output = "";
       if (separator != NULL) {
-        *separator = '\0'; // make sure source is zero-delimited
+        *separator = '\0';               // make sure source is zero-delimited
         expected_output = separator + 4; // after ===\n
       }
       num_tests++;
