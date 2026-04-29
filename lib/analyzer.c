@@ -52,11 +52,8 @@ char *ssprintf(const char *fmt, ...) {
   EXPECT(($name##_type.kind == tyTYPE), $node,                                 \
          ssprintf("not a type: %s", type_name($name##_type.kind)));
 
-#define ANALYZE_ARRAY($array, $table)                                          \
-  ITER_ARRAY($array, element, {                                                \
-    Table *table = $table;                                                     \
-    ANALYZE_STMT(element, element);                                            \
-  });
+#define ANALYZE_ARRAY($array)                                                  \
+  ITER_ARRAY($array, element, { ANALYZE_STMT(element, element); });
 
 void add_error(TypeErrorArray *error_data, Span span, char *message) {
   TypeError error = {.span = span, .message = message};
@@ -141,6 +138,15 @@ ANALYZER(integer, {
   EXPECT((sscanf(integer->text, "%zd", &integer->value) == 1), node,
          strdup("integer is too large"));
   *out_type = PRIM_TYPE(tyINT);
+  OK;
+});
+
+ANALYZER(boolean, {
+  if (boolean->length == 4)
+    boolean->value = true;
+  else
+    boolean->value = false;
+  *out_type = PRIM_TYPE(tyBOOL);
   OK;
 });
 
@@ -267,10 +273,10 @@ ANALYZER(function, {
   EXPECT(IS_GLOBAL, node,
          strdup("functions can only be defined in the global scope"));
 
-  if (node->stage < sTYPED) {
-    function->table = (Table){.parent = table, .data = NULL, .length = 0};
-    Table *table = &function->table;
+  function->table.parent = table;
+  Table *table = &function->table;
 
+  if (node->stage < sTYPED) {
     if (out_type->kind != tyFUNCTION) {
       *out_type = (Type){.kind = tyFUNCTION, .is_constant = true};
       out_type->function.params = (TypeArray){
@@ -289,7 +295,7 @@ ANALYZER(function, {
     node->stage = sTYPED;
   }
   bool is_static = false;
-  ANALYZE_ARRAY(function->stmts, &function->table);
+  ANALYZE_ARRAY(function->stmts);
   OK;
 });
 
@@ -307,15 +313,38 @@ ANALYZER(param, {
   OK;
 });
 
+ANALYZER(if_stmt, {
+  ANALYZE(if_stmt->cond, cond);
+  EXPECT((cond_type.kind == tyBOOL), node,
+         strdup("expected boolean type as if-statement condition"));
+
+  if_stmt->table.parent = table;
+  Table *table = &if_stmt->table;
+  ANALYZE_ARRAY(if_stmt->stmts);
+  OK;
+});
+
+ANALYZER(while_loop, {
+  ANALYZE(while_loop->cond, cond);
+  EXPECT((cond_type.kind == tyBOOL), node,
+         strdup("expected boolean type as while-loop condition"));
+
+  while_loop->table.parent = table;
+  Table *table = &while_loop->table;
+  ANALYZE_ARRAY(while_loop->stmts);
+  OK;
+});
+
 ANALYZER(for_loop, {
+  for_loop->table.parent = table;
+  Table *table = &for_loop->table;
+
   ANALYZE_STMT(for_loop->init, init);
   ANALYZE(for_loop->cond, cond);
   ANALYZE_STMT(for_loop->step, step);
   EXPECT((cond_type.kind == tyBOOL), node,
-         strdup("expected boolean type for for-loop condition"));
-  for_loop->table.parent = table;
-
-  ANALYZE_ARRAY(for_loop->stmts, &for_loop->table);
+         strdup("expected boolean type as for-loop condition"));
+  ANALYZE_ARRAY(for_loop->stmts);
   OK;
 });
 
@@ -369,7 +398,8 @@ ANALYZER(declaration, {
 });
 
 ANALYZER(module, {
-  ANALYZE_ARRAY(module->declarations, &module->table);
+  Table *table = &module->table;
+  ANALYZE_ARRAY(module->declarations);
   OK;
 });
 
@@ -379,20 +409,22 @@ ANALYZER_SIGNATURE(node) {
   SWITCH(node, {
     ACASE(name);
     ACASE(integer);
+    ACASE(boolean);
     ACASE(string);
     ACASE(unary);
     ACASE(binary);
     ACASE(function_call);
     ACASE(function);
     ACASE(param);
+    ACASE(if_stmt);
+    ACASE(while_loop);
     ACASE(for_loop);
     ACASE(assign);
     ACASE(return_stmt);
     ACASE(declaration);
     ACASE(module);
-  default:
-    panicf("analyze not implemented for node: %s", ast_node_name(node->kind));
   });
+  panicf("analyze not implemented for node: %s", ast_node_name(node->kind));
 }
 
 void print_analyze_errors(const char *source, TypeErrorArray type_errors) {

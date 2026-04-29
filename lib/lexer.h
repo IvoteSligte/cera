@@ -51,6 +51,8 @@ typedef enum {
   tFOR,
   tIF,
   tWHILE,
+  tTRUE,
+  tFALSE,
   // metasymbol for the number of token kinds
   tKIND_COUNT,
 } TokenKind;

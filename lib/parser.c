@@ -279,6 +279,11 @@ PARSER(function_call, {
   RETURN(function_call, {.function = function, .args = args});
 });
 
+PARSER(boolean, {
+  EXPECT(tTRUE, tFALSE);
+  RETURN(boolean, {.text = token.text, .length = token.length});
+});
+
 PARSER(paren_expr, {
   EXPECT(tLPAREN);
   MUST_PARSE(expr, expr);
@@ -293,6 +298,7 @@ PARSER(primary, {
   TRY_PARSE(function_call);
   TRY_PARSE(name);
   TRY_PARSE(integer);
+  TRY_PARSE(boolean);
   TRY_PARSE(string);
   FAIL;
 })
@@ -332,7 +338,8 @@ PARSER(binary, {
         *out = left;
         OK;
       },
-         tPLUS, tMINUS, tSTAR, tSLASH, tLT, tGT, tLT_EQ, tGT_EQ, tEQ_EQ, tAMP_AMP, tBAR_BAR);
+      tPLUS, tMINUS, tSTAR, tSLASH, tLT, tGT, tLT_EQ, tGT_EQ, tEQ_EQ, tAMP_AMP,
+      tBAR_BAR);
   MUST_PARSE(expr, right);
 
   YIELD(binary, {.op = op, .has_parens = false, .left = left, .right = right});
@@ -431,7 +438,7 @@ PARSER(declaration, {
 PARSER(stmt, {
   TRY_PARSE(expr_stmt);
   TRY_PARSE(if_stmt);
-  TRY_PARSE(while_loop);  
+  TRY_PARSE(while_loop);
   TRY_PARSE(for_loop);
   TRY_PARSE(assign);
   TRY_PARSE(return_stmt);

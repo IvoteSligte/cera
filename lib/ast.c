@@ -146,6 +146,7 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(INVALID);
     N(NAME);
     N(INTEGER);
+    N(BOOLEAN);    
     N(STRING);
     N(UNARY);
     N(BINARY);

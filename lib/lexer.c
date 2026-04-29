@@ -60,6 +60,8 @@ const Matcher MATCHERS[] = {
     M(FOR, "for", "for"),
     M(IF, "if", "if"),
     M(WHILE, "while", "while"),
+    M(TRUE, "true", "true"),
+    M(FALSE, "false", "false"),
 };
 #undef M
 

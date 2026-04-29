@@ -12,6 +12,8 @@ main :: () {
     if true || false; {
         print_string("if");
     }
+    print_string("\n");
 }
 =====
 forforforforforwhilewhilewhileif
+

@@ -11,13 +11,16 @@ typedef enum {
   aINVALID = 0,
   aNAME,
   aINTEGER,
+  aBOOLEAN,  
   aSTRING,
   aUNARY,
   aBINARY,
   aFUNCTION_CALL,
   aFUNCTION,
   aPARAM,
-  aIF_STMT,  aWHILE_LOOP,  aFOR_LOOP,
+  aIF_STMT,
+  aWHILE_LOOP,
+  aFOR_LOOP,
   aASSIGN,
   aRETURN_STMT,
   aDECLARATION, // variable declaration
@@ -136,6 +139,11 @@ typedef struct ASTNode {
     struct {
       const char *text;
       size_t length;
+      bool value;
+    } boolean;
+    struct {
+      const char *text;
+      size_t length;
       String value;
     } string;
     struct {
@@ -169,7 +177,7 @@ typedef struct ASTNode {
       SymbolTable table;
     } if_stmt;
     struct {
-      ASTNode *cond;      
+      ASTNode *cond;
       ASTNodeArray stmts;
       SymbolTable table;
     } while_loop;

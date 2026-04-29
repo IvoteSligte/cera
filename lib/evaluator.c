@@ -120,8 +120,6 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
 
 #define OK(value...) return value;
 
-#define OK_INT($integer) OK((Value){.integer = $integer})
-
 Value evaluate_builtin(NodeArray args, BuiltinID id) {
   switch (id) {
   case NOT_BUILTIN:
@@ -148,7 +146,9 @@ Value evaluate_builtin(NodeArray args, BuiltinID id) {
 
 EVALUATOR(name, { OK(*name->value_ptr); });
 
-EVALUATOR(integer, { OK_INT(integer->value); });
+EVALUATOR(integer, { OK((Value){.integer = integer->value}); });
+
+EVALUATOR(boolean, { OK((Value){.boolean = boolean->value}); });
 
 EVALUATOR(string, {
   // the string value is immutable, only typed as mutable as it
@@ -159,7 +159,7 @@ EVALUATOR(string, {
 EVALUATOR(unary, {
   EVALUATE(unary->expr, expr);
   if (unary->op == tMINUS) {
-    OK_INT(-expr_value.integer)
+    OK((Value){.integer = -expr_value.integer})
   }
   panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
 });
@@ -200,6 +200,7 @@ EVALUATOR(binary, {
   }
   OK(value);
 });
+
 EVALUATOR(function_call, {
   EVALUATE(function_call->function, function);
 
@@ -228,6 +229,7 @@ Value evaluate_expr(Node *node) {
   SWITCH(node, {
     ECASE(name);
     ECASE(integer);
+    ECASE(boolean);
     ECASE(string);
     ECASE(unary);
     ECASE(binary);

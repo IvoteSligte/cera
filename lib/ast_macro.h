@@ -5,6 +5,7 @@
 #define NODE_bool aBOOL
 #define NODE_void aVOID
 #define NODE_integer aINTEGER
+#define NODE_boolean aBOOLEAN
 #define NODE_string aSTRING
 #define NODE_unary aUNARY
 #define NODE_binary aBINARY
