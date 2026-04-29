@@ -5,14 +5,14 @@
 typedef struct {
   Span span;
   char *message;
-} TypeError;
+} AnalyzeError;
 
 typedef struct {
-  TypeError *data;
+  AnalyzeError *data;
   size_t length;
-} TypeErrorArray;
+} AnalyzeErrorArray;
 
-bool analyze(AST *ast, TypeErrorArray *error_data);
+bool analyze(AST *ast, AnalyzeErrorArray *error_data);
 
-void print_analyze_errors(const char* source, TypeErrorArray type_errors);
-void free_analyze_errors(TypeErrorArray *type_errors);
+void print_analyze_errors(const char* source, AnalyzeErrorArray type_errors);
+void free_analyze_errors(AnalyzeErrorArray *type_errors);

@@ -40,7 +40,7 @@ bool test(const char *source, const char *expected_output) {
   AST ast = {0};
   LexError lex_error = {0};
   ParseError parse_error = {0};
-  TypeErrorArray type_errors = {0};
+  AnalyzeErrorArray type_errors = {0};
 
   if (!(fill_token_stream(source, &stream, &lex_error))) {
     print_lex_error(lex_error);

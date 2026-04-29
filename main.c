@@ -37,7 +37,7 @@ int main() {
   printf("Parse success.\n");
   ast_print_nodes(ast.head);
 
-  TypeErrorArray type_errors = {0};
+  AnalyzeErrorArray type_errors = {0};
   if (!analyze(&ast, &type_errors)) {
     print_analyze_errors(source, type_errors);
     free_analyze_errors(&type_errors);

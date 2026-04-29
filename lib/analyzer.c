@@ -55,10 +55,10 @@ char *ssprintf(const char *fmt, ...) {
 #define ANALYZE_ARRAY($array)                                                  \
   ITER_ARRAY($array, element, { ANALYZE_STMT(element, element); });
 
-void add_error(TypeErrorArray *error_data, Span span, char *message) {
-  TypeError error = {.span = span, .message = message};
+void add_error(AnalyzeErrorArray *error_data, Span span, char *message) {
+  AnalyzeError error = {.span = span, .message = message};
   error_data->data =
-      realloc(error_data->data, sizeof(TypeError) * (error_data->length + 1));
+      realloc(error_data->data, sizeof(AnalyzeError) * (error_data->length + 1));
   error_data->data[error_data->length] = error;
   error_data->length++;
 }
@@ -97,7 +97,7 @@ typedef enum {
 #define ANALYZER_SIGNATURE($name)                                              \
   Result analyze_##$name(Allocator *allocator, Node *node, Table *table,       \
                          Type return_type, Type *out_type,                     \
-                         TypeErrorArray *error_data, bool is_static,           \
+                         AnalyzeErrorArray *error_data, bool is_static,           \
                          Flags *flags)
 
 #define ANALYZER($name, ...)                                                   \
@@ -427,9 +427,9 @@ ANALYZER_SIGNATURE(node) {
   panicf("analyze not implemented for node: %s", ast_node_name(node->kind));
 }
 
-void print_analyze_errors(const char *source, TypeErrorArray type_errors) {
+void print_analyze_errors(const char *source, AnalyzeErrorArray type_errors) {
   for (size_t i = 0; i < type_errors.length; i++) {
-    TypeError error = type_errors.data[i];
+    AnalyzeError error = type_errors.data[i];
     eprintf("Error: %s\n", error.message);
 
     OffsetInfo oi = get_offset_info(source, error.span.offset);
@@ -443,16 +443,16 @@ void print_analyze_errors(const char *source, TypeErrorArray type_errors) {
   }
 }
 
-void free_analyze_errors(TypeErrorArray *type_errors) {
+void free_analyze_errors(AnalyzeErrorArray *type_errors) {
   for (size_t i = 0; i < type_errors->length; i++) {
-    TypeError error = type_errors->data[i];
+    AnalyzeError error = type_errors->data[i];
     free(error.message);
   }
   free(type_errors->data);
   type_errors->data = NULL;
 }
 
-bool analyze(AST *ast, TypeErrorArray *error_data) {
+bool analyze(AST *ast, AnalyzeErrorArray *error_data) {
   Table table = {0};
   Flags flags = 0;
   Result result = rBLOCKED;
