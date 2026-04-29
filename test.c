@@ -1,24 +1,11 @@
 
+#include <dirent.h> // TODO: cross-platform
 #include <stdbool.h>
 #include <stdio.h>
 
 #include "lib/parser.h"
 #include "lib/regexp.h"
-
-#define TEST($name, $source)                                                   \
-  {                                                                            \
-    regmatch_t match;                                                          \
-    if (!has_regex || match_regex(&regex, #$name, &match)) {                   \
-      num_tests++;                                                             \
-      printf("- running test " #$name " \n");                                  \
-      if (test($source)) {                                                     \
-        num_succeeded++;                                                       \
-        printf("- test " #$name " succeeded\n");                               \
-      } else {                                                                 \
-        printf("- test " #$name " failed\n");                                  \
-      }                                                                        \
-    }                                                                          \
-  }
+#include "lib/util.h"
 
 typedef enum {
   LEXING,
@@ -67,26 +54,46 @@ int main(int argc, const char *argv[]) {
     compile_regex(pattern, &regex);
     has_regex = true;
   }
+
+  DIR *dir = opendir("test/");
+  if (dir == NULL) {
+    printf("Could not open test/ directory.");
+    return 1;
+  }
   lexer_init();
 
-  TEST(empty_main, "main :: () {}");
-  TEST(literals, "main :: () { 0; 100; 592391; \"a string literal\"; }");
-  TEST(binary_exprs, "main :: () { 5 + 6; 9 - 1 * 4 / 2; }");
-  TEST(stmts, "main :: () {                    \n"
-              "    for i := 0; i < 5; i += 1; {\n"
-              "        print_string(\"for\");  \n"
-              "    }                           \n"
-              "                                \n"
-              "    i := 0;                     \n"
-              "    while i < 3; {              \n"
-              "        print_string(\"while\");\n"
-              "        i += 1;                 \n"
-              "    }                           \n"
-              "                                \n"
-              "    if true || false; {         \n"
-              "        print_string(\"if\");   \n"
-              "    }                           \n"
-              "}                               \n");
+  struct dirent *dir_entry = NULL;
+  char path[5 + 256] = "test/";
+  while ((dir_entry = readdir(dir)) != NULL) {
+    const char *file_name = dir_entry->d_name;
+    strcpy(&path[5], file_name);
+    const char *file_extension = strrchr(file_name, '.');
+    if (strcmp(file_extension, FILE_EXTENSION) != 0) {
+      continue;
+    }
+    char *name = file_extension == NULL
+                     ? strdup(file_name)
+                     : strndup(file_name, file_extension - file_name);
+    char *source = read_file(path);
+    if (source == NULL) {
+      continue;
+    }
+    regmatch_t match;
+    if (!has_regex || match_regex(&regex, name, &match)) {
+      num_tests++;
+      printf("- running test %s\n", name);
+      if (test(source)) {
+        num_succeeded++;
+        printf("- test %s succeeded\n", name);
+      } else {
+        printf("- test %s failed\n", name);
+      }
+    }
+    free(source);
+    free(name);
+  }
+  closedir(dir);
+
   printf("[%zu/%zu] tests succeeded\n", num_succeeded, num_tests);
 
   lexer_free();

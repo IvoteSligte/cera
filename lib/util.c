@@ -47,35 +47,40 @@ void backtrace_abort(void) { abort(); }
 
 #endif
 
+// Prints a message to stderr followed by a system error message.
+#define pprintf($format, $args...)                                             \
+  {                                                                            \
+    eprintf($format, $args);                                                   \
+    perror("");                                                                \
+  }
 
 char *read_file(const char *path) {
   FILE *fptr = fopen(path, "r");
 
   if (fptr == NULL) {
-    perror("Failed to open file:");
+    pprintf("Failed to open file `%s`", path);
     return NULL;
   }
   if (fseek(fptr, 0L, SEEK_END) != 0) {
-    perror("Failed to seek to end of file:");
+    pprintf("Failed to seek to end of file `%s`", path);
     return NULL;
   }
   size_t size = ftell(fptr);
   if (fseek(fptr, 0L, SEEK_SET) != 0) {
-    perror("Failed to seek to start of file:");
+    pprintf("Failed to seek to start of file `%s`", path);
     return NULL;
   }
   char *data = malloc(size + 1);
 
   if (fread(data, 1, size, fptr) != size) {
-    perror("Reading file returned an unexpected number of bytes:");
+    pprintf("Reading file `%s` returned an unexpected number of bytes", path);
     free(data);
     return NULL;
   }
   data[size] = '\0';
 
   if (fclose(fptr) != 0) {
-    perror("Failed to close file:");
+    pprintf("Failed to close file `%s`", path);
   }
   return data;
 }
-

@@ -9,6 +9,7 @@
 
 __attribute__((noreturn)) void backtrace_abort(void);
 
+// Reads a file to a string, returning NULL and printing the error on failure.
 char *read_file(const char *path);
 
 #define eprintf(format, ...) fprintf(stderr, format __VA_OPT__(, ) __VA_ARGS__)
@@ -52,3 +53,5 @@ char *read_file(const char *path);
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define FMT($string) (int)($string).length, ($string).text
+
+#define FILE_EXTENSION ".cm"
