@@ -359,24 +359,23 @@ ANALYZER(module, {
 ANALYZER_SIGNATURE(node) {
   if (node->stage >= sANALYZED)
     return rOK;
-  SWITCH(
-      node,
-      panicf("analyze not implemented for node: %s", ast_node_name(node->kind)),
-      {
-        ACASE(name);
-        ACASE(integer);
-        ACASE(string);
-        ACASE(unary);
-        ACASE(binary);
-        ACASE(function_call);
-        ACASE(function);
-        ACASE(param);
-        ACASE(for_loop);
-        ACASE(assign);
-        ACASE(return_stmt);
-        ACASE(declaration);
-        ACASE(module);
-      });
+  SWITCH(node, {
+    ACASE(name);
+    ACASE(integer);
+    ACASE(string);
+    ACASE(unary);
+    ACASE(binary);
+    ACASE(function_call);
+    ACASE(function);
+    ACASE(param);
+    ACASE(for_loop);
+    ACASE(assign);
+    ACASE(return_stmt);
+    ACASE(declaration);
+    ACASE(module);
+  default:
+    panicf("analyze not implemented for node: %s", ast_node_name(node->kind));
+  });
 }
 
 void print_analyze_errors(const char *source, TypeErrorArray type_errors) {

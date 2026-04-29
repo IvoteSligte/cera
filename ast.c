@@ -67,75 +67,72 @@ void ast_visit(ASTNode *node, size_t depth,
                void(callback)(ASTNode *node, size_t depth)) {
   callback(node, depth);
 
-  SWITCH(
-      node,
-      panicf("visit not implemented for node: %s", ast_node_name(node->kind)), {
-        CASE(name, {});
-        CASE(integer, {});
-        CASE(string, {});
-        CASE(unary, { VISIT(unary->expr); });
-        CASE(binary, {
-          VISIT(binary->left);
-          VISIT(binary->right);
-        });
-        CASE(function_call, {
-          VISIT(function_call->function);
-          VISIT_ARRAY(function_call->args);
-        });
-        CASE(function, {
-          VISIT_ARRAY(function->params);
-          if (function->return_type != NULL)
-            VISIT(function->return_type);
-          VISIT_ARRAY(function->stmts);
-        });
-        CASE(param, {
-          VISIT(param->name);
-          VISIT(param->type);
-        });
-        CASE(for_loop, {
-          VISIT(for_loop->init);
-          VISIT(for_loop->cond);
-          VISIT(for_loop->step);
-          VISIT_ARRAY(for_loop->stmts);
-        });
-        CASE(assign, {
-          VISIT(assign->target);
-          VISIT(assign->expr);
-        });
-        CASE(return_stmt, { VISIT(return_stmt->expr); });
-        CASE(declaration, {
-          VISIT(declaration->name);
-          VISIT(declaration->expr);
-        })
-        CASE(module, { VISIT_ARRAY(module->declarations); });
-      });
+  SWITCH(node, {
+    CASE(name, {});
+    CASE(integer, {});
+    CASE(string, {});
+    CASE(unary, { VISIT(unary->expr); });
+    CASE(binary, {
+      VISIT(binary->left);
+      VISIT(binary->right);
+    });
+    CASE(function_call, {
+      VISIT(function_call->function);
+      VISIT_ARRAY(function_call->args);
+    });
+    CASE(function, {
+      VISIT_ARRAY(function->params);
+      if (function->return_type != NULL)
+        VISIT(function->return_type);
+      VISIT_ARRAY(function->stmts);
+    });
+    CASE(param, {
+      VISIT(param->name);
+      VISIT(param->type);
+    });
+    CASE(for_loop, {
+      VISIT(for_loop->init);
+      VISIT(for_loop->cond);
+      VISIT(for_loop->step);
+      VISIT_ARRAY(for_loop->stmts);
+    });
+    CASE(assign, {
+      VISIT(assign->target);
+      VISIT(assign->expr);
+    });
+    CASE(return_stmt, { VISIT(return_stmt->expr); });
+    CASE(declaration, {
+      VISIT(declaration->name);
+      VISIT(declaration->expr);
+    })
+    CASE(module, { VISIT_ARRAY(module->declarations); });
+  default:
+    panicf("visit not implemented for node: %s", ast_node_name(node->kind));
+  });
 }
 
 static void print_node(ASTNode *node, size_t depth) {
   printf("%*.*s", (int)depth, (int)depth, " ");
-  SWITCH(
-      node,
-      panicf("print not implemented for node: %s", ast_node_name(node->kind)), {
-        CASE(name, {
-          printf("name: %.*s\n", (int)name->name.length, name->name.text);
-        });
-        CASE(integer, {
-          printf("integer: %.*s\n", (int)integer->length, integer->text);
-        });
-        CASE(string, {
-          printf("string: \"%.*s\"\n", (int)string->length, string->text);
-        });
-        CASE(unary, { printf("unary: `%s`\n", token_name(unary->op)); });
-        CASE(binary, { printf("binary: `%s`\n", token_name(binary->op)); });
-        CASE(function_call, { printf("function_call:\n"); })
-        CASE(function, { printf("function:\n"); });
-        CASE(param, { printf("param:\n"); });
-        CASE(for_loop, { printf("for_loop:\n"); });
-        CASE(assign, { printf("assign: `%s`\n", token_name(assign->op)); });
-        CASE(return_stmt, { printf("return_stmt:\n"); });
-        CASE(declaration, { printf("declaration:\n"); });
-        CASE(module, { printf("module:\n"); });
-      });
+  SWITCH(node, {
+    CASE(name,
+         { printf("name: %.*s\n", (int)name->name.length, name->name.text); });
+    CASE(integer,
+         { printf("integer: %.*s\n", (int)integer->length, integer->text); });
+    CASE(string,
+         { printf("string: \"%.*s\"\n", (int)string->length, string->text); });
+    CASE(unary, { printf("unary: `%s`\n", token_name(unary->op)); });
+    CASE(binary, { printf("binary: `%s`\n", token_name(binary->op)); });
+    CASE(function_call, { printf("function_call:\n"); })
+    CASE(function, { printf("function:\n"); });
+    CASE(param, { printf("param:\n"); });
+    CASE(for_loop, { printf("for_loop:\n"); });
+    CASE(assign, { printf("assign: `%s`\n", token_name(assign->op)); });
+    CASE(return_stmt, { printf("return_stmt:\n"); });
+    CASE(declaration, { printf("declaration:\n"); });
+    CASE(module, { printf("module:\n"); });
+  default:
+    panicf("print not implemented for node: %s", ast_node_name(node->kind));
+  });
 }
 
 void ast_print_nodes(ASTNode *node) { ast_visit(node, 0, print_node); }

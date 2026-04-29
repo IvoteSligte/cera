@@ -17,15 +17,14 @@
 #define NODE_declaration aDECLARATION
 #define NODE_module aMODULE
 
-#define SWITCH($node, $default, $cases)                                        \
+#define SWITCH($node, $cases)                                                  \
   {                                                                            \
     ASTNode *__node = $node;                                                   \
     switch (__node->kind) {                                                    \
-    case aINVALID:                                                             \
+    case aINVALID: {                                                           \
       panicf("matched INVALID AST node");                                      \
+    }                                                                          \
       $cases;                                                                  \
-    default:                                                                   \
-      $default;                                                                \
     }                                                                          \
   }
 

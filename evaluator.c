@@ -34,53 +34,50 @@ ControlFlow evaluate_stmts(NodeArray stmts, Value *function_out) {
 }
 
 Value *evaluate_target(Node *node) {
-  SWITCH(node, panicf("not a target: %s", ast_node_name(node->kind)),
-         { CASE(name, { return name->value_ptr; }); });
+  SWITCH(node, {
+    CASE(name, { return name->value_ptr; });
+  default:
+    panicf("not a target: %s", ast_node_name(node->kind));
+  });
 }
 
 ControlFlow evaluate_stmt(Node *node, Value *function_out) {
-  SWITCH(
-      node,
-      {
-        evaluate_expr(node);
-        OK(cNEXT);
-      },
-      {
-        CASE(param);
-        CASE(for_loop, {
-          evaluate_stmt(for_loop->init, function_out);
-          while (true) {
-            EVALUATE(for_loop->cond, cond);
-            if (!cond_value.boolean)
-              break;
-            ControlFlow control = evaluate_stmts(for_loop->stmts, function_out);
-            if (control == cRETURN)
-              OK(cRETURN);
-            evaluate_stmt(for_loop->step, function_out);
-          }
-          OK(cNEXT);
-        });
-        CASE(assign, {
-          Value *target = evaluate_target(assign->target);
-          EVALUATE(assign->expr, expr);
-          *target = expr_value;
-          OK(cNEXT);
-        });
-        CASE(return_stmt, {
-          EVALUATE(return_stmt->expr, expr);
-          *function_out = expr_value;
+  SWITCH(node, {
+    CASE(for_loop, {
+      evaluate_stmt(for_loop->init, function_out);
+      while (true) {
+        EVALUATE(for_loop->cond, cond);
+        if (!cond_value.boolean)
+          break;
+        ControlFlow control = evaluate_stmts(for_loop->stmts, function_out);
+        if (control == cRETURN)
           OK(cRETURN);
-        });
-        CASE(declaration, {
-          if (!declaration->is_constant) {
-            EVALUATE(declaration->expr, value);
-            declaration->symbol_data->value = value_value;
-          }
-          OK(cNEXT);
-        });
-        CASE(module);
-      });
-  panicf("not a statement: %s", ast_node_name(node->kind));
+        evaluate_stmt(for_loop->step, function_out);
+      }
+      OK(cNEXT);
+    });
+    CASE(assign, {
+      Value *target = evaluate_target(assign->target);
+      EVALUATE(assign->expr, expr);
+      *target = expr_value;
+      OK(cNEXT);
+    });
+    CASE(return_stmt, {
+      EVALUATE(return_stmt->expr, expr);
+      *function_out = expr_value;
+      OK(cRETURN);
+    });
+    CASE(declaration, {
+      if (!declaration->is_constant) {
+        EVALUATE(declaration->expr, value);
+        declaration->symbol_data->value = value_value;
+      }
+      OK(cNEXT);
+    });
+  default:
+    evaluate_expr(node);
+    OK(cNEXT);
+  });
 }
 #undef OK
 
@@ -187,7 +184,7 @@ EVALUATOR(function, {OK((Value){.function = node})});
 #define ECASE($name) CASE($name, return evaluate_##$name(node))
 
 Value evaluate_expr(Node *node) {
-  SWITCH(node, panicf("not an expression: %s", ast_node_name(node->kind)), {
+  SWITCH(node, {
     ECASE(name);
     ECASE(integer);
     ECASE(string);
@@ -195,6 +192,8 @@ Value evaluate_expr(Node *node) {
     ECASE(binary);
     ECASE(function_call);
     ECASE(function);
+  default:
+    panicf("not an expression: %s", ast_node_name(node->kind));
   });
 }
 
