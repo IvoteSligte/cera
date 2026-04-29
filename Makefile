@@ -7,9 +7,9 @@ CFLAGS_debug = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DDEB
 CFLAGS_test = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic
 CFLAGS = $(CFLAGS_$(BUILD))
 
-LIB_SRC = $(filter-out main.c, $(wildcard *.c))
+LIB_SRC = $(wildcard lib/*.c)
 SRC_debug = $(LIB_SRC) main.c
-SRC_test = $(LIB_SRC) $(wildcard test/*.c)
+SRC_test = $(LIB_SRC) test.c
 
 OBJ = $(SRC_$(BUILD):%.c=build/$(BUILD)/%.o)
 

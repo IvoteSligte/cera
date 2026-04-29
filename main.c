@@ -1,8 +1,8 @@
 
-#include "analyzer.h"
-#include "evaluator.h"
-#include "lexer.h"
-#include "parser.h"
+#include "lib/analyzer.h"
+#include "lib/evaluator.h"
+#include "lib/lexer.h"
+#include "lib/parser.h"
 
 int main() {
   char *source = read_file("test.ex");

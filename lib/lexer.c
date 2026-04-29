@@ -1,6 +1,6 @@
 #include "lexer.h"
 #include "offset.h"
-#include "regex.h"
+#include "regexp.h"
 
 typedef struct {
   TokenKind kind;

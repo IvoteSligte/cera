@@ -2,8 +2,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "../parser.h"
-#include "../regex.h"
+#include "lib/parser.h"
+#include "lib/regexp.h"
 
 #define TEST($name, $source)                                                   \
   {                                                                            \
