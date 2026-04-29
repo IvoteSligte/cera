@@ -332,7 +332,7 @@ PARSER(binary, {
         *out = left;
         OK;
       },
-      tPLUS, tMINUS, tSTAR, tSLASH, tLT, tGT, tLT_EQ, tGT_EQ, tEQ_EQ);
+         tPLUS, tMINUS, tSTAR, tSLASH, tLT, tGT, tLT_EQ, tGT_EQ, tEQ_EQ, tAMP_AMP, tBAR_BAR);
   MUST_PARSE(expr, right);
 
   YIELD(binary, {.op = op, .has_parens = false, .left = left, .right = right});
@@ -385,6 +385,22 @@ PARSER(return_stmt, {
   RETURN(return_stmt, {.expr = expr});
 });
 
+PARSER(if_stmt, {
+  EXPECT(tIF);
+  MUST_PARSE(expr_stmt, cond);
+  MUST_PARSE_BLOCK;
+
+  RETURN(if_stmt, {.cond = cond, .stmts = stmts});
+});
+
+PARSER(while_loop, {
+  EXPECT(tWHILE);
+  MUST_PARSE(expr_stmt, cond);
+  MUST_PARSE_BLOCK;
+
+  RETURN(while_loop, {.cond = cond, .stmts = stmts});
+});
+
 PARSER(for_loop, {
   EXPECT(tFOR);
   MUST_PARSE(declaration, init);
@@ -414,6 +430,8 @@ PARSER(declaration, {
 
 PARSER(stmt, {
   TRY_PARSE(expr_stmt);
+  TRY_PARSE(if_stmt);
+  TRY_PARSE(while_loop);  
   TRY_PARSE(for_loop);
   TRY_PARSE(assign);
   TRY_PARSE(return_stmt);

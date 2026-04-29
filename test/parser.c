@@ -55,7 +55,8 @@ end:
   return result;
 }
 
-// The first argument is an optional regex pattern that matches test names to run.
+// The first argument is an optional regex pattern that matches test names to
+// run.
 int main(int argc, const char *argv[]) {
   size_t num_tests = 0;
   size_t num_succeeded = 0;
@@ -71,6 +72,21 @@ int main(int argc, const char *argv[]) {
   TEST(empty_main, "main :: () {}");
   TEST(literals, "main :: () { 0; 100; 592391; \"a string literal\"; }");
   TEST(binary_exprs, "main :: () { 5 + 6; 9 - 1 * 4 / 2; }");
+  TEST(stmts, "main :: () {                    \n"
+              "    for i := 0; i < 5; i += 1; {\n"
+              "        print_string(\"for\");  \n"
+              "    }                           \n"
+              "                                \n"
+              "    i := 0;                     \n"
+              "    while i < 3; {              \n"
+              "        print_string(\"while\");\n"
+              "        i += 1;                 \n"
+              "    }                           \n"
+              "                                \n"
+              "    if true || false; {         \n"
+              "        print_string(\"if\");   \n"
+              "    }                           \n"
+              "}                               \n");
   printf("[%zu/%zu] tests succeeded\n", num_succeeded, num_tests);
 
   lexer_free();

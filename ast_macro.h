@@ -11,6 +11,8 @@
 #define NODE_function_call aFUNCTION_CALL
 #define NODE_function aFUNCTION
 #define NODE_param aPARAM
+#define NODE_if_stmt aIF_STMT
+#define NODE_while_loop aWHILE_LOOP
 #define NODE_for_loop aFOR_LOOP
 #define NODE_assign aASSIGN
 #define NODE_return_stmt aRETURN_STMT

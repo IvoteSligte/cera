@@ -186,45 +186,47 @@ ANALYZER(unary, {
   panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
 });
 
+#define ANALYZE_BINARY($expected_type, $type_error, $equal_error, $out_type)   \
+  EXPECT((left_type.kind == $expected_type), binary->left, $type_error);       \
+  EXPECT((right_type.kind == $expected_type), binary->right, $type_error);     \
+  EXPECT((left_type.kind == right_type.kind), node, $equal_error);             \
+  *out_type = $out_type;                                                       \
+  OK;
+
 ANALYZER(binary, {
   ANALYZE(binary->left, left);
   ANALYZE(binary->right, right);
   if (IS_ONE_OF(binary->op, tPLUS, tMINUS, tSTAR, tSLASH)) {
-    EXPECT((left_type.kind == tyINT), binary->left,
-           strdup("cannot apply arithmetic operator to non-numeric type"));
-    EXPECT((right_type.kind == tyINT), binary->right,
-           strdup("cannot apply arithmetic operator to non-numeric type"));
-    EXPECT((left_type.kind == right_type.kind), node,
-           strdup("types on both sides of an arithmetic operator "
-                  "must be the same"));
-    *out_type = left_type;
-    OK;
+    ANALYZE_BINARY(
+        tyINT, strdup("cannot apply arithmetic operator to non-numeric type"),
+        strdup(
+            "types on both sides of an arithmetic operator must be the same"),
+        left_type);
   }
   if (IS_ONE_OF(binary->op, tLT, tGT, tLT_EQ, tGT_EQ)) {
-    EXPECT((left_type.kind == tyINT), binary->left,
-           ssprintf("cannot apply operator %s to non-numeric type",
-                    token_name(binary->op)));
-    EXPECT((right_type.kind == tyINT), binary->right,
-           ssprintf("cannot apply operator %s to non-numeric type",
-                    token_name(binary->op)));
-    EXPECT((left_type.kind == right_type.kind), node,
-           strdup("types on both sides of a comparison operator "
-                  "must be the same"));
-    *out_type = PRIM_TYPE(tyBOOL);
-    OK;
+    ANALYZE_BINARY(
+        tyINT,
+        ssprintf("cannot apply operator %s to non-numeric type",
+                 token_name(binary->op)),
+        strdup("types on both sides of a comparison operator must be the same"),
+        PRIM_TYPE(tyBOOL));
   }
   if (binary->op == tEQ_EQ) {
-    EXPECT((left_type.kind == tyINT), binary->left,
-           ssprintf("cannot apply operator %s to non-numeric type (currently)",
-                    token_name(binary->op)));
-    EXPECT((right_type.kind == tyINT), binary->right,
-           ssprintf("cannot apply operator %s to non-numeric type (currently)",
-                    token_name(binary->op)));
-    EXPECT((left_type.kind == right_type.kind), node,
-           strdup("types on both sides of a comparison operator "
-                  "must be the same"));
-    *out_type = PRIM_TYPE(tyBOOL);
-    OK;
+    ANALYZE_BINARY(
+        tyINT,
+        ssprintf("cannot apply operator == to non-numeric type (currently)"),
+        strdup("types on both sides of a comparison operator must be the same"),
+        PRIM_TYPE(tyBOOL));
+  }
+  if (binary->op == tAMP_AMP) {
+    ANALYZE_BINARY(tyBOOL,
+                   strdup("cannot apply operator && to non-boolean type"), "",
+                   PRIM_TYPE(tyBOOL));
+  }
+  if (binary->op == tBAR_BAR) {
+    ANALYZE_BINARY(tyBOOL,
+                   strdup("cannot apply operator || to non-boolean type"), "",
+                   PRIM_TYPE(tyBOOL));
   }
   panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
 });
@@ -320,7 +322,22 @@ ANALYZER(for_loop, {
 ANALYZER(assign, {
   ANALYZE(assign->target, target);
   ANALYZE(assign->expr, expr);
-  EXPECT((type_eq(target_type, expr_type)), node, strdup("type mismatch"));
+
+  if (assign->op == tEQ) {
+  } else if (IS_ONE_OF(assign->op, tPLUS_EQ, tMINUS_EQ, tSTAR_EQ, tSLASH_EQ)) {
+    EXPECT(
+        (target_type.kind == tyINT), assign->target,
+        strdup(
+            "cannot apply arithmetic assignment operator to non-numeric type"));
+    EXPECT(
+        (expr_type.kind == tyINT), assign->expr,
+        strdup(
+            "cannot apply arithmetic assignment operator to non-numeric type"));
+  } else {
+    panicf("Unexpected assignment operator: %s", token_name(assign->op));
+  }
+  EXPECT(type_eq(target_type, expr_type), node,
+         strdup("assigment type mismatch"));
   EXPECT(target_type.is_bound, node,
          strdup("cannot assign to temporary value"));
   EXPECT(target_type.is_constant, node, strdup("cannot assign to constant"));

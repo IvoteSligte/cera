@@ -17,7 +17,7 @@ typedef enum {
   aFUNCTION_CALL,
   aFUNCTION,
   aPARAM,
-  aFOR_LOOP,
+  aIF_STMT,  aWHILE_LOOP,  aFOR_LOOP,
   aASSIGN,
   aRETURN_STMT,
   aDECLARATION, // variable declaration
@@ -163,6 +163,16 @@ typedef struct ASTNode {
       ASTNodeArray stmts;
       SymbolTable table;
     } function;
+    struct {
+      ASTNode *cond;
+      ASTNodeArray stmts;
+      SymbolTable table;
+    } if_stmt;
+    struct {
+      ASTNode *cond;      
+      ASTNodeArray stmts;
+      SymbolTable table;
+    } while_loop;
     struct {
       ASTNode *init;
       ASTNode *cond;

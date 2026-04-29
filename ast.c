@@ -152,6 +152,8 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(FUNCTION_CALL);
     N(FUNCTION);
     N(PARAM);
+    N(IF_STMT);
+    N(WHILE_LOOP);
     N(FOR_LOOP);
     N(ASSIGN);
     N(RETURN_STMT);

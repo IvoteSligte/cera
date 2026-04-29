@@ -43,6 +43,25 @@ Value *evaluate_target(Node *node) {
 
 ControlFlow evaluate_stmt(Node *node, Value *function_out) {
   SWITCH(node, {
+    CASE(if_stmt, {
+      EVALUATE(if_stmt->cond, cond);
+      if (cond_value.boolean) {
+        ControlFlow control = evaluate_stmts(if_stmt->stmts, function_out);
+        OK(control);
+      }
+      OK(cNEXT);
+    });
+    CASE(while_loop, {
+      while (true) {
+        EVALUATE(while_loop->cond, cond);
+        if (!cond_value.boolean)
+          break;
+        ControlFlow control = evaluate_stmts(while_loop->stmts, function_out);
+        if (control == cRETURN)
+          OK(cRETURN);
+      }
+      OK(cNEXT);
+    });
     CASE(for_loop, {
       evaluate_stmt(for_loop->init, function_out);
       while (true) {
@@ -59,7 +78,25 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
     CASE(assign, {
       Value *target = evaluate_target(assign->target);
       EVALUATE(assign->expr, expr);
-      *target = expr_value;
+      switch (assign->op) {
+      case tEQ:
+        *target = expr_value;
+        break;
+      case tPLUS_EQ:
+        target->integer += expr_value.integer;
+        break;
+      case tMINUS_EQ:
+        target->integer -= expr_value.integer;
+        break;
+      case tSTAR_EQ:
+        target->integer *= expr_value.integer;
+        break;
+      case tSLASH_EQ:
+        target->integer /= expr_value.integer;
+        break;
+      default:
+        panicf("Unexpected assignment operator: %s", token_name(assign->op));
+      }
       OK(cNEXT);
     });
     CASE(return_stmt, {
@@ -154,6 +191,10 @@ EVALUATOR(binary, {
     BIN(boolean, integer, >=);
   case tEQ_EQ:
     BIN(boolean, integer, ==);
+  case tAMP_AMP:
+    BIN(boolean, boolean, &&);
+  case tBAR_BAR:
+    BIN(boolean, boolean, ||);
   default:
     panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
   }
