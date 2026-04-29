@@ -2,7 +2,10 @@
 #include <dirent.h> // TODO: cross-platform
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
+#include "lib/analyzer.h"
+#include "lib/evaluator.h"
 #include "lib/parser.h"
 #include "lib/regexp.h"
 #include "lib/util.h"
@@ -21,25 +24,36 @@ typedef enum {
     goto end;                                                                  \
   }
 
-bool test(const char *source) {
+bool test(const char *source, const char *expected_output) {
+  TokenStream stream = {0};
   AST ast = {0};
   LexError lex_error = {0};
   ParseError parse_error = {0};
-  bool result = false;
-  TokenStream stream = {0};
+  TypeErrorArray type_errors = {0};
+
   if (!(fill_token_stream(source, &stream, &lex_error))) {
     print_lex_error(lex_error);
-    goto end;
+    free_token_stream(&stream);
+    return false;
   }
   if (!parse_token_stream(stream, &ast, &parse_error)) {
     print_parse_error(source, stream, parse_error);
-    goto end;
+    free_token_stream(&stream);
+    free_ast(&ast);
+    return false;
   }
-  result = DONE;
-end:
+  if (!analyze(&ast, &type_errors)) {
+    print_analyze_errors(source, type_errors);
+    free_analyze_errors(&type_errors);
+    free_token_stream(&stream);
+    free_ast(&ast);
+    return false;
+  }
+  evaluate_module(ast.head); // TODO: compare output with expected_output
+
   free_token_stream(&stream);
   free_ast(&ast);
-  return result;
+  return true;
 }
 
 // The first argument is an optional regex pattern that matches test names to
@@ -74,22 +88,28 @@ int main(int argc, const char *argv[]) {
     char *name = file_extension == NULL
                      ? strdup(file_name)
                      : strndup(file_name, file_extension - file_name);
-    char *source = read_file(path);
-    if (source == NULL) {
-      continue;
-    }
     regmatch_t match;
     if (!has_regex || match_regex(&regex, name, &match)) {
+      char *source = read_file(path);
+      if (source == NULL) {
+        continue;
+      }
+      char *separator = strstr(source, "===");
+      const char *expected_output = "";
+      if (separator != NULL) {
+        *separator = '\0'; // make sure source is zero-delimited
+        expected_output = separator + 4; // after ===\n
+      }
       num_tests++;
       printf("- running test %s\n", name);
-      if (test(source)) {
+      if (test(source, expected_output)) {
         num_succeeded++;
         printf("- test %s succeeded\n", name);
       } else {
         printf("- test %s failed\n", name);
       }
+      free(source);
     }
-    free(source);
     free(name);
   }
   closedir(dir);
