@@ -59,9 +59,10 @@ char *ssprintf(const char *fmt, ...) {
     BLOCK;
 
 #define ANALYZE_TYPE($node, $name)                                             \
-  ANALYZE($node, $name);                                                       \
-  EXPECT(($name##_type.kind == tyTYPE), $node,                                 \
-         ssprintf("not a type: %s", type_name($name##_type.kind)));
+  ANALYZE($node, $name##_type);                                                \
+  EXPECT(($name##_type_type.kind == tyTYPE), $node,                            \
+         ssprintf("not a type: %s", type_name($name##_type_type.kind)));       \
+  Type $name##_type = evaluate_expr($node).type;
 
 #define ANALYZE_ARRAY($array)                                                  \
   {                                                                            \
@@ -288,9 +289,8 @@ ANALYZER(param, {
            strdup("duplicate parameter name"));
   }
   ANALYZE_TYPE(param->type, param);
-  Type type = evaluate_expr(param->type).type;
-  param->symbol_data->type = type;
-  *out_type = type;
+  param->symbol_data->type = param_type;
+  *out_type = param_type;
   OK;
 });
 
@@ -303,6 +303,7 @@ ANALYZER(function, {
   Table *table = &function->table;
 
   if (out_type->kind == tyUNKNOWN) {
+    out_type->is_constant = true;
     if (out_type->function.params.data == NULL) {
       out_type->function.params = (TypeArray){
           .data = ra_calloc(allocator, sizeof(Type) * function->params.length),
@@ -312,16 +313,19 @@ ANALYZER(function, {
       ANALYZE(param_node, param);
       out_type->function.params.data[i] = param_type;
     });
+    out_type->function._return = ra_calloc(allocator, sizeof(Type));
     if (function->return_type != NULL) {
-      ANALYZE_TYPE(function->return_type, declared);
-      out_type->function._return = ra_calloc(allocator, sizeof(Type));
-      *out_type->function._return = declared_type;
+      ANALYZE_TYPE(function->return_type, return);
+      *out_type->function._return = return_type;
+    } else {
+      *out_type->function._return = PRIM_TYPE(tyVOID);
     }
     // Set the type to tyFUNCTION from tyUNKNOWN,
     // indicating that the type has been determined.
-    *out_type = (Type){.kind = tyFUNCTION, .is_constant = true};
+    out_type->kind = tyFUNCTION;
   }
   bool is_static = false;
+  Type return_type = *out_type->function._return;
   ANALYZE_ARRAY(function->stmts);
   OK;
 });
@@ -333,7 +337,8 @@ ANALYZER(if_stmt, {
 
   if_stmt->table.parent = table;
   Table *table = &if_stmt->table;
-  ANALYZE_ARRAY(if_stmt->stmts);
+  ANALYZE_ARRAY(if_stmt->then_stmts);
+  ANALYZE_ARRAY(if_stmt->else_stmts);  
   OK;
 });
 
@@ -389,7 +394,8 @@ ANALYZER(assign, {
 ANALYZER(return_stmt, {
   ANALYZE(return_stmt->expr, expr);
   EXPECT(type_eq(expr_type, return_type), return_stmt->expr,
-         strdup("return type mismatch"));
+         ssprintf("return type mismatch: expected %s, but found %s",
+                  type_name(return_type.kind), type_name(expr_type.kind)));
   OK;
 });
 
@@ -400,9 +406,8 @@ ANALYZER(field, {
            strdup("duplicate field name"));
   }
   ANALYZE_TYPE(field->type, field);
-  Type type = evaluate_expr(field->type).type;
-  field->symbol_data->type = type;
-  *out_type = type;
+  field->symbol_data->type = field_type;
+  *out_type = field_type;
   OK;
 });
 

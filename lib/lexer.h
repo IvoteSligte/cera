@@ -43,7 +43,7 @@ typedef enum {
   tCOL,
   tCOL_EQ,
   tCOL_COL,
-  tRARROW,  
+  tRARROW,
   // keywords
   tSTRUCT,
   tUNION,
@@ -51,6 +51,7 @@ typedef enum {
   tRETURN,
   tFOR,
   tIF,
+  tELSE,
   tWHILE,
   tTRUE,
   tFALSE,

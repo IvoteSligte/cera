@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "lib/analyzer.h"
+#include "lib/ast.h"
 #include "lib/evaluator.h"
 #include "lib/parser.h"
 #include "lib/util.h"
@@ -73,8 +74,10 @@ bool test(const char *source, const char *expected_output) {
     free_ast(&ast);
     return false;
   }
-  evaluate_module(ast.head); // TODO: compare output with expected_output
+  ast_print_nodes(ast.head);
+  evaluate_module(ast.head);
 
+  // compare output with expected output
   if (stdout_size != strlen(expected_output) ||
       (stdout_buffer != NULL &&
        strncmp(stdout_buffer, expected_output, stdout_size) != 0)) {

@@ -56,7 +56,7 @@ typedef enum {
   tyFUNCTION,
   tySTRUCT,
   tyUNION,
-  tyTYPE,  
+  tyTYPE,
 } TypeKind;
 
 typedef enum {
@@ -138,12 +138,12 @@ typedef struct {
 } FieldInfoArray;
 
 typedef struct {
-  FieldInfoArray fields;  
+  FieldInfoArray fields;
 } StructInfo;
 
 typedef struct {
   StructInfo *data;
-  size_t length;  
+  size_t length;
 } StructList;
 
 typedef struct ASTNode {
@@ -197,7 +197,8 @@ typedef struct ASTNode {
     } function;
     struct {
       ASTNode *cond;
-      ASTNodeArray stmts;
+      ASTNodeArray then_stmts;
+      ASTNodeArray else_stmts;      
       SymbolTable table;
     } if_stmt;
     struct {
@@ -264,4 +265,4 @@ bool get_symbol(SymbolTable *table, Name name, SymbolData **out_data_ptr);
 SymbolTable get_top_table(SymbolTable table);
 
 StructID add_struct(RandomAllocator *allocator, StructList *list);
-bool get_field_type(StructInfo* list, Name name, Type* out_type);
+bool get_field_type(StructInfo *list, Name name, Type *out_type);

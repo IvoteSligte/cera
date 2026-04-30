@@ -84,53 +84,26 @@ static size_t lex_eof(const char *text) {
 
 // assumes that tokens are in the same order as in the TokenKind definition
 const Matcher MATCHERS[] = {
-    CM(EOF, "EOF", lex_eof),
-    CM(WHITESPACE, "whitespace", lex_whitespace),
+    CM(EOF, "EOF", lex_eof), CM(WHITESPACE, "whitespace", lex_whitespace),
     CM(COMMENT, "comment", lex_comment),
     // words
-    CM(IDENT, "identifier", lex_identifier),
-    CM(NUMBER, "number", lex_number),
+    CM(IDENT, "identifier", lex_identifier), CM(NUMBER, "number", lex_number),
     CM(STRING, "string", lex_string),
     // symbols
-    M(LPAREN, "("),
-    M(RPAREN, ")"),
-    M(LBRACE, "{"),
-    M(RBRACE, "}"),
-    M(LBRACKET, "["),
-    M(RBRACKET, "]"),
+    M(LPAREN, "("), M(RPAREN, ")"), M(LBRACE, "{"), M(RBRACE, "}"),
+    M(LBRACKET, "["), M(RBRACKET, "]"),
     // operators
-    M(PLUS, "+"),
-    M(MINUS, "-"),
-    M(STAR, "*"),
-    M(SLASH, "/"),
-    M(PLUS_EQ, "+="),
-    M(MINUS_EQ, "-="),
-    M(STAR_EQ, "*="),
-    M(SLASH_EQ, "/="),
-    M(LT, "<"),
-    M(GT, ">"),
-    M(LT_EQ, "<="),
-    M(GT_EQ, ">="),
-    M(EQ_EQ, "=="),
-    M(AMP_AMP, "&&"),
-    M(BAR_BAR, "||"),
+    M(PLUS, "+"), M(MINUS, "-"), M(STAR, "*"), M(SLASH, "/"), M(PLUS_EQ, "+="),
+    M(MINUS_EQ, "-="), M(STAR_EQ, "*="), M(SLASH_EQ, "/="), M(LT, "<"),
+    M(GT, ">"), M(LT_EQ, "<="), M(GT_EQ, ">="), M(EQ_EQ, "=="),
+    M(AMP_AMP, "&&"), M(BAR_BAR, "||"),
     // misc symbols
-    M(HASHTAG, "#"),
-    M(SEMI, ";"),
-    M(COMMA, ","),
-    M(DOT, "."),
-    M(EQ, "="),
-    M(COL, ":"),
-    M(COL_EQ, ":="),
-    M(COL_COL, "::"),
-    M(RARROW, "->"),
+    M(HASHTAG, "#"), M(SEMI, ";"), M(COMMA, ","), M(DOT, "."), M(EQ, "="),
+    M(COL, ":"), M(COL_EQ, ":="), M(COL_COL, "::"), M(RARROW, "->"),
     // keywords
-    M(STRUCT, "struct"),
-    M(UNION, "union"),
-    M(ENUM, "enum"),
-    M(RETURN, "return"),
-    M(FOR, "for"),
-    M(IF, "if"),
+    M(STRUCT, "struct"), M(UNION, "union"), M(ENUM, "enum"),
+    M(RETURN, "return"), M(FOR, "for"), M(IF, "if"),
+    M(ELSE, "else"),    
     M(WHILE, "while"),
     M(TRUE, "true"),
     M(FALSE, "false"),
@@ -181,7 +154,8 @@ LexResult lex(const char *source, size_t *offset, Token *out,
     size_t match_length = MATCHERS[i].function != NULL
                               ? MATCHERS[i].function(text)
                               : lex_keyword(text, MATCHERS[i].display_name);
-    if (match_length > 0) {
+    // prioritises longer and later matches
+    if (match_length >= longest_match) {
       *out = (Token){
           .offset = *offset,
           .length = match_length,

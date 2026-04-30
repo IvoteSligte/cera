@@ -3,6 +3,10 @@
 #include "analyzer_shared.h"
 #include "ast_macro.h"
 
+#ifdef DEBUG_EVALUATOR
+#include "offset.h"
+#endif
+
 #ifdef TEST
 extern void print_string(const char *text, size_t length);
 #endif
@@ -49,11 +53,13 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
   SWITCH(node, {
     CASE(if_stmt, {
       EVALUATE(if_stmt->cond, cond);
+      ControlFlow control = 0;
       if (cond_value.boolean) {
-        ControlFlow control = evaluate_stmts(if_stmt->stmts, function_out);
-        OK(control);
+        control = evaluate_stmts(if_stmt->then_stmts, function_out);
+      } else {
+        control = evaluate_stmts(if_stmt->else_stmts, function_out);
       }
-      OK(cNEXT);
+      OK(control);
     });
     CASE(while_loop, {
       while (true) {
@@ -105,6 +111,7 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
     });
     CASE(return_stmt, {
       EVALUATE(return_stmt->expr, expr);
+      printf("returning %zd\n", expr_value.integer);
       *function_out = expr_value;
       OK(cRETURN);
     });
@@ -134,10 +141,10 @@ Value evaluate_builtin(NodeArray args, BuiltinID id) {
 #ifdef TEST
     print_string(arg_value.string.text, arg_value.string.length);
 #else
-    // Using fwrite instead of printf because printf can only print non-zero-delimited
-    // strings of up to INT_MAX characters in length.
+    // Using fwrite instead of printf because printf can only print
+    // non-zero-delimited strings of up to INT_MAX characters in length.
     fwrite(arg_value.string.text, arg_value.string.length, 1, stdout);
-#endif    
+#endif
     return (Value){0};
   }
   default:
@@ -206,6 +213,8 @@ EVALUATOR(binary, {
   default:
     panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
   }
+  printf("%zd %s %zd -> %zd\n", left_value.integer,
+         token_display_name(binary->op), right_value.integer, value.integer);
   OK(value);
 });
 
@@ -245,7 +254,7 @@ Value evaluate_expr(Node *node) {
     ECASE(binary);
     ECASE(function_call);
     ECASE(function);
-    ECASE(_struct);    
+    ECASE(_struct);
   default:
     panicf("not an expression: %s", ast_node_name(node->kind));
   });

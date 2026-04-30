@@ -247,13 +247,15 @@ bool parse_block(GENERAL_PARAMS, Span *out_span, NodeArray *out_stmts) {
   OK; // FIXME: silent pointer->bool conversion bug
 }
 
-#define MUST_PARSE_BLOCK                                                       \
-  Span block_span = {0};                                                       \
-  NodeArray stmts = {0};                                                       \
-  if (!parse_block(allocator, stream, token_index, error_data, &block_span,    \
-                   &stmts))                                                    \
-    FAIL;                                                                      \
-  EXTEND_SPAN(block_span);
+#define MUST_PARSE_BLOCK($name)                                                \
+  NodeArray $name##_stmts = {0};                                               \
+  {                                                                            \
+    Span block_span = {0};                                                     \
+    if (!parse_block(allocator, stream, token_index, error_data, &block_span,  \
+                     &$name##_stmts))                                          \
+      FAIL;                                                                    \
+    EXTEND_SPAN(block_span);                                                   \
+  }
 
 PARSER(name, {
   EXPECT(tIDENT);
@@ -300,6 +302,7 @@ PARSER(primary, {
   TRY_PARSE(integer);
   TRY_PARSE(boolean);
   TRY_PARSE(string);
+  TRY_PARSE(paren_expr);
   FAIL;
 })
 
@@ -365,9 +368,9 @@ PARSER(function, {
   ZERO_OR_MORE_SEPARATED(param, params, tCOMMA);
   EXPECT(tRPAREN);
   MAY_PARSE(return_type, return_type);
-  MUST_PARSE_BLOCK;
+  MUST_PARSE_BLOCK(body);
   RETURN(function,
-         {.params = params, .return_type = return_type, .stmts = stmts});
+         {.params = params, .return_type = return_type, .stmts = body_stmts});
 });
 
 PARSER(expr, {
@@ -401,17 +404,20 @@ PARSER(return_stmt, {
 PARSER(if_stmt, {
   EXPECT(tIF);
   MUST_PARSE(expr_stmt, cond);
-  MUST_PARSE_BLOCK;
-
-  RETURN(if_stmt, {.cond = cond, .stmts = stmts});
+  MUST_PARSE_BLOCK(then);
+  TRY_TOKEN(
+      { RETURN(if_stmt, {.cond = cond, .then_stmts = then_stmts}); }, tELSE);
+  MUST_PARSE_BLOCK(else);
+  RETURN(if_stmt,
+         {.cond = cond, .then_stmts = then_stmts, .else_stmts = else_stmts});
 });
 
 PARSER(while_loop, {
   EXPECT(tWHILE);
   MUST_PARSE(expr_stmt, cond);
-  MUST_PARSE_BLOCK;
+  MUST_PARSE_BLOCK(body);
 
-  RETURN(while_loop, {.cond = cond, .stmts = stmts});
+  RETURN(while_loop, {.cond = cond, .stmts = body_stmts});
 });
 
 PARSER(for_loop, {
@@ -419,9 +425,10 @@ PARSER(for_loop, {
   MUST_PARSE(decl, init);
   MUST_PARSE(expr_stmt, cond);
   MUST_PARSE(assign, step);
-  MUST_PARSE_BLOCK;
+  MUST_PARSE_BLOCK(body);
 
-  RETURN(for_loop, {.init = init, .cond = cond, .step = step, .stmts = stmts});
+  RETURN(for_loop,
+         {.init = init, .cond = cond, .step = step, .stmts = body_stmts});
 });
 
 PARSER(field, {
