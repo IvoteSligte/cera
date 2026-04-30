@@ -231,6 +231,8 @@ EVALUATOR(function_call, {
 
 EVALUATOR(function, {OK((Value){.function = node})});
 
+EVALUATOR(_struct, {OK((Value){._struct = _struct->id})});
+
 #define ECASE($name) CASE($name, return evaluate_##$name(node))
 
 Value evaluate_expr(Node *node) {
@@ -243,19 +245,18 @@ Value evaluate_expr(Node *node) {
     ECASE(binary);
     ECASE(function_call);
     ECASE(function);
+    ECASE(_struct);    
   default:
     panicf("not an expression: %s", ast_node_name(node->kind));
   });
 }
-
-static const Name MAIN_NAME = (Name){.text = "main", .length = 4};
 
 void evaluate_module(Node *node) {
   assert(node->kind == aMODULE);
   __auto_type module = &node->module;
   ITER_ARRAY(module->decls, decl_node, {
     __auto_type decl = &decl_node->decl;
-    if (name_eq(decl->name->name.name, MAIN_NAME)) {
+    if (name_eq_string(decl->name->name.name, "main")) {
       // FIXME: there is no check that `main` has the correct signature
       evaluate_stmt(decl_node, NULL);
 

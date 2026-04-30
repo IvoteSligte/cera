@@ -14,12 +14,17 @@ Span join_spans(Span left, Span right) {
 
 bool name_eq(Name left, Name right) {
   return left.length == right.length &&
-         strncmp(left.text, right.text, left.length) == 0;
+         memcmp(left.text, right.text, left.length) == 0;
+}
+
+bool name_eq_string(Name name, const char *string) {
+  return name_eq(name, (Name){.text = string, .length = strlen(string)});
 }
 
 bool type_eq(Type left, Type right) {
-  if (left.kind != right.kind)
+  if (left.kind != right.kind) {
     return false;
+  }
   if (left.kind == tyFUNCTION) {
     if (left.function.params.length != right.function.params.length)
       return false;
@@ -27,7 +32,18 @@ bool type_eq(Type left, Type right) {
       if (!type_eq(left.function.params.data[i], right.function.params.data[i]))
         return false;
     }
-    return type_eq(*left.function._return, *right.function._return);
+    bool left_has_return = left.function._return != NULL;
+    bool right_has_return = left.function._return != NULL;
+    if (!left_has_return || !right_has_return)
+      return !left_has_return && !right_has_return;
+    else
+      return type_eq(*left.function._return, *right.function._return);
+  }
+  if (left.kind == tySTRUCT) {
+    return left._struct == right._struct;
+  }
+  if (left.kind == tyUNION) {
+    panicf("unimplemented: type_eq for tyUNION");
   }
   return true;
 }
@@ -46,7 +62,6 @@ const char *type_name(TypeKind kind) {
     N(FUNCTION);
     N(STRUCT);
     N(UNION);
-    N(ALIAS);
     N(TYPE);
   }
   panicf("Unknown type kind: %d", kind);
@@ -146,7 +161,7 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(INVALID);
     N(NAME);
     N(INTEGER);
-    N(BOOLEAN);    
+    N(BOOLEAN);
     N(STRING);
     N(UNARY);
     N(BINARY);
@@ -158,9 +173,29 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(FOR_LOOP);
     N(ASSIGN);
     N(RETURN_STMT);
+    N(FIELD);
+    N(STRUCT);
     N(DECL);
     N(MODULE);
   }
   panicf("Unknown node kind: %d", kind)
 }
 #undef N
+
+StructID add_struct(RandomAllocator *allocator, StructList *list) {
+  StructID id = list->length;
+  list->data = ra_recalloc(allocator, list->data, list->length + 1);
+  list->length++;
+  return id;
+}
+
+bool get_field_type(StructInfo *_struct, Name name, Type *out_type) {
+  for (size_t i = 0; i < _struct->fields.length; i++) {
+    FieldInfo field = _struct->fields.data[i];
+    if (name_eq(field.name, name)) {
+      *out_type = field.type;
+      return true;
+    }
+  }
+  return false;
+}

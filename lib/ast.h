@@ -11,7 +11,7 @@ typedef enum {
   aINVALID = 0,
   aNAME,
   aINTEGER,
-  aBOOLEAN,  
+  aBOOLEAN,
   aSTRING,
   aUNARY,
   aBINARY,
@@ -23,6 +23,8 @@ typedef enum {
   aFOR_LOOP,
   aASSIGN,
   aRETURN_STMT,
+  aFIELD,
+  aSTRUCT,
   aDECL, // variable declaration
   aMODULE,
 } ASTNodeKind;
@@ -54,14 +56,15 @@ typedef enum {
   tyFUNCTION,
   tySTRUCT,
   tyUNION,
-  tyALIAS,
-  tyTYPE,
+  tyTYPE,  
 } TypeKind;
 
 typedef enum {
   NOT_BUILTIN = 0,
   PRINT_STRING,
 } BuiltinID;
+
+typedef size_t StructID;
 
 typedef struct Type Type;
 
@@ -81,6 +84,7 @@ typedef struct Type {
       TypeArray params;
       Type *_return;
     } function;
+    StructID _struct;
   };
 } Type;
 
@@ -100,6 +104,7 @@ typedef union {
     BuiltinID builtin_id;
     ASTNode *function;
   };
+  StructID _struct;
 } Value;
 
 typedef struct {
@@ -122,9 +127,28 @@ typedef struct SymbolTable {
   size_t length;
 } SymbolTable;
 
+typedef struct {
+  Name name;
+  Type type;
+} FieldInfo;
+
+typedef struct {
+  FieldInfo *data;
+  size_t length;
+} FieldInfoArray;
+
+typedef struct {
+  FieldInfoArray fields;  
+} StructInfo;
+
+typedef struct {
+  StructInfo *data;
+  size_t length;  
+} StructList;
+
 typedef struct ASTNode {
   Span span;
-  enum { sPARSED = 0, sTYPED, sANALYZED } stage;
+  bool is_analyzed;
   ASTNodeKind kind;
   union {
     struct {
@@ -197,6 +221,15 @@ typedef struct ASTNode {
       ASTNode *expr;
     } return_stmt;
     struct {
+      ASTNode *name;
+      ASTNode *type;
+      SymbolData *symbol_data;
+    } field;
+    struct {
+      ASTNodeArray fields;
+      StructID id;
+    } _struct;
+    struct {
       bool is_constant;
       ASTNode *name;
       ASTNode *expr;
@@ -213,6 +246,7 @@ Span token_span(Token token);
 Span join_spans(Span left, Span right);
 
 bool name_eq(Name left, Name right);
+bool name_eq_string(Name name, const char *string);
 bool type_eq(Type left, Type right);
 
 const char *type_name(TypeKind kind);
@@ -228,3 +262,6 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
                 SymbolData **out_data_ptr);
 bool get_symbol(SymbolTable *table, Name name, SymbolData **out_data_ptr);
 SymbolTable get_top_table(SymbolTable table);
+
+StructID add_struct(RandomAllocator *allocator, StructList *list);
+bool get_field_type(StructInfo* list, Name name, Type* out_type);

@@ -17,6 +17,8 @@
 #define NODE_for_loop aFOR_LOOP
 #define NODE_assign aASSIGN
 #define NODE_return_stmt aRETURN_STMT
+#define NODE_field aFIELD
+#define NODE__struct aSTRUCT
 #define NODE_decl aDECL
 #define NODE_module aMODULE
 

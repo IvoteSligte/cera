@@ -424,8 +424,25 @@ PARSER(for_loop, {
   RETURN(for_loop, {.init = init, .cond = cond, .step = step, .stmts = stmts});
 });
 
+PARSER(field, {
+  MUST_PARSE(name, name);
+  EXPECT(tCOL);
+  MUST_PARSE(name, type);
+  EXPECT(tSEMI);
+  RETURN(field, {.name = name, .type = type});
+});
+
+PARSER(_struct, {
+  EXPECT(tSTRUCT);
+  EXPECT(tLBRACE);
+  ZERO_OR_MORE(field, fields);
+  EXPECT(tRBRACE);
+  RETURN(_struct, {.fields = fields});
+});
+
 PARSER(decl_expr, {
   TRY_PARSE(function);
+  TRY_PARSE(_struct);
   TRY_PARSE(expr_stmt);
   OK;
 });

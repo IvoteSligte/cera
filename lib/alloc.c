@@ -17,10 +17,10 @@ void *la_realloc(ListAllocator *allocator, void *ptr, size_t new_size) {
     if (allocator->data[i] == ptr) {
       ptr = realloc(ptr, new_size);
       allocator->data[i] = ptr;
-      return ptr;      
+      return ptr;
     }
   }
-  return NULL;  
+  return NULL;
 }
 
 void la_shrink(ListAllocator *allocator, size_t new_length) {
