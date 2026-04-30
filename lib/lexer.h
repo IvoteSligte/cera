@@ -76,11 +76,6 @@ typedef struct {
   size_t offset;
 } LexError;
 
-// Initializes lexer globals. MUST be called before lex().
-void lexer_init(void);
-// Frees lexer globals.
-void lexer_free(void);
-
 const char *token_name(TokenKind kind);
 const char *token_display_name(TokenKind kind);
 int token_precedence(TokenKind kind);

@@ -1,86 +1,143 @@
 #include "lexer.h"
 #include "offset.h"
-#include "regexp.h"
+
+#include <ctype.h>
 
 typedef struct {
   TokenKind kind;
   const char *name;
   const char *display_name;
-  const char *regex;
+  size_t (*function)(const char *text);
 } Matcher;
 
-#define M(name, display_name, regex) {t##name, #name, display_name, "^" regex}
+static size_t lex_whitespace(const char *text) {
+  size_t length = 0;
+  while (IS_ONE_OF(text[length], '\n', '\t', '\f', '\v', ' ')) {
+    length++;
+  }
+  return length;
+}
+
+static size_t lex_comment(const char *text) {
+  if (text[0] != '/' || text[1] != '/')
+    return 0;
+  size_t length = 2;
+  while (text[length] != '\0') {
+    length++;
+    if (text[length] == '\n')
+      break;
+  }
+  return length;
+}
+
+static size_t lex_identifier(const char *text) {
+  if (!isalpha(text[0]) && text[0] != '_')
+    return 0;
+  size_t length = 1;
+  while (isalnum(text[length]) || text[length] == '_')
+    length++;
+  return length;
+}
+
+static size_t lex_number(const char *text) {
+  size_t length = 0;
+  while (isdigit(text[length]))
+    length++;
+  return length;
+}
+
+static size_t lex_string(const char *text) {
+  if (text[0] != '"')
+    return 0;
+  size_t length = 1;
+  while (true) {
+    if (text[length] == '\0')
+      return 0; // TODO: error `expected '"', but found EOF`
+    if (text[length] == '"') {
+      length++;
+      break;
+    }
+    if (text[length] == '\\' && text[length + 1] != '\0')
+      length += 2;
+    else
+      length++;
+  }
+  return length;
+}
+
+static size_t lex_keyword(const char *text, const char *keyword) {
+  size_t length = strlen(keyword);
+  if (strncmp(text, keyword, length) == 0)
+    return length;
+  else
+    return 0;
+}
+
+static size_t lex_eof(const char *text) {
+  UNUSED(text);
+  return 0;
+}
+
+#define CM($name, $display_name, $function)                                    \
+  {t##$name, #$name, $display_name, $function}
+#define M($name, $display_name) CM($name, $display_name, NULL)
 
 // assumes that tokens are in the same order as in the TokenKind definition
 const Matcher MATCHERS[] = {
-    M(EOF, "EOF", "[><]"),
-    M(WHITESPACE, "whitespace", "[\n\t ]+"),
-    M(COMMENT, "comment", "// .*\n"),
+    CM(EOF, "EOF", lex_eof),
+    CM(WHITESPACE, "whitespace", lex_whitespace),
+    CM(COMMENT, "comment", lex_comment),
     // words
-    M(IDENT, "identifier", "[a-zA-Z_][a-zA-Z_0-9]*"),
-    M(NUMBER, "number", "[0-9]+"),
-    M(STRING, "string", "\"([^\\\\\"]|\\\\.)*\""),
+    CM(IDENT, "identifier", lex_identifier),
+    CM(NUMBER, "number", lex_number),
+    CM(STRING, "string", lex_string),
     // symbols
-    M(LPAREN, "(", "\\("),
-    M(RPAREN, ")", "\\)"),
-    M(LBRACE, "{", "\\{"),
-    M(RBRACE, "}", "\\}"),
-    M(LBRACKET, "[", "\\["),
-    M(RBRACKET, "]", "]"),
+    M(LPAREN, "("),
+    M(RPAREN, ")"),
+    M(LBRACE, "{"),
+    M(RBRACE, "}"),
+    M(LBRACKET, "["),
+    M(RBRACKET, "]"),
     // operators
-    M(PLUS, "+", "\\+"),
-    M(MINUS, "-", "-"),
-    M(STAR, "*", "\\*"),
-    M(SLASH, "/", "/"),
-    M(PLUS_EQ, "+=", "\\+="),
-    M(MINUS_EQ, "-=", "-="),
-    M(STAR_EQ, "*=", "\\*="),
-    M(SLASH_EQ, "/=", "/="),
-    M(LT, "<", "<"),
-    M(GT, ">", ">"),
-    M(LT_EQ, "<=", "<="),
-    M(GT_EQ, ">=", ">="),
-    M(EQ_EQ, "==", "=="),
-    M(AMP_AMP, "&&", "&&"),
-    M(BAR_BAR, "||", "\\|\\|"),
+    M(PLUS, "+"),
+    M(MINUS, "-"),
+    M(STAR, "*"),
+    M(SLASH, "/"),
+    M(PLUS_EQ, "+="),
+    M(MINUS_EQ, "-="),
+    M(STAR_EQ, "*="),
+    M(SLASH_EQ, "/="),
+    M(LT, "<"),
+    M(GT, ">"),
+    M(LT_EQ, "<="),
+    M(GT_EQ, ">="),
+    M(EQ_EQ, "=="),
+    M(AMP_AMP, "&&"),
+    M(BAR_BAR, "||"),
     // misc symbols
-    M(HASHTAG, "#", "#"),
-    M(SEMI, ";", ";"),
-    M(COMMA, ",", ","),
-    M(DOT, ".", "\\."),
-    M(EQ, "=", "="),
-    M(COL, ":", ":"),
-    M(COL_EQ, ":=", ":="),
-    M(COL_COL, "::", "::"),
-    M(RARROW, "->", "->"),
+    M(HASHTAG, "#"),
+    M(SEMI, ";"),
+    M(COMMA, ","),
+    M(DOT, "."),
+    M(EQ, "="),
+    M(COL, ":"),
+    M(COL_EQ, ":="),
+    M(COL_COL, "::"),
+    M(RARROW, "->"),
     // keywords
-    M(STRUCT, "struct", "struct"),
-    M(UNION, "union", "union"),
-    M(ENUM, "enum", "enum"),
-    M(RETURN, "return", "return"),
-    M(FOR, "for", "for"),
-    M(IF, "if", "if"),
-    M(WHILE, "while", "while"),
-    M(TRUE, "true", "true"),
-    M(FALSE, "false", "false"),
+    M(STRUCT, "struct"),
+    M(UNION, "union"),
+    M(ENUM, "enum"),
+    M(RETURN, "return"),
+    M(FOR, "for"),
+    M(IF, "if"),
+    M(WHILE, "while"),
+    M(TRUE, "true"),
+    M(FALSE, "false"),
 };
 #undef M
 
 #define NUM_MATCHERS (sizeof(MATCHERS) / sizeof(MATCHERS[0]))
-
-regex_t regexes[NUM_MATCHERS];
-
-void lexer_init(void) {
-  assert(tKIND_COUNT == NUM_MATCHERS);
-  for (size_t i = 0; i < NUM_MATCHERS; i++)
-    compile_regex(MATCHERS[i].regex, &regexes[i]);
-}
-
-void lexer_free(void) {
-  for (size_t i = 0; i < NUM_MATCHERS; i++) {
-    regfree(&regexes[i]);
-  }
-}
 
 const char *token_name(TokenKind kind) { return MATCHERS[kind].name; }
 
@@ -120,11 +177,14 @@ LexResult lex(const char *source, size_t *offset, Token *out,
     return LEX_EOF;
   }
   for (size_t i = 0; i < NUM_MATCHERS; i++) {
-    regmatch_t match;
-    if (match_regex(&regexes[i], &source[*offset], &match)) {
+    const char *text = source + *offset;
+    size_t match_length = MATCHERS[i].function != NULL
+                              ? MATCHERS[i].function(text)
+                              : lex_keyword(text, MATCHERS[i].display_name);
+    if (match_length > 0) {
       *out = (Token){
           .offset = *offset,
-          .length = match.rm_eo - match.rm_so, // end - start
+          .length = match_length,
           .text = &source[*offset],
           .kind = MATCHERS[i].kind,
       };

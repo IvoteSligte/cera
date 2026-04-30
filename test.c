@@ -1,5 +1,6 @@
 
 #include <dirent.h> // TODO: cross-platform
+#include <regex.h> // TODO: cross-platform
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,7 +8,6 @@
 #include "lib/analyzer.h"
 #include "lib/evaluator.h"
 #include "lib/parser.h"
-#include "lib/regexp.h"
 #include "lib/util.h"
 
 // Buffer for capturing program stdout.
@@ -19,6 +19,29 @@ void print_string(const char *text, size_t length) {
   stdout_buffer = realloc(stdout_buffer, stdout_size + length);
   memcpy(&stdout_buffer[stdout_size], text, length);
   stdout_size += length;
+}
+
+void compile_regex(const char *pattern, regex_t *regex) {
+  int result = regcomp(regex, pattern, REG_EXTENDED);
+  if (result) {
+    char errbuf[100];
+    regerror(result, regex, errbuf, 100);
+    panicf("Failed to compile regex `%s`. Error: %s", pattern, errbuf);
+  }
+}
+
+bool match_regex(regex_t *regex, const char *string, regmatch_t *out_match) {
+  int result = regexec(regex, string, 1, out_match, 0);
+  if (!IS_ONE_OF(result, REG_NOERROR, REG_NOMATCH)) {
+    char errbuf[100];
+    regerror(result, regex, errbuf, 100);
+    panicf("Failed to run regex. Error: %s", errbuf);
+  }
+  return result == REG_NOERROR; // match
+}
+
+void free_regex(regex_t* regex) {
+  regfree(regex);
 }
 
 typedef enum {
@@ -102,7 +125,6 @@ int main(int argc, const char *argv[]) {
     printf("Could not open test/ directory.");
     return 1;
   }
-  lexer_init();
 
   struct dirent *dir_entry = NULL;
   char path[5 + 256] = "test/";
@@ -144,7 +166,6 @@ int main(int argc, const char *argv[]) {
 
   printf("[%zu/%zu] tests succeeded\n", num_succeeded, num_tests);
 
-  lexer_free();
   if (has_regex) {
     free_regex(&regex);
   }

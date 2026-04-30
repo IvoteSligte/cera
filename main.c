@@ -10,17 +10,14 @@ int main() {
     return 1;
   }
 
-  lexer_init();
   LexError lex_error = {0};
   TokenStream stream = {0};
   if (!fill_token_stream(source, &stream, &lex_error)) {
     print_lex_error(lex_error);
-    lexer_free();
     free_token_stream(&stream);
     free(source);
     return 1;
   }
-  lexer_free();
   print_token_stream(stream);
 
   AST ast = {0};
