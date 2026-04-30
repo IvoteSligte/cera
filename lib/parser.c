@@ -354,11 +354,17 @@ PARSER(param, {
   RETURN(param, {.name = name, .type = type});
 });
 
+PARSER(return_type, {
+  EXPECT(tRARROW);
+  TRY_PARSE(name);
+  FAIL;
+});
+
 PARSER(function, {
   EXPECT(tLPAREN);
   ZERO_OR_MORE_SEPARATED(param, params, tCOMMA);
   EXPECT(tRPAREN);
-  MAY_PARSE(name, return_type);
+  MAY_PARSE(return_type, return_type);
   MUST_PARSE_BLOCK;
   RETURN(function,
          {.params = params, .return_type = return_type, .stmts = stmts});

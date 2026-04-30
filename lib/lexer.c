@@ -52,6 +52,7 @@ const Matcher MATCHERS[] = {
     M(COL, ":", ":"),
     M(COL_EQ, ":=", ":="),
     M(COL_COL, "::", "::"),
+    M(RARROW, "->", "->"),
     // keywords
     M(STRUCT, "struct", "struct"),
     M(UNION, "union", "union"),
