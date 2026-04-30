@@ -3,12 +3,19 @@
 #include "analyzer_shared.h"
 #include "ast_macro.h"
 
-#ifdef DEBUG_EVALUATOR
-#include "offset.h"
-#endif
-
 #ifdef TEST
 extern void print_string(const char *text, size_t length);
+#endif
+
+#ifdef DEBUG_EVALUATOR
+#include "offset.h"
+#define LOG_ENTER                                                              \
+  {                                                                            \
+    OffsetInfo oi = get_offset_info(node->source, node->span.offset);          \
+    printf("%-3zu | %.*s\n", oi.line_number, (int)oi.line_length, oi.line);    \
+  }
+#else
+#define LOG_ENTER
 #endif
 
 typedef ASTNodeArray NodeArray;
@@ -129,8 +136,6 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
 }
 #undef OK
 
-#define OK(value...) return value;
-
 Value evaluate_builtin(NodeArray args, BuiltinID id) {
   switch (id) {
   case NOT_BUILTIN:
@@ -154,10 +159,13 @@ Value evaluate_builtin(NodeArray args, BuiltinID id) {
 
 #define EVALUATOR($name, ...)                                                  \
   Value evaluate_##$name(Node *node) {                                         \
+    LOG_ENTER;                                                                 \
     __auto_type $name = &node->$name;                                          \
     UNUSED($name);                                                             \
     __VA_ARGS__;                                                               \
   }
+
+#define OK(value...) return value;
 
 EVALUATOR(name, { OK(*name->value_ptr); });
 

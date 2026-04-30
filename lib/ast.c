@@ -74,7 +74,7 @@ void free_ast(AST *ast) {
   ast->head = NULL;
 }
 
-#define VISIT($node) ast_visit($node, depth + 1, callback)
+#define VISIT($node) ast_visit($node, depth + 1, callback_data, callback)
 
 #define VISIT_ARRAY(array) ITER_ARRAY(array, element, { VISIT(element); });
 
@@ -84,11 +84,11 @@ void free_ast(AST *ast) {
     return;                                                                    \
   })
 
-void ast_visit(ASTNode *node, size_t depth,
-               void(callback)(ASTNode *node, size_t depth)) {
+void ast_visit(ASTNode *node, size_t depth, void *callback_data,
+               void(callback)(ASTNode *node, size_t depth, void *data)) {
   if (node == NULL)
     return;
-  callback(node, depth);
+  callback(node, depth, callback_data);
 
   SWITCH(node, {
     PCASE(name, {});
@@ -147,7 +147,8 @@ void ast_visit(ASTNode *node, size_t depth,
   panicf("visit not implemented for node: %s", ast_node_name(node->kind));
 }
 
-static void print_node(ASTNode *node, size_t depth) {
+static void print_node(ASTNode *node, size_t depth, void *data) {
+  UNUSED(data);
   printf("%*.*s", (int)depth, (int)depth, " ");
   SWITCH(node, {
     PCASE(name,
@@ -176,7 +177,7 @@ static void print_node(ASTNode *node, size_t depth) {
   panicf("print not implemented for node: %s", ast_node_name(node->kind));
 }
 
-void ast_print_nodes(ASTNode *node) { ast_visit(node, 0, print_node); }
+void ast_print_nodes(ASTNode *node) { ast_visit(node, 0, NULL, print_node); }
 
 #define N(name)                                                                \
   case (a##name):                                                              \

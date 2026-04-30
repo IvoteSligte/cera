@@ -511,6 +511,13 @@ void print_parse_error(const char *source, TokenStream stream,
   }
 }
 
+#ifdef DEBUG_EVALUATOR
+void set_node_source(Node *node, size_t depth, void *source) {
+  UNUSED(depth);
+  node->source = (const char *)source;
+}
+#endif
+
 bool parse_token_stream(TokenStream stream, AST *out_ast,
                         ParseError *error_data) {
   *out_ast = (AST){0};
@@ -521,5 +528,8 @@ bool parse_token_stream(TokenStream stream, AST *out_ast,
   if (token_index < stream.length) {
     return false;
   }
+#ifdef DEBUG_EVALUATOR
+  ast_visit(out_ast->head, 0, (void *)stream.source, set_node_source);
+#endif
   return result;
 }

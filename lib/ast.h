@@ -149,6 +149,9 @@ typedef struct {
 typedef struct ASTNode {
   Span span;
   bool is_analyzed;
+#ifdef DEBUG_EVALUATOR
+  const char* source;
+#endif  
   ASTNodeKind kind;
   union {
     struct {
@@ -254,8 +257,8 @@ const char *type_name(TypeKind kind);
 
 void free_ast(AST *ast);
 
-void ast_visit(ASTNode *node, size_t depth,
-               void(callback)(ASTNode *node, size_t depth));
+void ast_visit(ASTNode *node, size_t depth, void *callback_data,
+               void(callback)(ASTNode *node, size_t depth, void *data));
 void ast_print_nodes(ASTNode *node);
 const char *ast_node_name(ASTNodeKind kind);
 
