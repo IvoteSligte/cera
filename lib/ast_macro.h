@@ -17,7 +17,7 @@
 #define NODE_for_loop aFOR_LOOP
 #define NODE_assign aASSIGN
 #define NODE_return_stmt aRETURN_STMT
-#define NODE_declaration aDECLARATION
+#define NODE_decl aDECL
 #define NODE_module aMODULE
 
 #define SWITCH($node, $cases)                                                  \

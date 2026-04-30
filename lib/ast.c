@@ -101,11 +101,11 @@ void ast_visit(ASTNode *node, size_t depth,
       VISIT(assign->expr);
     });
     CASE(return_stmt, { VISIT(return_stmt->expr); });
-    CASE(declaration, {
-      VISIT(declaration->name);
-      VISIT(declaration->expr);
+    CASE(decl, {
+      VISIT(decl->name);
+      VISIT(decl->expr);
     })
-    CASE(module, { VISIT_ARRAY(module->declarations); });
+    CASE(module, { VISIT_ARRAY(module->decls); });
   default:
     panicf("visit not implemented for node: %s", ast_node_name(node->kind));
   });
@@ -128,7 +128,7 @@ static void print_node(ASTNode *node, size_t depth) {
     CASE(for_loop, { printf("for_loop:\n"); });
     CASE(assign, { printf("assign: `%s`\n", token_name(assign->op)); });
     CASE(return_stmt, { printf("return_stmt:\n"); });
-    CASE(declaration, { printf("declaration:\n"); });
+    CASE(decl, { printf("decl:\n"); });
     CASE(module, { printf("module:\n"); });
   default:
     panicf("print not implemented for node: %s", ast_node_name(node->kind));
@@ -158,7 +158,7 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(FOR_LOOP);
     N(ASSIGN);
     N(RETURN_STMT);
-    N(DECLARATION);
+    N(DECL);
     N(MODULE);
   }
   panicf("Unknown node kind: %d", kind)

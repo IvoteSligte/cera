@@ -20,9 +20,9 @@ char *ssprintf(const char *fmt, ...) {
   return out;
 }
 
-#define NAME_OF($declaration)                                                  \
-  assert(($declaration)->name->kind == aNAME);                                 \
-  Name name = ($declaration)->name->name.name;
+#define NAME_OF($decl)                                                  \
+  assert(($decl)->name->kind == aNAME);                                 \
+  Name name = ($decl)->name->name.name;
 
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
@@ -380,26 +380,26 @@ ANALYZER(return_stmt, {
   OK;
 });
 
-ANALYZER(declaration, {
-  NAME_OF(declaration);
-  bool is_static = IS_GLOBAL || declaration->is_constant;
+ANALYZER(decl, {
+  NAME_OF(decl);
+  bool is_static = IS_GLOBAL || decl->is_constant;
 
-  if (declaration->symbol_data == NULL) {
-    EXPECT(add_symbol(allocator, table, name, &declaration->symbol_data), node,
+  if (decl->symbol_data == NULL) {
+    EXPECT(add_symbol(allocator, table, name, &decl->symbol_data), node,
            strdup("duplicate declaration"));
-    declaration->symbol_data->is_static = is_static;
+    decl->symbol_data->is_static = is_static;
   }
-  ANALYZE(declaration->expr, expr);
-  declaration->symbol_data->type = expr_type;
+  ANALYZE(decl->expr, expr);
+  decl->symbol_data->type = expr_type;
   if (is_static) {
-    declaration->symbol_data->value = evaluate_expr(declaration->expr);
+    decl->symbol_data->value = evaluate_expr(decl->expr);
   }
   OK;
 });
 
 ANALYZER(module, {
   Table *table = &module->table;
-  ANALYZE_ARRAY(module->declarations);
+  ANALYZE_ARRAY(module->decls);
   OK;
 });
 
@@ -421,7 +421,7 @@ ANALYZER_SIGNATURE(node) {
     ACASE(for_loop);
     ACASE(assign);
     ACASE(return_stmt);
-    ACASE(declaration);
+    ACASE(decl);
     ACASE(module);
   });
   panicf("analyze not implemented for node: %s", ast_node_name(node->kind));

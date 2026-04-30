@@ -382,7 +382,7 @@ PARSER(expr_stmt, {
   OK;
 });
 
-PARSER_PROTOTYPE(declaration);
+PARSER_PROTOTYPE(decl);
 
 PARSER(assign, {
   MUST_PARSE(name, name);
@@ -416,7 +416,7 @@ PARSER(while_loop, {
 
 PARSER(for_loop, {
   EXPECT(tFOR);
-  MUST_PARSE(declaration, init);
+  MUST_PARSE(decl, init);
   MUST_PARSE(expr_stmt, cond);
   MUST_PARSE(assign, step);
   MUST_PARSE_BLOCK;
@@ -424,21 +424,21 @@ PARSER(for_loop, {
   RETURN(for_loop, {.init = init, .cond = cond, .step = step, .stmts = stmts});
 });
 
-PARSER(declaration_expr, {
+PARSER(decl_expr, {
   TRY_PARSE(function);
   TRY_PARSE(expr_stmt);
   OK;
 });
 
-PARSER(declaration, {
+PARSER(decl, {
   MUST_PARSE(name, name);
 
   EXPECT(tCOL_COL, tCOL_EQ);
   bool is_constant = token.kind == tCOL_COL;
 
-  MUST_PARSE(declaration_expr, expr);
+  MUST_PARSE(decl_expr, expr);
 
-  RETURN(declaration, {.is_constant = is_constant, .name = name, .expr = expr});
+  RETURN(decl, {.is_constant = is_constant, .name = name, .expr = expr});
 });
 
 PARSER(stmt, {
@@ -448,13 +448,13 @@ PARSER(stmt, {
   TRY_PARSE(for_loop);
   TRY_PARSE(assign);
   TRY_PARSE(return_stmt);
-  TRY_PARSE(declaration);
+  TRY_PARSE(decl);
   FAIL;
 });
 
 PARSER(module, {
-  ZERO_OR_MORE(declaration, declarations);
-  RETURN(module, {.declarations = declarations});
+  ZERO_OR_MORE(decl, decls);
+  RETURN(module, {.decls = decls});
 });
 
 void print_parse_error(const char *source, TokenStream stream,

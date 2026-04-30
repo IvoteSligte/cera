@@ -23,7 +23,7 @@ typedef enum {
   aFOR_LOOP,
   aASSIGN,
   aRETURN_STMT,
-  aDECLARATION, // variable declaration
+  aDECL, // variable declaration
   aMODULE,
 } ASTNodeKind;
 
@@ -201,9 +201,9 @@ typedef struct ASTNode {
       ASTNode *name;
       ASTNode *expr;
       SymbolData *symbol_data;
-    } declaration;
+    } decl;
     struct {
-      ASTNodeArray declarations;
+      ASTNodeArray decls;
       SymbolTable table;
     } module;
   };

@@ -108,10 +108,10 @@ ControlFlow evaluate_stmt(Node *node, Value *function_out) {
       *function_out = expr_value;
       OK(cRETURN);
     });
-    CASE(declaration, {
-      if (!declaration->is_constant) {
-        EVALUATE(declaration->expr, value);
-        declaration->symbol_data->value = value_value;
+    CASE(decl, {
+      if (!decl->is_constant) {
+        EVALUATE(decl->expr, value);
+        decl->symbol_data->value = value_value;
       }
       OK(cNEXT);
     });
@@ -253,16 +253,14 @@ static const Name MAIN_NAME = (Name){.text = "main", .length = 4};
 void evaluate_module(Node *node) {
   assert(node->kind == aMODULE);
   __auto_type module = &node->module;
-  ITER_ARRAY(module->declarations, declaration_node, {
-    __auto_type declaration = &declaration_node->declaration;
-    if (name_eq(declaration->name->name.name, MAIN_NAME)) {
-      // FIXME: this evaluates the declaration, not the function in the
-      // declaration
-      // there is also no check that `main` has the correct signature
-      evaluate_stmt(declaration_node, NULL);
+  ITER_ARRAY(module->decls, decl_node, {
+    __auto_type decl = &decl_node->decl;
+    if (name_eq(decl->name->name.name, MAIN_NAME)) {
+      // FIXME: there is no check that `main` has the correct signature
+      evaluate_stmt(decl_node, NULL);
 
-      assert(declaration->expr->kind == aFUNCTION);
-      __auto_type function = &declaration->expr->function;
+      assert(decl->expr->kind == aFUNCTION);
+      __auto_type function = &decl->expr->function;
       Value function_out = {0};
       evaluate_stmts(function->stmts, &function_out);
       return;
