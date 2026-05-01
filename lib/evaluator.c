@@ -12,7 +12,8 @@ extern void print_string(const char *text, size_t length);
 #define LOG_ENTER                                                              \
   {                                                                            \
     OffsetInfo oi = get_offset_info(node->source, node->span.offset);          \
-    printf("%-3zu | %.*s\n", oi.line_number, (int)oi.line_length, oi.line);    \
+    printf("%-3zu %-2zu | %.*s | %s\n", oi.line_number, recursion_depth,       \
+           (int)oi.line_length, oi.line, ast_node_name(node->kind));           \
   }
 #else
 #define LOG_ENTER
@@ -31,22 +32,30 @@ typedef enum {
   }
 
 #define EVALUATE(node, name)                                                   \
-  Value name##_value = evaluate_expr(node);                                    \
+  Value name##_value = evaluate_expr(node, recursion_depth);                   \
   UNUSED(name##_value);
 
 #define EVALUATE_ARRAY($array)                                                 \
   ITER_ARRAY($array, element, { EVALUATE(element, element); });
 
-ControlFlow evaluate_stmt(Node *node, Value *function_out);
+#define PARAMS Node *node, size_t recursion_depth, Value *function_out
 
-ControlFlow evaluate_stmts(NodeArray stmts, Value *function_out) {
+ControlFlow evaluate_stmt(PARAMS);
+
+ControlFlow evaluate_stmts(NodeArray stmts, size_t recursion_depth,
+                           Value *function_out) {
   ITER_ARRAY(stmts, stmt_node, {
-    ControlFlow control = evaluate_stmt(stmt_node, function_out);
+    ControlFlow control =
+        evaluate_stmt(stmt_node, recursion_depth, function_out);
     if (control == cRETURN)
       return cRETURN;
   });
   return cNEXT;
 }
+
+#define EVALUATE_STMT($stmt) evaluate_stmt($stmt, recursion_depth, function_out)
+#define EVALUATE_STMTS($stmts)                                                 \
+  evaluate_stmts($stmts, recursion_depth, function_out)
 
 Value *evaluate_target(Node *node) {
   SWITCH(node, {
@@ -56,87 +65,114 @@ Value *evaluate_target(Node *node) {
   });
 }
 
-ControlFlow evaluate_stmt(Node *node, Value *function_out) {
-  SWITCH(node, {
-    CASE(if_stmt, {
-      EVALUATE(if_stmt->cond, cond);
-      ControlFlow control = 0;
-      if (cond_value.boolean) {
-        control = evaluate_stmts(if_stmt->then_stmts, function_out);
-      } else {
-        control = evaluate_stmts(if_stmt->else_stmts, function_out);
-      }
-      OK(control);
-    });
-    CASE(while_loop, {
-      while (true) {
-        EVALUATE(while_loop->cond, cond);
-        if (!cond_value.boolean)
-          break;
-        ControlFlow control = evaluate_stmts(while_loop->stmts, function_out);
-        if (control == cRETURN)
-          OK(cRETURN);
-      }
-      OK(cNEXT);
-    });
-    CASE(for_loop, {
-      evaluate_stmt(for_loop->init, function_out);
-      while (true) {
-        EVALUATE(for_loop->cond, cond);
-        if (!cond_value.boolean)
-          break;
-        ControlFlow control = evaluate_stmts(for_loop->stmts, function_out);
-        if (control == cRETURN)
-          OK(cRETURN);
-        evaluate_stmt(for_loop->step, function_out);
-      }
-      OK(cNEXT);
-    });
-    CASE(assign, {
-      Value *target = evaluate_target(assign->target);
-      EVALUATE(assign->expr, expr);
-      switch (assign->op) {
-      case tEQ:
-        *target = expr_value;
-        break;
-      case tPLUS_EQ:
-        target->integer += expr_value.integer;
-        break;
-      case tMINUS_EQ:
-        target->integer -= expr_value.integer;
-        break;
-      case tSTAR_EQ:
-        target->integer *= expr_value.integer;
-        break;
-      case tSLASH_EQ:
-        target->integer /= expr_value.integer;
-        break;
-      default:
-        panicf("Unexpected assignment operator: %s", token_name(assign->op));
-      }
-      OK(cNEXT);
-    });
-    CASE(return_stmt, {
-      EVALUATE(return_stmt->expr, expr);
-      printf("returning %zd\n", expr_value.integer);
-      *function_out = expr_value;
+#define EVALUATOR($name, $body...)                                             \
+  ControlFlow evaluate_##$name(PARAMS) {                                       \
+    LOG_ENTER;                                                                 \
+    __auto_type $name = &node->$name;                                          \
+    UNUSED(recursion_depth);                                                   \
+    UNUSED(function_out);                                                      \
+    $body;                                                                     \
+  }
+
+EVALUATOR(if_stmt, {
+  EVALUATE(if_stmt->cond, cond);
+  ControlFlow control = 0;
+  if (cond_value.boolean) {
+    control = EVALUATE_STMTS(if_stmt->then_stmts);
+  } else {
+    control = EVALUATE_STMTS(if_stmt->else_stmts);
+  }
+  OK(control);
+});
+
+EVALUATOR(while_loop, {
+  while (true) {
+    EVALUATE(while_loop->cond, cond);
+    if (!cond_value.boolean)
+      break;
+    ControlFlow control = EVALUATE_STMTS(while_loop->stmts);
+    if (control == cRETURN)
       OK(cRETURN);
-    });
-    CASE(decl, {
-      if (!decl->is_constant) {
-        EVALUATE(decl->expr, value);
-        decl->symbol_data->value = value_value;
-      }
-      OK(cNEXT);
-    });
+  }
+  OK(cNEXT);
+});
+
+EVALUATOR(for_loop, {
+  EVALUATE_STMT(for_loop->init);
+  while (true) {
+    EVALUATE(for_loop->cond, cond);
+    if (!cond_value.boolean)
+      break;
+    ControlFlow control = EVALUATE_STMTS(for_loop->stmts);
+    if (control == cRETURN)
+      OK(cRETURN);
+    EVALUATE_STMT(for_loop->step);
+  }
+  OK(cNEXT);
+});
+
+EVALUATOR(assign, {
+  Value *target = evaluate_target(assign->target);
+  EVALUATE(assign->expr, expr);
+  switch (assign->op) {
+  case tEQ:
+    *target = expr_value;
+    break;
+  case tPLUS_EQ:
+    target->integer += expr_value.integer;
+    break;
+  case tMINUS_EQ:
+    target->integer -= expr_value.integer;
+    break;
+  case tSTAR_EQ:
+    target->integer *= expr_value.integer;
+    break;
+  case tSLASH_EQ:
+    target->integer /= expr_value.integer;
+    break;
   default:
-    evaluate_expr(node);
+    panicf("Unexpected assignment operator: %s", token_name(assign->op));
+  }
+  OK(cNEXT);
+});
+
+EVALUATOR(return_stmt, {
+  EVALUATE(return_stmt->expr, expr);
+  printf("returning %zd\n", expr_value.integer);
+  *function_out = expr_value;
+  OK(cRETURN);
+});
+
+EVALUATOR(decl, {
+  if (!decl->is_constant) {
+    EVALUATE(decl->expr, value);
+    decl->symbol_data->value = value_value;
+  }
+  OK(cNEXT);
+});
+
+#define ECASE($name)                                                           \
+  CASE($name, return evaluate_##$name(node, recursion_depth, function_out))
+
+ControlFlow evaluate_stmt(PARAMS) {
+  SWITCH(node, {
+    ECASE(if_stmt);
+    ECASE(while_loop);
+    ECASE(for_loop);
+    ECASE(assign);
+    ECASE(return_stmt);
+    ECASE(decl);
+  default:
+    evaluate_expr(node, recursion_depth);
     OK(cNEXT);
   });
 }
+#undef PARAMS
 #undef OK
+#undef EVALUATOR
+#undef ECASE
 
-Value evaluate_builtin(NodeArray args, BuiltinID id) {
+Value evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth) {
   switch (id) {
   case NOT_BUILTIN:
     panicf("unreachable");
@@ -158,10 +194,11 @@ Value evaluate_builtin(NodeArray args, BuiltinID id) {
 }
 
 #define EVALUATOR($name, ...)                                                  \
-  Value evaluate_##$name(Node *node) {                                         \
+  Value evaluate_##$name(Node *node, size_t recursion_depth) {                 \
     LOG_ENTER;                                                                 \
     __auto_type $name = &node->$name;                                          \
     UNUSED($name);                                                             \
+    UNUSED(recursion_depth);                                                   \
     __VA_ARGS__;                                                               \
   }
 
@@ -230,19 +267,19 @@ EVALUATOR(function_call, {
   EVALUATE(function_call->function, function);
 
   if (function_value.builtin_id != NOT_BUILTIN) {
-    OK(evaluate_builtin(function_call->args, function_value.builtin_id));
+    OK(evaluate_builtin(function_call->args, function_value.builtin_id,
+                        recursion_depth + 1));
   }
-
   assert(function_value.function->kind == aFUNCTION);
   __auto_type function = &function_value.function->function;
 
   ITER_ARRAY(function_call->args, arg, {
     Node *param = function->params.data[i];
-    param->param.symbol_data->value = evaluate_expr(arg);
+    param->param.symbol_data->value = evaluate_expr(arg, recursion_depth + 1);
   });
   // assumes that parameter values have been set
   Value function_out = {0};
-  evaluate_stmts(function->stmts, &function_out);
+  evaluate_stmts(function->stmts, recursion_depth + 1, &function_out);
   OK(function_out);
 });
 
@@ -250,9 +287,9 @@ EVALUATOR(function, {OK((Value){.function = node})});
 
 EVALUATOR(_struct, {OK((Value){._struct = _struct->id})});
 
-#define ECASE($name) CASE($name, return evaluate_##$name(node))
+#define ECASE($name) CASE($name, return evaluate_##$name(node, recursion_depth))
 
-Value evaluate_expr(Node *node) {
+Value evaluate_expr(Node *node, size_t recursion_depth) {
   SWITCH(node, {
     ECASE(name);
     ECASE(integer);
@@ -274,13 +311,12 @@ void evaluate_module(Node *node) {
   ITER_ARRAY(module->decls, decl_node, {
     __auto_type decl = &decl_node->decl;
     if (name_eq_string(decl->name->name.name, "main")) {
-      // FIXME: there is no check that `main` has the correct signature
-      evaluate_stmt(decl_node, NULL);
+      evaluate_stmt(decl_node, 0, NULL);
 
       assert(decl->expr->kind == aFUNCTION);
       __auto_type function = &decl->expr->function;
       Value function_out = {0};
-      evaluate_stmts(function->stmts, &function_out);
+      evaluate_stmts(function->stmts, 0, &function_out);
       return;
     }
   });
