@@ -1,9 +1,9 @@
 
-run: build
-    ./build/debug.out
+run *args: build
+    ./build/debug.out {{args}}
 
-test: build-test
-    ./build/test.out
+test *args: build-test
+    ./build/test.out {{args}}
 
 check:
     cc -fsyntax-only *.c lib/*.c -Wall -Wextra

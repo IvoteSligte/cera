@@ -108,16 +108,10 @@ typedef union {
 } Value;
 
 typedef struct {
-  Type type;
-  Value value;
-  bool is_static;
-} SymbolData;
-
-typedef struct {
   Name name;
-  // storing data separately to keep pointers to it valid when the symbol table
-  // is reallocated
-  SymbolData *data;
+  bool is_static;
+  size_t local_index;
+  ASTNode *node;
 } Symbol;
 
 typedef struct SymbolTable SymbolTable;
@@ -151,13 +145,17 @@ typedef struct ASTNode {
   bool is_analyzed;
   Type type;
 #ifdef DEBUG_EVALUATOR
-  const char* source;
+  const char *source;
 #endif
   ASTNodeKind kind;
   union {
     struct {
       Name name;
-      Value *value_ptr;
+      bool is_static;
+      union {
+        Value* static_value_ptr;
+        size_t local_index;
+      };
     } name;
     struct {
       const char *text;
@@ -191,18 +189,21 @@ typedef struct ASTNode {
     struct {
       ASTNode *name;
       ASTNode *type;
-      SymbolData *symbol_data;
+      // True if the symbol has been added to the declaration table.
+      bool symbol_added;
     } param;
     struct {
       ASTNodeArray params;
       ASTNode *return_type; // nullable
       ASTNodeArray stmts;
       SymbolTable table;
+      // The total number of local variables in this function.
+      size_t local_count;
     } function;
     struct {
       ASTNode *cond;
       ASTNodeArray then_stmts;
-      ASTNodeArray else_stmts;      
+      ASTNodeArray else_stmts;
       SymbolTable table;
     } if_stmt;
     struct {
@@ -228,7 +229,6 @@ typedef struct ASTNode {
     struct {
       ASTNode *name;
       ASTNode *type;
-      SymbolData *symbol_data;
     } field;
     struct {
       ASTNodeArray fields;
@@ -238,7 +238,11 @@ typedef struct ASTNode {
       bool is_constant;
       ASTNode *name;
       ASTNode *expr;
-      SymbolData *symbol_data;
+      // Value of the declaration if it is static.
+      Value static_value;
+      // True if the symbol has been added to the declaration table.
+      bool symbol_added;
+      size_t local_index;
     } decl;
     struct {
       ASTNodeArray decls;
@@ -264,8 +268,8 @@ void ast_print_nodes(ASTNode *node);
 const char *ast_node_name(ASTNodeKind kind);
 
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
-                SymbolData **out_data_ptr);
-bool get_symbol(SymbolTable *table, Name name, SymbolData **out_data_ptr);
+                ASTNode *node, bool is_static, size_t local_index);
+bool get_symbol(SymbolTable *table, Name name, Symbol *out);
 SymbolTable get_top_table(SymbolTable table);
 
 StructID add_struct(RandomAllocator *allocator, StructList *list);

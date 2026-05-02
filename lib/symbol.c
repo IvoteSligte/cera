@@ -2,47 +2,58 @@
 #include "ast.h"
 #include "ast_macro.h"
 
-#define PRIM_DATA($name)                                                       \
-  static SymbolData $name##_DATA = {.type = PRIM_TYPE(tyTYPE),                 \
-                                    .value = {.type = PRIM_TYPE(ty##$name)},   \
-                                    .is_static = true};
+#define NEW_NAME($name) {.text = #$name, .length = sizeof(#$name) - 1}
 
-PRIM_DATA(VOID);
-PRIM_DATA(INT);
-PRIM_DATA(BOOL);
-PRIM_DATA(STRING);
+#define BUILTIN_SYMBOL($name, $NAME, $type, $value)                            \
+  static ASTNode $NAME##_NODE = {                                              \
+      .type = $type,                                                           \
+      .kind = aDECL,                                                           \
+      .decl = {.is_constant = true, .static_value = $value}};                  \
+  static Symbol $NAME##_SYMBOL = {                                             \
+      .name = NEW_NAME($name), .node = &$NAME##_NODE, .is_static = true}
 
-static SymbolData PRINT_STRING_DATA = (SymbolData){
+#define PRIM_SYMBOL($name, $NAME)                                              \
+  BUILTIN_SYMBOL($name, $NAME, PRIM_TYPE(tyTYPE),                              \
+                 {.type = PRIM_TYPE(ty##$NAME)});
+
+PRIM_SYMBOL(void, VOID);
+PRIM_SYMBOL(int, INT);
+PRIM_SYMBOL(bool, BOOL);
+PRIM_SYMBOL(string, STRING);
+
+static ASTNode PRINT_STRING_NODE = {
     .type = {.kind = tyFUNCTION,
              .is_constant = true,
-             .function = {.params = {.data = &STRING_DATA.value.type,
-                                     .length = 1},
-                          ._return = &VOID_DATA.value.type}},
-    .value = {.builtin_id = PRINT_STRING},
-    .is_static = true};
+             .function = {.params = {.data = &STRING_NODE.decl.static_value.type, .length = 1},
+                          ._return = &VOID_NODE.decl.static_value.type}},
+    .kind = aDECL,
+    .decl = {.is_constant = 1, .static_value = {.builtin_id = PRINT_STRING}}};
 
-#define MATCH($name, $NAME)                                                    \
-  if (name.length == strlen(#$name) &&                                         \
-      strncmp(name.text, #$name, name.length) == 0) {                          \
-    *out_data_ptr = &$NAME##_DATA;                                             \
+static Symbol PRINT_STRING_SYMBOL = {
+    .name = NEW_NAME(print_string), .node = &PRINT_STRING_NODE, .is_static = 1};
+
+#define MATCH($NAME)                                                           \
+  if (name_eq(name, $NAME##_SYMBOL.name)) {                                    \
+    *out = $NAME##_SYMBOL;                                                     \
     return true;                                                               \
   }
 
 // NOTE: this currently prevents naming shadowing builtins, even as local
 // variables
-bool get_builtin(Name name, SymbolData **out_data_ptr) {
-  MATCH(void, VOID);
-  MATCH(int, INT);
-  MATCH(bool, BOOL);
-  MATCH(string, STRING);
-  MATCH(print_string, PRINT_STRING);
+bool get_builtin(Name name, Symbol *out) {
+  MATCH(VOID);
+  MATCH(INT);
+  MATCH(BOOL);
+  MATCH(STRING);
+  MATCH(PRINT_STRING);
   return false;
 }
 
 // Adds a symbol to the table, returning false if NAME was already in the table.
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
-                SymbolData **out_data_ptr) {
-  if (get_builtin(name, out_data_ptr)) {
+                ASTNode *node, bool is_static, size_t local_index) {
+  Symbol builtin;
+  if (get_builtin(name, &builtin)) {
     return false;
   }
   for (size_t i = 0; i < table->length; i++) {
@@ -53,26 +64,28 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
   }
   table->data =
       ra_recalloc(allocator, table->data, sizeof(Symbol) * (table->length + 1));
-  *out_data_ptr = ra_calloc(allocator, sizeof(SymbolData));
-  table->data[table->length] = (Symbol){.name = name, .data = *out_data_ptr};
+  table->data[table->length] = (Symbol){.name = name,
+                                        .is_static = is_static,
+                                        .local_index = local_index,
+                                        .node = node};
   table->length++;
   return true;
 }
 
-bool get_symbol(SymbolTable *table, Name name, SymbolData **out_data_ptr) {
-  if (get_builtin(name, out_data_ptr)) {
+bool get_symbol(SymbolTable *table, Name name, Symbol *out) {
+  if (get_builtin(name, out)) {
     return true;
   }
   for (size_t i = 0; i < table->length; i++) {
     if (name_eq(table->data[i].name, name)) {
-      *out_data_ptr = table->data[i].data;
+      *out = table->data[i];
       return true;
     }
   }
   if (table->parent == NULL) {
     return false;
   }
-  return get_symbol(table->parent, name, out_data_ptr);
+  return get_symbol(table->parent, name, out);
 }
 
 SymbolTable get_top_table(SymbolTable table) {

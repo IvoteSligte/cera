@@ -259,8 +259,7 @@ bool parse_block(GENERAL_PARAMS, Span *out_span, NodeArray *out_stmts) {
 
 PARSER(name, {
   EXPECT(tIDENT);
-  RETURN(name, {.name = {.text = token.text, .length = token.length},
-                .value_ptr = NULL});
+  RETURN(name, {.name = {.text = token.text, .length = token.length}});
 });
 
 PARSER(integer, {

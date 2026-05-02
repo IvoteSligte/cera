@@ -6,7 +6,7 @@ fibonacci :: (i: int) -> int {
 }
 
 main :: () {
-    if fibonacci(3) == 2; {
+    if fibonacci(6) == 8; {
         print_string("correct answer\n");
     } else {
         print_string("incorrect answer\n");

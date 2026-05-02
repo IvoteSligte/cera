@@ -32,34 +32,41 @@ typedef enum {
   }
 
 #define EVALUATE(node, name)                                                   \
-  Value name##_value = evaluate_expr(node, recursion_depth);                   \
+  Value name##_value = evaluate_expr(node, recursion_depth, stack_frame);      \
   UNUSED(name##_value);
 
 #define EVALUATE_ARRAY($array)                                                 \
   ITER_ARRAY($array, element, { EVALUATE(element, element); });
 
-#define PARAMS Node *node, size_t recursion_depth, Value *function_out
+#define PARAMS                                                                 \
+  Node *node, size_t recursion_depth, Value *stack_frame, Value *function_out
+
+#define EVALUATE_STMT($stmt)                                                   \
+  evaluate_stmt($stmt, recursion_depth, stack_frame, function_out)
+#define EVALUATE_STMTS($stmts)                                                 \
+  evaluate_stmts($stmts, recursion_depth, stack_frame, function_out)
 
 ControlFlow evaluate_stmt(PARAMS);
 
 ControlFlow evaluate_stmts(NodeArray stmts, size_t recursion_depth,
-                           Value *function_out) {
+                           Value *stack_frame, Value *function_out) {
   ITER_ARRAY(stmts, stmt_node, {
-    ControlFlow control =
-        evaluate_stmt(stmt_node, recursion_depth, function_out);
+    ControlFlow control = EVALUATE_STMT(stmt_node);
     if (control == cRETURN)
       return cRETURN;
   });
   return cNEXT;
 }
 
-#define EVALUATE_STMT($stmt) evaluate_stmt($stmt, recursion_depth, function_out)
-#define EVALUATE_STMTS($stmts)                                                 \
-  evaluate_stmts($stmts, recursion_depth, function_out)
-
-Value *evaluate_target(Node *node) {
+Value *evaluate_target(Node *node, Value *stack_frame) {
   SWITCH(node, {
-    CASE(name, { return name->value_ptr; });
+    CASE(name, {
+      if (name->is_static) {
+        return name->static_value_ptr;
+      } else {
+        return &stack_frame[name->local_index];
+      }
+    });
   default:
     panicf("not a target: %s", ast_node_name(node->kind));
   });
@@ -70,6 +77,7 @@ Value *evaluate_target(Node *node) {
     LOG_ENTER;                                                                 \
     __auto_type $name = &node->$name;                                          \
     UNUSED(recursion_depth);                                                   \
+    UNUSED(stack_frame);                                                       \
     UNUSED(function_out);                                                      \
     $body;                                                                     \
   }
@@ -112,7 +120,7 @@ EVALUATOR(for_loop, {
 });
 
 EVALUATOR(assign, {
-  Value *target = evaluate_target(assign->target);
+  Value *target = evaluate_target(assign->target, stack_frame);
   EVALUATE(assign->expr, expr);
   switch (assign->op) {
   case tEQ:
@@ -146,13 +154,14 @@ EVALUATOR(return_stmt, {
 EVALUATOR(decl, {
   if (!decl->is_constant) {
     EVALUATE(decl->expr, value);
-    decl->symbol_data->value = value_value;
+    stack_frame[decl->local_index] = value_value;
   }
   OK(cNEXT);
 });
 
 #define ECASE($name)                                                           \
-  CASE($name, return evaluate_##$name(node, recursion_depth, function_out))
+  CASE($name, return evaluate_##$name(node, recursion_depth, stack_frame,      \
+                                      function_out))
 
 ControlFlow evaluate_stmt(PARAMS) {
   SWITCH(node, {
@@ -163,7 +172,7 @@ ControlFlow evaluate_stmt(PARAMS) {
     ECASE(return_stmt);
     ECASE(decl);
   default:
-    evaluate_expr(node, recursion_depth);
+    evaluate_expr(node, recursion_depth, stack_frame);
     OK(cNEXT);
   });
 }
@@ -172,7 +181,8 @@ ControlFlow evaluate_stmt(PARAMS) {
 #undef EVALUATOR
 #undef ECASE
 
-Value evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth) {
+Value evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
+                       Value *stack_frame) {
   switch (id) {
   case NOT_BUILTIN:
     panicf("unreachable");
@@ -194,17 +204,30 @@ Value evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth) {
 }
 
 #define EVALUATOR($name, ...)                                                  \
-  Value evaluate_##$name(Node *node, size_t recursion_depth) {                 \
+  Value evaluate_##$name(Node *node, size_t recursion_depth,                   \
+                         Value *stack_frame) {                                 \
     LOG_ENTER;                                                                 \
     __auto_type $name = &node->$name;                                          \
     UNUSED($name);                                                             \
     UNUSED(recursion_depth);                                                   \
+    UNUSED(stack_frame);                                                       \
     __VA_ARGS__;                                                               \
   }
 
 #define OK(value...) return value;
 
-EVALUATOR(name, { OK(*name->value_ptr); });
+EVALUATOR(name, {
+  if (name->is_static) {
+    printf("static `%.*s`: %zd\n", FMT(name->name),
+           name->static_value_ptr->integer);
+    OK(*name->static_value_ptr);
+  } else {
+    printf("local %zu `%.*s` at %p: %zd\n", name->local_index, FMT(name->name),
+           &stack_frame[name->local_index],
+           stack_frame[name->local_index].integer);
+    OK(stack_frame[name->local_index]);
+  }
+});
 
 EVALUATOR(integer, { OK((Value){.integer = integer->value}); });
 
@@ -268,18 +291,24 @@ EVALUATOR(function_call, {
 
   if (function_value.builtin_id != NOT_BUILTIN) {
     OK(evaluate_builtin(function_call->args, function_value.builtin_id,
-                        recursion_depth + 1));
+                        recursion_depth + 1, stack_frame));
   }
   assert(function_value.function->kind == aFUNCTION);
   __auto_type function = &function_value.function->function;
+  Value new_stack_frame[function->local_count];
+  memset(new_stack_frame, 121, sizeof(new_stack_frame));
+  printf("function call (%zu locals, %zu params, stack frame at %p)\n",
+         function->local_count, function->params.length, new_stack_frame);
 
   ITER_ARRAY(function_call->args, arg, {
-    Node *param = function->params.data[i];
-    param->param.symbol_data->value = evaluate_expr(arg, recursion_depth + 1);
+    new_stack_frame[i] = evaluate_expr(arg, recursion_depth + 1, stack_frame);
+    printf("set param %zu at %p to %zd\n", i, &new_stack_frame[i],
+           new_stack_frame[i].integer);
   });
   // assumes that parameter values have been set
   Value function_out = {0};
-  evaluate_stmts(function->stmts, recursion_depth + 1, &function_out);
+  evaluate_stmts(function->stmts, recursion_depth + 1, new_stack_frame,
+                 &function_out);
   OK(function_out);
 });
 
@@ -287,9 +316,10 @@ EVALUATOR(function, {OK((Value){.function = node})});
 
 EVALUATOR(_struct, {OK((Value){._struct = _struct->id})});
 
-#define ECASE($name) CASE($name, return evaluate_##$name(node, recursion_depth))
+#define ECASE($name)                                                           \
+  CASE($name, return evaluate_##$name(node, recursion_depth, stack_frame))
 
-Value evaluate_expr(Node *node, size_t recursion_depth) {
+Value evaluate_expr(Node *node, size_t recursion_depth, Value *stack_frame) {
   SWITCH(node, {
     ECASE(name);
     ECASE(integer);
@@ -311,12 +341,13 @@ void evaluate_module(Node *node) {
   ITER_ARRAY(module->decls, decl_node, {
     __auto_type decl = &decl_node->decl;
     if (name_eq_string(decl->name->name.name, "main")) {
-      evaluate_stmt(decl_node, 0, NULL);
+      evaluate_stmt(decl_node, 0, NULL, NULL);
 
       assert(decl->expr->kind == aFUNCTION);
       __auto_type function = &decl->expr->function;
+      Value stack_frame[function->local_count];
       Value function_out = {0};
-      evaluate_stmts(function->stmts, 0, &function_out);
+      evaluate_stmts(function->stmts, 0, stack_frame, &function_out);
       return;
     }
   });

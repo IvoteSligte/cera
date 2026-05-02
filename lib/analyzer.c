@@ -27,14 +27,15 @@ char *ssprintf(const char *fmt, ...) {
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
     return analyze_##$name(allocator, node, table, struct_list, return_type,   \
-                           error_data, is_static, flags);                      \
+                           local_count, error_data, is_static, flags);         \
   })
 
 // Analyze a node, only returning on error.
 #define TRY_ANALYZE($node, $name)                                              \
   {                                                                            \
-    Result result = analyze_node(allocator, $node, table, struct_list,         \
-                                 return_type, error_data, is_static, flags);   \
+    Result result =                                                            \
+        analyze_node(allocator, $node, table, struct_list, return_type,        \
+                     local_count, error_data, is_static, flags);               \
     if (result == rERROR)                                                      \
       FAIL;                                                                    \
     blocked |= result == rBLOCKED;                                             \
@@ -52,7 +53,7 @@ char *ssprintf(const char *fmt, ...) {
   ANALYZE($node, $name##_type);                                                \
   EXPECT(($name##_type_type.kind == tyTYPE), $node,                            \
          ssprintf("not a type: %s", type_name($name##_type_type.kind)));       \
-  Type $name##_type = evaluate_expr($node, 0).type;
+  Type $name##_type = evaluate_expr($node, 0, NULL).type;
 
 #define ANALYZE_ARRAY($array)                                                  \
   {                                                                            \
@@ -103,8 +104,8 @@ typedef enum {
 #define ANALYZER_SIGNATURE($name)                                              \
   Result analyze_##$name(Allocator *allocator, Node *node, Table *table,       \
                          StructList *struct_list, Type return_type,            \
-                         AnalyzeErrorArray *error_data, bool is_static,        \
-                         Flags *flags)
+                         size_t *local_count, AnalyzeErrorArray *error_data,   \
+                         bool is_static, Flags *flags)
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
@@ -118,24 +119,31 @@ typedef enum {
     UNUSED(is_static);                                                         \
     UNUSED(allocator);                                                         \
     UNUSED(blocked);                                                           \
+    UNUSED(local_count);                                                       \
   }
 
 ANALYZER_SIGNATURE(node);
 
 ANALYZER(name, {
-  SymbolData *symbol_data = NULL;
-  if (!get_symbol(table, name->name, &symbol_data)) {
+  Symbol symbol = {0};
+  if (!get_symbol(table, name->name, &symbol)) {
     eprintf("INFO: compilation blocked by undefined symbol `%.*s` \n",
             (int)name->name.length, name->name.text);
     EXPECT(((*flags & ERROR_ON_BLOCK) == 0), node, strdup("undefined symbol"));
     BLOCK;
   }
-  EXPECT((!is_static || symbol_data->is_static), node,
+  EXPECT((!is_static || symbol.is_static), node,
          strdup("static declaration refers to runtime variable"));
-  name->value_ptr = &symbol_data->value;
-  if (symbol_data->type.kind == tyUNKNOWN)
+  name->is_static = symbol.is_static;
+  if (symbol.is_static) {
+    assert(symbol.node->kind == aDECL);
+    name->static_value_ptr = &symbol.node->decl.static_value;
+  } else {
+    name->local_index = symbol.local_index;
+  }
+  if (symbol.node->type.kind == tyUNKNOWN)
     BLOCK;
-  node->type = symbol_data->type;
+  node->type = symbol.node->type;
   node->type.is_bound = true;
   OK;
 });
@@ -273,12 +281,13 @@ ANALYZER(function_call, {
 
 ANALYZER(param, {
   NAME_OF(param);
-  if (param->symbol_data == NULL) {
-    EXPECT(add_symbol(allocator, table, name, &param->symbol_data), node,
+  if (!param->symbol_added) {
+    EXPECT(add_symbol(allocator, table, name, node, false, *local_count), node,
            strdup("duplicate parameter name"));
+    *local_count += 1;
+    param->symbol_added = true;
   }
   ANALYZE_TYPE(param->type, param);
-  param->symbol_data->type = param_type;
   node->type = param_type;
   OK;
 });
@@ -291,6 +300,7 @@ ANALYZER(function, {
   function->table.parent = table;
   Table *table = &function->table;
   Type *type = &node->type;
+  size_t *local_count = &function->local_count;
 
   if (type->kind == tyUNKNOWN) {
     type->is_constant = true;
@@ -390,13 +400,7 @@ ANALYZER(return_stmt, {
 });
 
 ANALYZER(field, {
-  NAME_OF(field);
-  if (field->symbol_data == NULL) {
-    EXPECT(add_symbol(allocator, table, name, &field->symbol_data), node,
-           strdup("duplicate field name"));
-  }
   ANALYZE_TYPE(field->type, field);
-  field->symbol_data->type = field_type;
   node->type = field_type;
   OK;
 });
@@ -434,16 +438,17 @@ ANALYZER(decl, {
   NAME_OF(decl);
   bool is_static = IS_GLOBAL || decl->is_constant;
 
-  if (decl->symbol_data == NULL) {
-    EXPECT(add_symbol(allocator, table, name, &decl->symbol_data), decl->name,
-           strdup("duplicate declaration"));
-    decl->symbol_data->is_static = is_static;
+  if (!decl->symbol_added) {
+    size_t local_index = *local_count;
+    EXPECT(add_symbol(allocator, table, name, node, is_static, local_index),
+           decl->name, strdup("duplicate declaration"));
+    *local_count += 1;
+    decl->symbol_added = true;
+    decl->local_index = local_index;
   }
-  assert(decl->symbol_data != NULL);
-
   TRY_ANALYZE(decl->expr, expr);
   // function type can be determined despite blocking
-  decl->symbol_data->type = expr_type;
+  node->type = expr_type;
   if (blocked)
     BLOCK;
 
@@ -452,7 +457,7 @@ ANALYZER(decl, {
            ssprintf("invalid `main` function type, expected `() -> void`"));
   }
   if (is_static) {
-    decl->symbol_data->value = evaluate_expr(decl->expr, 0);
+    decl->static_value = evaluate_expr(decl->expr, 0, NULL);
   }
   OK;
 });
@@ -517,14 +522,16 @@ void free_analyze_errors(AnalyzeErrorArray *type_errors) {
 bool analyze(AST *ast, AnalyzeErrorArray *error_data) {
   Table table = {0};
   StructList struct_list = {0};
+  size_t global_count = 0;
   Flags flags = 0;
   Result result = rBLOCKED;
   for (size_t i = 0;; i++) {
     eprintf("INFO: analysis iteration: %zu\n", i);
     // TODO: make sure the symbol tables (also allocated using random_allocator)
     // are freed, but the symbol data is not
-    result = analyze_node(&ast->random_allocator, ast->head, &table,
-                          &struct_list, (Type){0}, error_data, true, &flags);
+    result =
+        analyze_node(&ast->random_allocator, ast->head, &table, &struct_list,
+                     (Type){0}, &global_count, error_data, true, &flags);
     if (result != rBLOCKED)
       break;
     flags = (flags & ANYTHING_CHANGED) != 0 ? ERROR_ON_BLOCK : 0;
