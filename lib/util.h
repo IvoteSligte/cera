@@ -57,6 +57,7 @@ char *read_file(const char *path);
 #define ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 #define FMT($string) (int)($string).length, ($string).text
 

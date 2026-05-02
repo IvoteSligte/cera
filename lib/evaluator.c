@@ -295,8 +295,9 @@ EVALUATOR(function_call, {
   }
   assert(function_value.function->kind == aFUNCTION);
   __auto_type function = &function_value.function->function;
-  Value new_stack_frame[function->local_count];
-  memset(new_stack_frame, 121, sizeof(new_stack_frame));
+// C requires that a variable-sized array contains at least 1 element.  
+  Value new_stack_frame[MAX(function->local_count, 1)];
+  memset(new_stack_frame, 0, sizeof(new_stack_frame));
   printf("function call (%zu locals, %zu params, stack frame at %p)\n",
          function->local_count, function->params.length, new_stack_frame);
 
