@@ -27,30 +27,20 @@ char *ssprintf(const char *fmt, ...) {
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
     return analyze_##$name(allocator, node, table, struct_list, return_type,   \
-                           out_type, error_data, is_static, flags);            \
+                           error_data, is_static, flags);                      \
   })
-
-// Analyze a node, only returning on error, and write the type to $out_type.
-#define TRY_ANALYZE_TO_TYPE($node, $out_type)                                  \
-  {                                                                            \
-    Result result =                                                            \
-        analyze_node(allocator, $node, table, struct_list, return_type,        \
-                     $out_type, error_data, is_static, flags);                 \
-    if (result == rERROR)                                                      \
-      FAIL;                                                                    \
-    blocked |= result == rBLOCKED;                                             \
-  }
 
 // Analyze a node, only returning on error.
 #define TRY_ANALYZE($node, $name)                                              \
-  Type $name##_type = {0};                                                     \
-  TRY_ANALYZE_TO_TYPE($node, &$name##_type)
-
-// Analyze a node, returning on error or block, and write the type to $out_type
-#define ANALYZE_TO_TYPE($node, $out_type)                                      \
-  TRY_ANALYZE_TO_TYPE($node, $out_type);                                       \
-  if (blocked)                                                                 \
-    BLOCK;
+  {                                                                            \
+    Result result = analyze_node(allocator, $node, table, struct_list,         \
+                                 return_type, error_data, is_static, flags);   \
+    if (result == rERROR)                                                      \
+      FAIL;                                                                    \
+    blocked |= result == rBLOCKED;                                             \
+  }                                                                            \
+  Type $name##_type = ($node)->type;                                           \
+  UNUSED($name##_type)
 
 // Analyze a node, returning on error or block.
 #define ANALYZE($node, $name)                                                  \
@@ -62,7 +52,7 @@ char *ssprintf(const char *fmt, ...) {
   ANALYZE($node, $name##_type);                                                \
   EXPECT(($name##_type_type.kind == tyTYPE), $node,                            \
          ssprintf("not a type: %s", type_name($name##_type_type.kind)));       \
-  Type $name##_type = evaluate_expr($node).type;
+  Type $name##_type = evaluate_expr($node, 0).type;
 
 #define ANALYZE_ARRAY($array)                                                  \
   {                                                                            \
@@ -113,15 +103,14 @@ typedef enum {
 #define ANALYZER_SIGNATURE($name)                                              \
   Result analyze_##$name(Allocator *allocator, Node *node, Table *table,       \
                          StructList *struct_list, Type return_type,            \
-                         Type *out_type, AnalyzeErrorArray *error_data,        \
-                         bool is_static, Flags *flags)
+                         AnalyzeErrorArray *error_data, bool is_static,        \
+                         Flags *flags)
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
     __auto_type $name = &node->$name;                                          \
     bool blocked = false;                                                      \
     __VA_ARGS__;                                                               \
-    UNUSED(out_type);                                                          \
     UNUSED(table);                                                             \
     UNUSED(struct_list);                                                       \
     UNUSED(return_type);                                                       \
@@ -146,15 +135,15 @@ ANALYZER(name, {
   name->value_ptr = &symbol_data->value;
   if (symbol_data->type.kind == tyUNKNOWN)
     BLOCK;
-  *out_type = symbol_data->type;
-  out_type->is_bound = true;
+  node->type = symbol_data->type;
+  node->type.is_bound = true;
   OK;
 });
 
 ANALYZER(integer, {
   EXPECT((sscanf(integer->text, "%zd", &integer->value) == 1), node,
          strdup("integer is too large"));
-  *out_type = PRIM_TYPE(tyINT);
+  node->type = PRIM_TYPE(tyINT);
   OK;
 });
 
@@ -163,7 +152,7 @@ ANALYZER(boolean, {
     boolean->value = true;
   else
     boolean->value = false;
-  *out_type = PRIM_TYPE(tyBOOL);
+  node->type = PRIM_TYPE(tyBOOL);
   OK;
 });
 
@@ -194,7 +183,7 @@ ANALYZER(string, {
     value.length++;
   }
   string->value = value;
-  *out_type = PRIM_TYPE(tySTRING);
+  node->type = PRIM_TYPE(tySTRING);
   OK;
 });
 
@@ -203,7 +192,7 @@ ANALYZER(unary, {
   if (unary->op == tMINUS) {
     EXPECT((expr_type.kind != tyINT), unary->expr,
            strdup("cannot apply unary operator `-` to non-numeric type"));
-    *out_type = expr_type;
+    node->type = expr_type;
     OK;
   }
   panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
@@ -213,7 +202,7 @@ ANALYZER(unary, {
   EXPECT((left_type.kind == $expected_type), binary->left, $type_error);       \
   EXPECT((right_type.kind == $expected_type), binary->right, $type_error);     \
   EXPECT((left_type.kind == right_type.kind), node, $equal_error);             \
-  *out_type = $out_type;                                                       \
+  node->type = $out_type;                                                      \
   OK;
 
 ANALYZER(binary, {
@@ -262,7 +251,7 @@ ANALYZER(function_call, {
 
   __auto_type function = function_type.function;
   if (function._return != NULL) {
-    *out_type = *function._return;
+    node->type = *function._return;
   }
   TypeArray param_types = function.params;
 
@@ -290,7 +279,7 @@ ANALYZER(param, {
   }
   ANALYZE_TYPE(param->type, param);
   param->symbol_data->type = param_type;
-  *out_type = param_type;
+  node->type = param_type;
   OK;
 });
 
@@ -301,31 +290,32 @@ ANALYZER(function, {
 
   function->table.parent = table;
   Table *table = &function->table;
+  Type *type = &node->type;
 
-  if (out_type->kind == tyUNKNOWN) {
-    out_type->is_constant = true;
-    if (out_type->function.params.data == NULL) {
-      out_type->function.params = (TypeArray){
+  if (type->kind == tyUNKNOWN) {
+    type->is_constant = true;
+    if (type->function.params.data == NULL) {
+      type->function.params = (TypeArray){
           .data = ra_calloc(allocator, sizeof(Type) * function->params.length),
           .length = function->params.length};
     }
     ITER_ARRAY(function->params, param_node, {
       ANALYZE(param_node, param);
-      out_type->function.params.data[i] = param_type;
+      type->function.params.data[i] = param_type;
     });
-    out_type->function._return = ra_calloc(allocator, sizeof(Type));
+    type->function._return = ra_calloc(allocator, sizeof(Type));
     if (function->return_type != NULL) {
       ANALYZE_TYPE(function->return_type, return);
-      *out_type->function._return = return_type;
+      *type->function._return = return_type;
     } else {
-      *out_type->function._return = PRIM_TYPE(tyVOID);
+      *type->function._return = PRIM_TYPE(tyVOID);
     }
     // Set the type to tyFUNCTION from tyUNKNOWN,
     // indicating that the type has been determined.
-    out_type->kind = tyFUNCTION;
+    type->kind = tyFUNCTION;
   }
   bool is_static = false;
-  Type return_type = *out_type->function._return;
+  Type return_type = *type->function._return;
   ANALYZE_ARRAY(function->stmts);
   OK;
 });
@@ -338,7 +328,7 @@ ANALYZER(if_stmt, {
   if_stmt->table.parent = table;
   Table *table = &if_stmt->table;
   ANALYZE_ARRAY(if_stmt->then_stmts);
-  ANALYZE_ARRAY(if_stmt->else_stmts);  
+  ANALYZE_ARRAY(if_stmt->else_stmts);
   OK;
 });
 
@@ -407,7 +397,7 @@ ANALYZER(field, {
   }
   ANALYZE_TYPE(field->type, field);
   field->symbol_data->type = field_type;
-  *out_type = field_type;
+  node->type = field_type;
   OK;
 });
 
@@ -417,7 +407,7 @@ ANALYZER(_struct, {
   EXPECT(is_static, node, strdup("structs can only be defined as constants"));
 
   _struct->id = add_struct(allocator, struct_list);
-  *out_type =
+  node->type =
       (Type){.kind = tySTRUCT, .is_constant = true, ._struct = _struct->id};
   StructInfo *info = &struct_list->data[_struct->id];
 
@@ -450,14 +440,19 @@ ANALYZER(decl, {
     decl->symbol_data->is_static = is_static;
   }
   assert(decl->symbol_data != NULL);
-  Type *expr_type = &decl->symbol_data->type;
-  ANALYZE_TO_TYPE(decl->expr, expr_type);
+
+  TRY_ANALYZE(decl->expr, expr);
+  // function type can be determined despite blocking
+  decl->symbol_data->type = expr_type;
+  if (blocked)
+    BLOCK;
+
   if (name_eq_string(decl->name->name.name, "main")) {
-    EXPECT(type_eq(*expr_type, MAIN_FUNCTION_TYPE), decl->name,
+    EXPECT(type_eq(expr_type, MAIN_FUNCTION_TYPE), decl->name,
            ssprintf("invalid `main` function type, expected `() -> void`"));
   }
   if (is_static) {
-    decl->symbol_data->value = evaluate_expr(decl->expr);
+    decl->symbol_data->value = evaluate_expr(decl->expr, 0);
   }
   OK;
 });
@@ -528,9 +523,8 @@ bool analyze(AST *ast, AnalyzeErrorArray *error_data) {
     eprintf("INFO: analysis iteration: %zu\n", i);
     // TODO: make sure the symbol tables (also allocated using random_allocator)
     // are freed, but the symbol data is not
-    result =
-        analyze_node(&ast->random_allocator, ast->head, &table, &struct_list,
-                     (Type){0}, NULL, error_data, true, &flags);
+    result = analyze_node(&ast->random_allocator, ast->head, &table,
+                          &struct_list, (Type){0}, error_data, true, &flags);
     if (result != rBLOCKED)
       break;
     flags = (flags & ANYTHING_CHANGED) != 0 ? ERROR_ON_BLOCK : 0;

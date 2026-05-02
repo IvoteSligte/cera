@@ -149,9 +149,10 @@ typedef struct {
 typedef struct ASTNode {
   Span span;
   bool is_analyzed;
+  Type type;
 #ifdef DEBUG_EVALUATOR
   const char* source;
-#endif  
+#endif
   ASTNodeKind kind;
   union {
     struct {
