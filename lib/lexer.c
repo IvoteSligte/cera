@@ -156,6 +156,7 @@ int token_precedence(TokenKind kind) {
   case tGT:
   case tLT_EQ:
   case tGT_EQ:
+  case tEQ_EQ:    
     return 2;
   case tPLUS:
   case tMINUS:

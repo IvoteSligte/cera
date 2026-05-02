@@ -97,6 +97,8 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
     PCASE(string, {});
     PCASE(unary, { VISIT(unary->expr); });
     PCASE(binary, {
+      assert(binary->left != node);
+      assert(binary->right != node);      
       VISIT(binary->left);
       VISIT(binary->right);
     });

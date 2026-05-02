@@ -313,24 +313,40 @@ PARSER(unary, {
   RETURN(unary, {.op = op, .expr = expr});
 });
 
+// Binary operators are initially always parsed right-associatively
+// as `a * [b + [c == d]]`, regardless of the true operator precedence
+// and associativity.
+// This function fixes the tree structure to account for precedence.
+// All operators are assumed to be left-associative.
+// Note that this function is already called on the right-hand binary
+// expression, so the actual input would be `a * [[b + c] == d]`.
+// This is first mapped to `[a * [b + c]] == d` and then a recursive call
+// maps it to the desired `[[a * b] + c] == d`.
 void fix_precedence(Node *node) {
   assert(node->kind == aBINARY);
   __auto_type binary = &node->binary;
   assert(binary->left->kind != aBINARY);
 
-  if (binary->right->kind == aBINARY) {
-    __auto_type right = &binary->right->binary;
-
-    if (!right->has_parens &&
-        token_precedence(right->op) < token_precedence(binary->op)) {
-      Node *binary_right = binary->right;
-      // performs a left-rotation on the tree
-      // NOTE: this does not preserve order of nodes
-      binary->right = right->left;
-      right->left = node;
-      SWAP(node, binary_right);
-    }
+  if (binary->right->kind != aBINARY) {
+    return;
   }
+  __auto_type right = &binary->right->binary;
+  if (right->has_parens ||
+      token_precedence(right->op) > token_precedence(binary->op)) {
+    return;
+  }
+  // Rewrites `a * [b + c]` -> `[a * b] + c`
+  Node *children[3] = {binary->left, right->left, right->right};
+  Node *new_left = binary->right;
+  SWAP(&binary->op, &right->op);
+  {
+    binary->left = new_left;
+    new_left->binary.left = children[0];
+    new_left->binary.right = children[1];
+  }
+  binary->right = children[2];
+
+  fix_precedence(binary->left);
 }
 
 PARSER(binary, {
