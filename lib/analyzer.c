@@ -20,22 +20,37 @@ char *ssprintf(const char *fmt, ...) {
   return out;
 }
 
+typedef enum {
+  ANYTHING_CHANGED = 1 << 0,
+  BLOCKED = 1 << 1,
+  ERROR_ON_BLOCK = 1 << 2,
+} Flags;
+
+typedef struct {
+  Allocator *allocator;
+  AnalyzeErrorArray *error_data;
+  StructList struct_list;
+  bool anything_changed;
+  bool error_on_block;
+} State;
+
+#define ALLOC($size) ra_calloc(state->allocator, $size)
+
 #define NAME_OF($decl)                                                         \
   assert(($decl)->name->kind == aNAME);                                        \
   Name name = ($decl)->name->name.name;
 
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
-    return analyze_##$name(allocator, node, table, struct_list, return_type,   \
-                           local_count, error_data, is_static, flags);         \
+    return analyze_##$name(state, node, table, return_type, local_count,       \
+                           is_static);                                         \
   })
 
 // Analyze a node, only returning on error.
 #define TRY_ANALYZE($node, $name)                                              \
   {                                                                            \
-    Result result =                                                            \
-        analyze_node(allocator, $node, table, struct_list, return_type,        \
-                     local_count, error_data, is_static, flags);               \
+    Result result = analyze_node(state, $node, table, return_type,             \
+                                 local_count, is_static);                      \
     if (result == rERROR)                                                      \
       FAIL;                                                                    \
     blocked |= result == rBLOCKED;                                             \
@@ -72,7 +87,7 @@ void add_error(AnalyzeErrorArray *error_data, Span span, char *message) {
 
 #define EXPECT(condition, node, $message)                                      \
   if (!(condition)) {                                                          \
-    add_error(error_data, node->span, $message);                               \
+    add_error(state->error_data, node->span, $message);                        \
     return rERROR;                                                             \
   }
 
@@ -82,18 +97,12 @@ typedef enum {
   rOK,
 } Result;
 
-typedef enum {
-  ANYTHING_CHANGED = 1 << 0,
-  BLOCKED = 1 << 1,
-  ERROR_ON_BLOCK = 1 << 2,
-} Flags;
-
 #define OK                                                                     \
   {                                                                            \
     if (blocked)                                                               \
       BLOCK;                                                                   \
     node->is_analyzed = true;                                                  \
-    *flags |= ANYTHING_CHANGED;                                                \
+    state->anything_changed = true;                                            \
     return rOK;                                                                \
   }
 #define FAIL return rERROR
@@ -102,10 +111,9 @@ typedef enum {
 #define IS_GLOBAL (table->parent == NULL)
 
 #define ANALYZER_SIGNATURE($name)                                              \
-  Result analyze_##$name(Allocator *allocator, Node *node, Table *table,       \
-                         StructList *struct_list, Type return_type,            \
-                         size_t *local_count, AnalyzeErrorArray *error_data,   \
-                         bool is_static, Flags *flags)
+  Result analyze_##$name(State *state, Node *node, Table *table,               \
+                         Type return_type, size_t *local_count,                \
+                         bool is_static)
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
@@ -113,11 +121,9 @@ typedef enum {
     bool blocked = false;                                                      \
     __VA_ARGS__;                                                               \
     UNUSED(table);                                                             \
-    UNUSED(struct_list);                                                       \
+    UNUSED(state);                                                             \
     UNUSED(return_type);                                                       \
-    UNUSED(error_data);                                                        \
     UNUSED(is_static);                                                         \
-    UNUSED(allocator);                                                         \
     UNUSED(blocked);                                                           \
     UNUSED(local_count);                                                       \
   }
@@ -129,7 +135,7 @@ ANALYZER(name, {
   if (!get_symbol(table, name->name, &symbol)) {
     eprintf("INFO: compilation blocked by undefined symbol `%.*s` \n",
             (int)name->name.length, name->name.text);
-    EXPECT(((*flags & ERROR_ON_BLOCK) == 0), node, strdup("undefined symbol"));
+    EXPECT(!state->error_on_block, node, strdup("undefined symbol"));
     BLOCK;
   }
   EXPECT((!is_static || symbol.is_static), node,
@@ -166,7 +172,7 @@ ANALYZER(boolean, {
 
 ANALYZER(string, {
   UNUSED(string);
-  String value = {.text = ra_calloc(allocator, string->length)};
+  String value = {.text = ALLOC(string->length)};
   for (size_t i = 0; i < string->length; i++) {
     char c = string->text[i];
     if (c == '\\') {
@@ -282,8 +288,8 @@ ANALYZER(function_call, {
 ANALYZER(param, {
   NAME_OF(param);
   if (!param->symbol_added) {
-    EXPECT(add_symbol(allocator, table, name, node, false, *local_count), node,
-           strdup("duplicate parameter name"));
+    EXPECT(add_symbol(state->allocator, table, name, node, false, *local_count),
+           node, strdup("duplicate parameter name"));
     *local_count += 1;
     param->symbol_added = true;
   }
@@ -305,15 +311,15 @@ ANALYZER(function, {
   if (type->kind == tyUNKNOWN) {
     type->is_constant = true;
     if (type->function.params.data == NULL) {
-      type->function.params = (TypeArray){
-          .data = ra_calloc(allocator, sizeof(Type) * function->params.length),
-          .length = function->params.length};
+      type->function.params =
+          (TypeArray){.data = ALLOC(sizeof(Type) * function->params.length),
+                      .length = function->params.length};
     }
     ITER_ARRAY(function->params, param_node, {
       ANALYZE(param_node, param);
       type->function.params.data[i] = param_type;
     });
-    type->function._return = ra_calloc(allocator, sizeof(Type));
+    type->function._return = ALLOC(sizeof(Type));
     if (function->return_type != NULL) {
       ANALYZE_TYPE(function->return_type, return);
       *type->function._return = return_type;
@@ -410,15 +416,14 @@ ANALYZER(_struct, {
          strdup("structs can only be defined in the global scope"));
   EXPECT(is_static, node, strdup("structs can only be defined as constants"));
 
-  _struct->id = add_struct(allocator, struct_list);
+  _struct->id = add_struct(state->allocator, &state->struct_list);
   node->type =
       (Type){.kind = tySTRUCT, .is_constant = true, ._struct = _struct->id};
-  StructInfo *info = &struct_list->data[_struct->id];
+  StructInfo *info = &state->struct_list.data[_struct->id];
 
   if (info->fields.data == NULL) {
     info->fields = (FieldInfoArray){
-        .data =
-            ra_calloc(allocator, sizeof(FieldInfo) * _struct->fields.length),
+        .data = ALLOC(sizeof(FieldInfo) * _struct->fields.length),
         .length = _struct->fields.length};
   }
   ITER_ARRAY(_struct->fields, field_node, {
@@ -440,8 +445,9 @@ ANALYZER(decl, {
 
   if (!decl->symbol_added) {
     size_t local_index = *local_count;
-    EXPECT(add_symbol(allocator, table, name, node, is_static, local_index),
-           decl->name, strdup("duplicate declaration"));
+    EXPECT(
+        add_symbol(state->allocator, table, name, node, is_static, local_index),
+        decl->name, strdup("duplicate declaration"));
     *local_count += 1;
     decl->symbol_added = true;
     decl->local_index = local_index;
@@ -521,20 +527,20 @@ void free_analyze_errors(AnalyzeErrorArray *type_errors) {
 
 bool analyze(AST *ast, AnalyzeErrorArray *error_data) {
   Table table = {0};
-  StructList struct_list = {0};
   size_t global_count = 0;
-  Flags flags = 0;
+  State state = {.allocator = &ast->random_allocator, .error_data = error_data};
   Result result = rBLOCKED;
   for (size_t i = 0;; i++) {
     eprintf("INFO: analysis iteration: %zu\n", i);
     // TODO: make sure the symbol tables (also allocated using random_allocator)
     // are freed, but the symbol data is not
     result =
-        analyze_node(&ast->random_allocator, ast->head, &table, &struct_list,
-                     (Type){0}, &global_count, error_data, true, &flags);
+        analyze_node(&state, ast->head, &table, (Type){0}, &global_count, true);
     if (result != rBLOCKED)
       break;
-    flags = (flags & ANYTHING_CHANGED) != 0 ? ERROR_ON_BLOCK : 0;
+
+    state.error_on_block = state.anything_changed;
+    state.anything_changed = false;
   }
   return result;
 }
