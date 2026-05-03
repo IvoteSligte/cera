@@ -12,6 +12,12 @@ typedef ListAllocator Allocator;
 typedef ASTNode Node;
 typedef ASTNodeArray NodeArray;
 
+typedef struct {
+  Allocator *allocator;
+  TokenStream stream;
+  ParseError *error_data;
+} State;
+
 Node *yield(Allocator *allocator, Node node) {
   Node *dest = la_calloc(allocator, sizeof(Node));
   *dest = node;
@@ -38,7 +44,7 @@ void error_data_add(ParseError *data, size_t token_index,
   data->num_expected += 1;
 }
 
-#define _ERROR_DATA_ADD_1(a) error_data_add(error_data, *token_index, a);
+#define _ERROR_DATA_ADD_1(a) error_data_add(state->error_data, *token_index, a);
 #define _ERROR_DATA_ADD_2(a, ...)                                              \
   _ERROR_DATA_ADD_1(a) _ERROR_DATA_ADD_1(__VA_ARGS__)
 #define _ERROR_DATA_ADD_3(a, ...)                                              \
@@ -69,7 +75,7 @@ void error_data_add(ParseError *data, size_t token_index,
 
 #define YIELD($kind, ...)                                                      \
   *out =                                                                       \
-      yield(allocator,                                                         \
+      yield(state->allocator,                                                         \
             (Node){.span = span, .kind = NODE_##$kind, .$kind = __VA_ARGS__});
 
 #define RETURN($kind, ...)                                                     \
@@ -108,15 +114,13 @@ int log_indent = 0;
 #define BEGIN_LOG(name)
 #endif
 
-#define GENERAL_PARAMS                                                         \
-  Allocator *allocator, TokenStream stream, size_t *token_index,               \
-      ParseError *error_data
-#define PARSER_PROTOTYPE($name) bool parse_##$name(GENERAL_PARAMS, Node **out)
+#define PARSER_SIGNATURE($name)                                                \
+  bool parse_##$name(State *state, size_t *token_index, Node **out)
 
 #define BEGIN($name)                                                           \
   BEGIN_LOG($name);                                                            \
   size_t start_token_index = *token_index;                                     \
-  size_t start_allocator_length = allocator->length;                           \
+  size_t start_allocator_length = state->allocator->length;                           \
   Token token = PEEK;                                                          \
   Span span = (Span){.offset = token.offset, .length = 0};                     \
   UNUSED(span);                                                                \
@@ -132,13 +136,13 @@ int log_indent = 0;
 #define FAIL                                                                   \
   {                                                                            \
     *token_index = start_token_index;                                          \
-    la_shrink(allocator, start_allocator_length);                              \
+    la_shrink(state->allocator, start_allocator_length);                              \
     LOG_EXIT("FAIL");                                                          \
     return false;                                                              \
   }
 
 #define PARSER($name, ...)                                                     \
-  PARSER_PROTOTYPE($name) {                                                    \
+  PARSER_SIGNATURE($name) {                                                    \
     BEGIN(name);                                                               \
     __VA_ARGS__;                                                               \
   }
@@ -155,7 +159,7 @@ int log_indent = 0;
     EXTEND_SPAN(token);                                                        \
   }
 
-#define PEEK get_token(stream, *token_index)
+#define PEEK get_token(state->stream, *token_index)
 
 #define UNEXPECTED($expected...)                                               \
   {                                                                            \
@@ -183,7 +187,7 @@ int log_indent = 0;
   TokenKind op = token.kind;
 
 #define PARSE($name, $node_ptr)                                                \
-  parse_##$name(allocator, stream, token_index, error_data, $node_ptr)
+  parse_##$name(state, token_index, $node_ptr)
 
 // Try to parse and return on failure.
 #define MUST_PARSE($name, $node)                                               \
@@ -207,7 +211,7 @@ int log_indent = 0;
     Node *node = NULL;                                                         \
     while (PARSE($element, &node)) {                                           \
       assert(node != NULL);                                                    \
-      $nodes.data = la_realloc(allocator, $nodes.data,                         \
+      $nodes.data = la_realloc(state->allocator, $nodes.data,                         \
                                sizeof(ASTNode *) * ($nodes.length + 1));       \
       $nodes.data[$nodes.length] = node;                                       \
       $nodes.length++;                                                         \
@@ -221,7 +225,7 @@ int log_indent = 0;
   {                                                                            \
     Node *node = NULL;                                                         \
     while (PARSE($element, &node)) {                                           \
-      $nodes.data = la_realloc(allocator, $nodes.data,                         \
+      $nodes.data = la_realloc(state->allocator, $nodes.data,                         \
                                sizeof(ASTNode *) * ($nodes.length + 1));       \
       $nodes.data[$nodes.length] = node;                                       \
       $nodes.length++;                                                         \
@@ -232,10 +236,11 @@ int log_indent = 0;
     }                                                                          \
   }
 
-PARSER_PROTOTYPE(expr);
-PARSER_PROTOTYPE(stmt);
+PARSER_SIGNATURE(expr);
+PARSER_SIGNATURE(stmt);
 
-bool parse_block(GENERAL_PARAMS, Span *out_span, NodeArray *out_stmts) {
+bool parse_block(State *state, size_t *token_index, Span *out_span,
+                 NodeArray *out_stmts) {
   BEGIN(block);
   EXPECT(tLBRACE);
 
@@ -251,7 +256,7 @@ bool parse_block(GENERAL_PARAMS, Span *out_span, NodeArray *out_stmts) {
   NodeArray $name##_stmts = {0};                                               \
   {                                                                            \
     Span block_span = {0};                                                     \
-    if (!parse_block(allocator, stream, token_index, error_data, &block_span,  \
+    if (!parse_block(state, token_index, &block_span,  \
                      &$name##_stmts))                                          \
       FAIL;                                                                    \
     EXTEND_SPAN(block_span);                                                   \
@@ -361,7 +366,7 @@ PARSER(binary, {
   MUST_PARSE(expr, right);
 
   YIELD(binary, {.op = op, .has_parens = false, .left = left, .right = right});
-  fix_precedence(allocator->data[allocator->length - 1]);
+  fix_precedence(*out);
   OK;
 });
 
@@ -400,7 +405,7 @@ PARSER(expr_stmt, {
   OK;
 });
 
-PARSER_PROTOTYPE(decl);
+PARSER_SIGNATURE(decl);
 
 PARSER(assign, {
   MUST_PARSE(name, name);
@@ -537,9 +542,11 @@ bool parse_token_stream(TokenStream stream, AST *out_ast,
                         ParseError *error_data) {
   *out_ast = (AST){0};
   *error_data = (ParseError){0};
+  State state = {.allocator = &out_ast->list_allocator,
+                 .stream = stream,
+                 .error_data = error_data};
   size_t token_index = 0;
-  bool result = parse_module(&out_ast->list_allocator, stream, &token_index,
-                             error_data, &out_ast->head);
+  bool result = parse_module(&state, &token_index, &out_ast->head);
   if (token_index < stream.length) {
     return false;
   }
