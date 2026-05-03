@@ -24,7 +24,9 @@ PRIM_SYMBOL(string, STRING);
 static ASTNode PRINT_STRING_NODE = {
     .type = {.kind = tyFUNCTION,
              .is_constant = true,
-             .function = {.params = {.data = &STRING_NODE.decl.static_value.type, .length = 1},
+             .function = {.params = {.data =
+                                         &STRING_NODE.decl.static_value.type,
+                                     .length = 1},
                           ._return = &VOID_NODE.decl.static_value.type}},
     .kind = aDECL,
     .decl = {.is_constant = 1, .static_value = {.builtin_id = PRINT_STRING}}};
@@ -38,8 +40,6 @@ static Symbol PRINT_STRING_SYMBOL = {
     return true;                                                               \
   }
 
-// NOTE: this currently prevents naming shadowing builtins, even as local
-// variables
 bool get_builtin(Name name, Symbol *out) {
   MATCH(VOID);
   MATCH(INT);
@@ -52,9 +52,11 @@ bool get_builtin(Name name, Symbol *out) {
 // Adds a symbol to the table, returning false if NAME was already in the table.
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
                 ASTNode *node, bool is_static, size_t local_index) {
-  Symbol builtin;
-  if (get_builtin(name, &builtin)) {
-    return false;
+  if (table->parent == NULL) {
+    Symbol builtin;
+    if (get_builtin(name, &builtin)) {
+      return false;
+    }
   }
   for (size_t i = 0; i < table->length; i++) {
     Symbol symbol = table->data[i];
@@ -73,7 +75,7 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
 }
 
 bool get_symbol(SymbolTable *table, Name name, Symbol *out) {
-  if (get_builtin(name, out)) {
+  if (table->parent == NULL && get_builtin(name, out)) {
     return true;
   }
   for (size_t i = 0; i < table->length; i++) {
