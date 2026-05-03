@@ -75,7 +75,7 @@ void error_data_add(ParseError *data, size_t token_index,
 
 #define YIELD($kind, ...)                                                      \
   *out =                                                                       \
-      yield(state->allocator,                                                         \
+      yield(state->allocator,                                                  \
             (Node){.span = span, .kind = NODE_##$kind, .$kind = __VA_ARGS__});
 
 #define RETURN($kind, ...)                                                     \
@@ -120,7 +120,7 @@ int log_indent = 0;
 #define BEGIN($name)                                                           \
   BEGIN_LOG($name);                                                            \
   size_t start_token_index = *token_index;                                     \
-  size_t start_allocator_length = state->allocator->length;                           \
+  size_t start_allocator_length = state->allocator->length;                    \
   Token token = PEEK;                                                          \
   Span span = (Span){.offset = token.offset, .length = 0};                     \
   UNUSED(span);                                                                \
@@ -136,7 +136,7 @@ int log_indent = 0;
 #define FAIL                                                                   \
   {                                                                            \
     *token_index = start_token_index;                                          \
-    la_shrink(state->allocator, start_allocator_length);                              \
+    la_shrink(state->allocator, start_allocator_length);                       \
     LOG_EXIT("FAIL");                                                          \
     return false;                                                              \
   }
@@ -186,8 +186,7 @@ int log_indent = 0;
   TRY_TOKEN($on_fail, $ops);                                                   \
   TokenKind op = token.kind;
 
-#define PARSE($name, $node_ptr)                                                \
-  parse_##$name(state, token_index, $node_ptr)
+#define PARSE($name, $node_ptr) parse_##$name(state, token_index, $node_ptr)
 
 // Try to parse and return on failure.
 #define MUST_PARSE($name, $node)                                               \
@@ -211,7 +210,7 @@ int log_indent = 0;
     Node *node = NULL;                                                         \
     while (PARSE($element, &node)) {                                           \
       assert(node != NULL);                                                    \
-      $nodes.data = la_realloc(state->allocator, $nodes.data,                         \
+      $nodes.data = la_realloc(state->allocator, $nodes.data,                  \
                                sizeof(ASTNode *) * ($nodes.length + 1));       \
       $nodes.data[$nodes.length] = node;                                       \
       $nodes.length++;                                                         \
@@ -225,7 +224,7 @@ int log_indent = 0;
   {                                                                            \
     Node *node = NULL;                                                         \
     while (PARSE($element, &node)) {                                           \
-      $nodes.data = la_realloc(state->allocator, $nodes.data,                         \
+      $nodes.data = la_realloc(state->allocator, $nodes.data,                  \
                                sizeof(ASTNode *) * ($nodes.length + 1));       \
       $nodes.data[$nodes.length] = node;                                       \
       $nodes.length++;                                                         \
@@ -256,8 +255,7 @@ bool parse_block(State *state, size_t *token_index, Span *out_span,
   NodeArray $name##_stmts = {0};                                               \
   {                                                                            \
     Span block_span = {0};                                                     \
-    if (!parse_block(state, token_index, &block_span,  \
-                     &$name##_stmts))                                          \
+    if (!parse_block(state, token_index, &block_span, &$name##_stmts))         \
       FAIL;                                                                    \
     EXTEND_SPAN(block_span);                                                   \
   }
@@ -409,8 +407,7 @@ PARSER_SIGNATURE(decl);
 
 PARSER(assign, {
   MUST_PARSE(name, name);
-  EXPECT_OP(tEQ, tPLUS_EQ, tMINUS_EQ, tSTAR_EQ,
-            tSLASH_EQ); // TODO: handle tPLUS_EQ (and co.) operators
+  EXPECT_OP(tEQ, tPLUS_EQ, tMINUS_EQ, tSTAR_EQ, tSLASH_EQ);
   MUST_PARSE(expr_stmt, expr);
   RETURN(assign, {.op = op, .target = name, .expr = expr});
 });

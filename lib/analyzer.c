@@ -533,7 +533,7 @@ bool analyze(AST *ast, AnalyzeErrorArray *error_data) {
   for (size_t i = 0;; i++) {
     eprintf("INFO: analysis iteration: %zu\n", i);
     // TODO: make sure the symbol tables (also allocated using random_allocator)
-    // are freed, but the symbol data is not
+    // are freed, but the static values are not
     result =
         analyze_node(&state, ast->head, &table, (Type){0}, &global_count, true);
     if (result != rBLOCKED)
