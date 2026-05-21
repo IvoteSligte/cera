@@ -9,6 +9,8 @@
 #include <stdarg.h>
 #include <string.h>
 
+// TODO: more efficient local_index allocation
+
 // Creates a string like sprintf, but panics on failure.
 char *ssprintf(const char *fmt, ...) {
   va_list args;
@@ -64,10 +66,15 @@ typedef struct {
     BLOCK;
 
 #define ANALYZE_TYPE($node, $name)                                             \
-  ANALYZE($node, $name##_type);                                                \
-  EXPECT(($name##_type_type.kind == tyTYPE), $node,                            \
-         ssprintf("not a type: %s", type_name($name##_type_type.kind)));       \
-  Type $name##_type = evaluate_expr($node, 0, NULL).type;
+  Type $name##_type = {0};                                                     \
+  {                                                                            \
+    ANALYZE($node, $name##_type);                                              \
+    EXPECT(($name##_type_type.kind == tyTYPE), $node,                          \
+           ssprintf("not a type: %s", type_name($name##_type_type.kind)));     \
+    Value $name##_value = {0};                                                 \
+    evaluate_expr($node, 0, &$name##_value, &$name##_value);                   \
+    $name##_type = $name##_value.type;                                         \
+  }
 
 #define ANALYZE_ARRAY($array)                                                  \
   {                                                                            \
@@ -130,25 +137,19 @@ typedef enum {
 ANALYZER_SIGNATURE(node);
 
 ANALYZER(name, {
-  Symbol symbol = {0};
+  SymbolData symbol = {0};
   if (!get_symbol(table, name->name, &symbol)) {
     eprintf("INFO: compilation blocked by undefined symbol `%.*s` \n",
             (int)name->name.length, name->name.text);
     EXPECT(!state->error_on_block, node, strdup("undefined symbol"));
     BLOCK;
   }
-  EXPECT((!is_static || symbol.is_static), node,
+  EXPECT((!is_static || symbol.value.kind != symDYNAMIC), node,
          strdup("static declaration refers to runtime variable"));
-  name->is_static = symbol.is_static;
-  if (symbol.is_static) {
-    assert(symbol.node->kind == aDECL);
-    name->static_value_ptr = &symbol.node->decl.static_value;
-  } else {
-    name->local_index = symbol.stack_offset; // FIXME: fix local indices
-  }
-  if (symbol.node->type.kind == tyUNKNOWN)
+  name->value = symbol.value;
+  if (symbol.type.kind == tyUNKNOWN)
     BLOCK;
-  node->type = symbol.node->type;
+  node->type = symbol.type;
   node->type.is_bound = true;
   OK;
 });
@@ -170,7 +171,6 @@ ANALYZER(boolean, {
 });
 
 ANALYZER(string, {
-  UNUSED(string);
   String value = {.text = ALLOC(string->length)};
   for (size_t i = 0; i < string->length; i++) {
     char c = string->text[i];
@@ -290,11 +290,13 @@ ANALYZER(field_inst, {
   OK;
 });
 
-Type get_type_value(ASTNode *type_node) {
-  assert(type_node->kind == aNAME);
-  assert(type_node->type.kind != tyTYPE);
-  assert(type_node->name.static_value_ptr != NULL);
-  return type_node->name.static_value_ptr->type;
+Type get_type_value(ASTNode *node) {
+  assert(node->kind == aNAME);
+  assert(node->type.kind != tyTYPE);
+  assert(node->name.value.kind != symDYNAMIC);
+  return node->name.value.kind == symBUILTIN
+             ? node->name.value.builtin.type
+             : node->name.value.static_ptr->type;
 }
 
 ANALYZER(struct_inst, {
@@ -309,9 +311,6 @@ ANALYZER(struct_inst, {
 
   bool used[_struct->fields.length];
   memset(used, 0, sizeof(used));
-
-  struct_inst->local_index = *frame_length;
-  *frame_length += _struct->flat_length;
 
   ITER_ARRAY(struct_inst->fields, field_inst_node, {
     __auto_type field_inst = &field_inst_node->field_inst;
@@ -341,14 +340,14 @@ ANALYZER(struct_inst, {
 ANALYZER(param, {
   NAME_OF(param);
   if (!param->symbol_added) {
-    EXPECT(
-        add_symbol(state->allocator, table, name, node, false, *frame_length),
-        node, strdup("duplicate parameter name"));
-    *frame_length += 1;
+    EXPECT(add_symbol(state->allocator, table, name, node), node,
+           strdup("duplicate parameter name"));
     param->symbol_added = true;
   }
   ANALYZE_TYPE(param->type, param);
   node->type = param_type;
+  param->local_index = *frame_length;
+  *frame_length += flat_length(node->type);
   OK;
 });
 
@@ -465,17 +464,6 @@ ANALYZER(field, {
   OK;
 });
 
-size_t flat_length(Type type) {
-  assert(type.kind != tyUNKNOWN);
-  if (type.kind == tySTRUCT) {
-    return type._struct->_struct.flat_length;
-  } else if (type.kind == tyVOID) {
-    return 0;
-  } else {
-    return 1;
-  }
-}
-
 ANALYZER(_struct, {
   EXPECT(IS_GLOBAL, node,
          strdup("structs can only be defined in the global scope"));
@@ -501,26 +489,26 @@ ANALYZER(decl, {
   bool is_static = IS_GLOBAL || decl->is_constant;
 
   if (!decl->symbol_added) {
-    size_t local_index = *frame_length;
-    EXPECT(
-        add_symbol(state->allocator, table, name, node, is_static, local_index),
-        decl->name, strdup("duplicate declaration"));
-    *frame_length += 1;
+    EXPECT(add_symbol(state->allocator, table, name, node), decl->name,
+           strdup("duplicate declaration"));
     decl->symbol_added = true;
-    decl->local_index = local_index;
   }
   TRY_ANALYZE(decl->expr, expr);
   // function type can be determined despite blocking
   node->type = expr_type;
   if (blocked)
     BLOCK;
+  decl->local_index = *frame_length;
+  size_t value_length = flat_length(node->type);
+  *frame_length += value_length;
 
   if (name_eq_string(decl->name->name.name, "main")) {
     EXPECT(type_eq(expr_type, MAIN_FUNCTION_TYPE), decl->name,
            ssprintf("invalid `main` function type, expected `() -> void`"));
   }
   if (is_static) {
-    decl->static_value = evaluate_expr(decl->expr, 0, NULL);
+    decl->static_value_ptr = ALLOC(sizeof(Value) * value_length);
+    evaluate_expr(decl->expr, 0, NULL, decl->static_value_ptr);
   }
   OK;
 });

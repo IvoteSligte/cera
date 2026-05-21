@@ -89,20 +89,14 @@ typedef struct Type {
 } Type;
 
 typedef struct {
-  // owned string, not zero-delimited
+  // Owned string, not zero-delimited.
   char *text;
   size_t length;
 } String;
 
-// Currently always pointer-sized so alignment is not an issue
+// Currently always pointer-sized so alignment is not an issue.
 typedef ssize_t Bool;
 typedef ssize_t Int;
-
-typedef struct {
-  // non-zero if this is a builtin function
-  BuiltinID builtin_id;
-  ASTNode *function;
-} FunctionPtr;
 
 typedef union Value Value;
 
@@ -112,18 +106,37 @@ typedef union Value {
   String string;
   Type type;
   struct {
-    // non-zero if this is a builtin function
+    // Non-zero if this is a builtin function.
     BuiltinID builtin_id;
     ASTNode *function;
   };
+  // Value of a struct definition, not instance.
+  ASTNode *_struct;
 } Value;
 
 typedef struct {
   Name name;
-  bool is_static;
-  size_t stack_offset;
   ASTNode *node;
 } Symbol;
+
+typedef struct {
+  enum {
+    symBUILTIN,
+    symSTATIC,
+    symDYNAMIC,
+  } kind;
+  union {
+    Value builtin;
+    Value *static_ptr;
+    size_t local_index;
+  };
+} SymbolValue;
+
+// Data retrieved from a symbol on query.
+typedef struct {
+  SymbolValue value;
+  Type type;
+} SymbolData;
 
 typedef struct SymbolTable SymbolTable;
 typedef struct SymbolTable {
@@ -143,11 +156,7 @@ typedef struct ASTNode {
   union {
     struct {
       Name name;
-      bool is_static;
-      union {
-        Value *static_value_ptr;
-        size_t local_index;
-      };
+      SymbolValue value;
     } name;
     struct {
       const char *text;
@@ -183,6 +192,7 @@ typedef struct ASTNode {
       ASTNode *type;
       // True if the symbol has been added to the declaration table.
       bool symbol_added;
+      size_t local_index;
     } param;
     struct {
       ASTNodeArray params;
@@ -225,7 +235,6 @@ typedef struct ASTNode {
     struct {
       ASTNode *type;
       ASTNodeArray fields;
-      size_t local_index;
     } struct_inst;
     struct {
       ASTNode *name;
@@ -241,11 +250,14 @@ typedef struct ASTNode {
       bool is_constant;
       ASTNode *name;
       ASTNode *expr;
-      // Value of the declaration if it is static.
-      Value static_value;
+      union {
+        // Value of the declaration if it is static.
+        Value *static_value_ptr;
+        // Local index of the declaration if it is dynamic.
+        size_t local_index;
+      };
       // True if the symbol has been added to the declaration table.
       bool symbol_added;
-      size_t local_index;
     } decl;
     struct {
       ASTNodeArray decls;
@@ -271,6 +283,9 @@ void ast_print_nodes(ASTNode *node);
 const char *ast_node_name(ASTNodeKind kind);
 
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
-                ASTNode *node, bool is_static, size_t local_index);
-bool get_symbol(SymbolTable *table, Name name, Symbol *out);
+                ASTNode *node);
+bool get_symbol(SymbolTable *table, Name name, SymbolData *out);
 SymbolTable get_top_table(SymbolTable table);
+
+// Number of `Value`s large a value of this type is. Flattens structs.
+size_t flat_length(Type type);

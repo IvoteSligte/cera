@@ -1,6 +1,7 @@
 
 #include "evaluator.h"
 #include "analyzer_shared.h"
+#include "ast.h"
 #include "ast_macro.h"
 
 #ifdef TEST
@@ -31,8 +32,15 @@ typedef enum {
     return control_flow;                                                       \
   }
 
+static void copy(Value *dest, Value *src, size_t length) {
+  for (size_t i = 0; i < length; i++)
+    dest[i] = src[i];
+}
+
 #define EVALUATE($node, $name)                                                 \
-  Value $name = evaluate_expr($node, recursion_depth, stack_frame);
+  Value $name[MAX(flat_length($node->type), 1)];                               \
+  memset($name, 0, sizeof($name));                                             \
+  evaluate_expr($node, recursion_depth, stack_frame, $name);
 
 #define EVALUATE_ARRAY($array)                                                 \
   ITER_ARRAY($array, element, { EVALUATE(element, element); });
@@ -60,11 +68,15 @@ ControlFlow evaluate_stmts(NodeArray stmts, size_t recursion_depth,
 Value *evaluate_target(Node *node, Value *stack_frame) {
   SWITCH(node, {
     CASE(name, {
-      if (name->is_static) {
-        return name->static_value_ptr;
-      } else {
-        return &stack_frame[name->local_index];
+      switch (name->value.kind) {
+      case symBUILTIN:
+        panicf("cannot take address of builtin");
+      case symDYNAMIC:
+        return &stack_frame[name->value.local_index];
+      case symSTATIC:
+        return name->value.static_ptr;
       }
+      panicf("unreachable");
     });
   default:
     panicf("not a target: %s", ast_node_name(node->kind));
@@ -84,7 +96,7 @@ Value *evaluate_target(Node *node, Value *stack_frame) {
 EVALUATOR(if_stmt, {
   EVALUATE(if_stmt->cond, cond_value);
   ControlFlow control = 0;
-  if (cond_value._bool) {
+  if (cond_value->_bool) {
     control = EVALUATE_STMTS(if_stmt->then_stmts);
   } else {
     control = EVALUATE_STMTS(if_stmt->else_stmts);
@@ -95,7 +107,7 @@ EVALUATOR(if_stmt, {
 EVALUATOR(while_loop, {
   while (true) {
     EVALUATE(while_loop->cond, cond_value);
-    if (!cond_value._bool)
+    if (!cond_value->_bool)
       break;
     ControlFlow control = EVALUATE_STMTS(while_loop->stmts);
     if (control == cRETURN)
@@ -108,7 +120,7 @@ EVALUATOR(for_loop, {
   EVALUATE_STMT(for_loop->init);
   while (true) {
     EVALUATE(for_loop->cond, cond_value);
-    if (!cond_value._bool)
+    if (!cond_value->_bool)
       break;
     ControlFlow control = EVALUATE_STMTS(for_loop->stmts);
     if (control == cRETURN)
@@ -118,14 +130,14 @@ EVALUATOR(for_loop, {
   RETURN(cNEXT);
 });
 
-#define BIN_ASSIGN($op) target->_int $op expr_value._int
+#define BIN_ASSIGN($op) target->_int $op expr_value->_int
 
 EVALUATOR(assign, {
   Value *target = evaluate_target(assign->target, stack_frame);
   EVALUATE(assign->expr, expr_value);
   switch (assign->op) {
   case tEQ:
-    *target = expr_value;
+    *target = *expr_value;
     break;
   case tPLUS_EQ:
     BIN_ASSIGN(+=);
@@ -147,15 +159,16 @@ EVALUATOR(assign, {
 
 EVALUATOR(return_stmt, {
   EVALUATE(return_stmt->expr, expr_value);
-  printf("returning %zd\n", expr_value._int);
-  *function_out = expr_value;
+  printf("returning %zd\n", expr_value->_int);
+  *function_out = *expr_value;
   RETURN(cRETURN);
 });
 
 EVALUATOR(decl, {
+  // FIXME: should be is_static
   if (!decl->is_constant) {
     EVALUATE(decl->expr, value);
-    stack_frame[decl->local_index] = value;
+    copy(&stack_frame[decl->local_index], value, flat_length(node->type));
   }
   RETURN(cNEXT);
 });
@@ -173,7 +186,8 @@ ControlFlow evaluate_stmt(PARAMS) {
     ECASE(return_stmt);
     ECASE(decl);
   default: {
-    evaluate_expr(node, recursion_depth, stack_frame);
+    Value value[MAX(flat_length(node->type), 1)];
+    evaluate_expr(node, recursion_depth, stack_frame, value);
     RETURN(cNEXT);
   }
   });
@@ -183,23 +197,24 @@ ControlFlow evaluate_stmt(PARAMS) {
 #undef EVALUATOR
 #undef ECASE
 
-Value evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
-                       Value *stack_frame) {
+void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
+                      Value *stack_frame, Value *out) {
   switch (id) {
   case NOT_BUILTIN:
     panicf("unreachable");
   case PRINT_STRING: {
     assert(args.length == 1);
     EVALUATE(args.data[0], arg_value);
+    String arg_string = arg_value->string;
 #ifdef TEST
-    print_string(arg_value.string.text, arg_value.string.length);
+    print_string(arg_string.text, arg_string.length);
 #else
     // Using fwrite instead of printf because printf can only print
     // non-zero-delimited strings of up to INT_MAX characters in length.
-    String arg_string = arg_value.string;
     fwrite(arg_string.text, arg_string.length, 1, stdout);
 #endif
-    return (Value){0};
+    *out = (Value){0};
+    return;
   }
   default:
     panicf("unimplemented builtin: %d", id);
@@ -207,8 +222,8 @@ Value evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
 }
 
 #define EVALUATOR($name, ...)                                                  \
-  Value evaluate_##$name(Node *node, size_t recursion_depth,                   \
-                         Value *stack_frame) {                                 \
+  void evaluate_##$name(Node *node, size_t recursion_depth,                    \
+                        Value *stack_frame, Value *out) {                      \
     LOG_ENTER;                                                                 \
     __auto_type $name = &node->$name;                                          \
     UNUSED($name);                                                             \
@@ -219,40 +234,56 @@ Value evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
 
 #define OK return
 
-#define RETURN($value...) return $value;
+#define RETURN($value...)                                                      \
+  {                                                                            \
+    copy(out, $value, flat_length(node->type));                                \
+    OK;                                                                        \
+  }
 
-#define STACK_GET($type, $offset) ($type *)(&stack_frame[$offset])
-#define STACK_INT($offset) *STACK_GET(Int, $offset)
+#define RETURN_ONE($value...)                                                  \
+  {                                                                            \
+    Value __value = $value;                                                    \
+    copy(out, &__value, flat_length(node->type));                              \
+    return;                                                                    \
+  }
 
 EVALUATOR(name, {
-  if (name->is_static) {
-    printf("static `%.*s`: %zd\n", FMT(name->name),
-           name->static_value_ptr->_int);
-    RETURN(*name->static_value_ptr);
-  } else {
-    printf("local %zu `%.*s` at %p: %zd\n", name->local_index, FMT(name->name),
-           &stack_frame[name->local_index],
-           stack_frame[name->local_index]._int);
-    RETURN(stack_frame[name->local_index]);
+  switch (name->value.kind) {
+  case symBUILTIN: {
+    printf("builtin `%.*s`: %zd\n", FMT(name->name), name->value.builtin._int);
+    RETURN(&name->value.builtin);
   }
+  case symSTATIC: {
+    printf("static `%.*s`: %zd\n", FMT(name->name),
+           name->value.static_ptr->_int);
+    RETURN(name->value.static_ptr);
+  }
+  case symDYNAMIC: {
+    size_t local_index = name->value.local_index;
+    printf("dynamic %zu `%.*s` at %p: %zd\n", local_index, FMT(name->name),
+           &stack_frame[local_index], stack_frame[local_index]._int);
+    return;
+  }
+  }
+  panicf("unreachable");
 });
 
-EVALUATOR(integer, { RETURN((Value){._int = integer->value}); });
+EVALUATOR(integer, { RETURN_ONE({._int = integer->value}); });
 
-EVALUATOR(boolean, { RETURN((Value){._bool = boolean->value}); });
+EVALUATOR(boolean, { RETURN_ONE({._bool = boolean->value}); });
 
-EVALUATOR(string, { RETURN((Value){.string = string->value}); });
+EVALUATOR(string, { RETURN_ONE({.string = string->value}); });
 
 EVALUATOR(unary, {
   EVALUATE(unary->expr, expr_value);
   if (unary->op == tMINUS) {
-    RETURN((Value){._int = -expr_value._int});
+    RETURN_ONE({._int = -expr_value->_int});
   }
   panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
 });
 
 #define BIN($out_member, $in_member, $op)                                      \
-  value.$out_member = left_value.$in_member $op right_value.$in_member;        \
+  value.$out_member = left_value->$in_member $op right_value->$in_member;      \
   break;
 
 EVALUATOR(binary, {
@@ -285,53 +316,67 @@ EVALUATOR(binary, {
   default:
     panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
   }
-  printf("%zd %s %zd -> %zd\n", left_value._int, token_display_name(binary->op),
-         right_value._int, value._int);
-  RETURN(value);
+  printf("%zd %s %zd -> %zd\n", left_value->_int,
+         token_display_name(binary->op), right_value->_int, value._int);
+  RETURN_ONE(value);
 });
 
 EVALUATOR(function_call, {
   EVALUATE(function_call->function, function_value);
 
-  if (function_value.builtin_id != NOT_BUILTIN) {
-    RETURN(evaluate_builtin(function_call->args, function_value.builtin_id,
-                            recursion_depth + 1, stack_frame));
+  if (function_value->builtin_id != NOT_BUILTIN) {
+    evaluate_builtin(function_call->args, function_value->builtin_id,
+                     recursion_depth + 1, stack_frame, out);
+    OK;
   }
-  assert(function_value.function->kind == aFUNCTION);
-  __auto_type function = &function_value.function->function;
+  assert(function_value->function->kind == aFUNCTION);
+  __auto_type function = &function_value->function->function;
   // C requires that a variable-sized array contains at least 1 element.
   Value new_stack_frame[MAX(function->frame_length, 1)];
   memset(new_stack_frame, 0, sizeof(new_stack_frame));
   printf("function call (%zu locals, %zu params, stack frame at %p)\n",
          function->frame_length, function->params.length, new_stack_frame);
 
-  ITER_ARRAY(function_call->args, arg, {
-    new_stack_frame[i] = evaluate_expr(arg, recursion_depth + 1, stack_frame);
-    printf("set param %zu at %p to %zd\n", i, &new_stack_frame[i],
-           new_stack_frame[i]._int);
+  size_t arg_local_index = 0;
+  ITER_ARRAY(function_call->args, arg_node, {
+    Value *arg_value = &new_stack_frame[arg_local_index];
+    evaluate_expr(arg_node, recursion_depth + 1, stack_frame, arg_value);
+    arg_local_index += flat_length(arg_node->type);
+    printf("set param %zu at %p to %zd\n", i, arg_value, arg_value->_int);
   });
-  // assumes that parameter values have been set
-  Value function_out = {0};
+  // Assumes that parameter values have been set.
+  Value function_out[MAX(flat_length(node->type), 1)];
+  memset(function_out, 0, sizeof(function_out));
   evaluate_stmts(function->stmts, recursion_depth + 1, new_stack_frame,
-                 &function_out);
+                 function_out);
   RETURN(function_out);
 });
 
 EVALUATOR(function, {
-  RETURN((Value){.function = node});
+  UNUSED(function);
+  RETURN_ONE({.function = node});
 });
 
-/* EVALUATOR(_struct, { RETURN(value); }); */
-/*  */
-/* EVALUATOR(struct_inst, { */
-/*   RETURN((Value) { ._struct = . }); */
-/* }); */
+EVALUATOR(_struct, {
+  UNUSED(_struct);
+  RETURN_ONE({._struct = node});
+});
+
+EVALUATOR(struct_inst, {
+  size_t out_index = 0;
+  ITER_ARRAY(struct_inst->fields, field_inst_node, {
+    evaluate_expr(field_inst_node->field_inst.expr, recursion_depth,
+                  stack_frame, &out[out_index]);
+    out_index += flat_length(field_inst_node->type);
+  });
+  OK;
+});
 
 #define ECASE($name)                                                           \
-  CASE($name,                                                                  \
-       return evaluate_##$name(node, recursion_depth, stack_frame))
+  CASE($name, return evaluate_##$name(node, recursion_depth, stack_frame, out))
 
-Value evaluate_expr(ASTNode *node, size_t recursion_depth, Value *stack_frame) {
+void evaluate_expr(ASTNode *node, size_t recursion_depth, Value *stack_frame,
+                   Value *out) {
   SWITCH(node, {
     ECASE(name);
     ECASE(integer);

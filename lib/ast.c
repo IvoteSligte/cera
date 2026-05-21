@@ -222,3 +222,15 @@ const char *ast_node_name(ASTNodeKind kind) {
   panicf("Unknown node kind: %d", kind)
 }
 #undef N
+
+size_t flat_length(Type type) {
+  assert(type.kind != tyUNKNOWN);
+  if (type.kind == tySTRUCT) {
+    return type._struct->_struct.flat_length;
+  } else if (type.kind == tyVOID) {
+    return 0;
+  } else {
+    return 1;
+  }
+}
+

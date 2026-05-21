@@ -67,6 +67,7 @@ bool test(const char *source, const char *expected_output) {
     free_ast(&ast);
     return false;
   }
+  ast_print_nodes(ast.head);
   if (!analyze(&ast, &type_errors)) {
     print_analyze_errors(source, type_errors);
     free_analyze_errors(&type_errors);
@@ -74,7 +75,6 @@ bool test(const char *source, const char *expected_output) {
     free_ast(&ast);
     return false;
   }
-  ast_print_nodes(ast.head);
   evaluate_module(ast.head);
 
   // compare output with expected output
@@ -145,12 +145,14 @@ int main(int argc, const char *argv[]) {
       }
       num_tests++;
       printf("- running test %s\n", name);
+      fflush(stdout);
       if (test(source, expected_output)) {
         num_succeeded++;
         printf("- test %s succeeded\n", name);
       } else {
         printf("- test %s failed\n", name);
       }
+      fflush(stdout);
       free(source);
     }
     free(name);
