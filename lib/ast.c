@@ -98,7 +98,7 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
     PCASE(unary, { VISIT(unary->expr); });
     PCASE(binary, {
       assert(binary->left != node);
-      assert(binary->right != node);      
+      assert(binary->right != node);
       VISIT(binary->left);
       VISIT(binary->right);
     });
@@ -140,6 +140,14 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
       VISIT(field->type);
     });
     PCASE(_struct, { VISIT_ARRAY(_struct->fields); });
+    PCASE(field_inst, {
+      VISIT(field_inst->name);
+      VISIT(field_inst->expr);
+    });
+    PCASE(struct_inst, {
+      VISIT(struct_inst->type);
+      VISIT_ARRAY(struct_inst->fields);
+    });
     PCASE(decl, {
       VISIT(decl->name);
       VISIT(decl->expr);
@@ -173,6 +181,8 @@ static void print_node(ASTNode *node, size_t depth, void *data) {
     PCASE(return_stmt, printf("return_stmt:\n"));
     PCASE(field, printf("field:\n"));
     PCASE(_struct, printf("struct:\n"));
+    PCASE(field_inst, printf("field_inst:\n"));
+    PCASE(struct_inst, printf("struct_inst:\n"));
     PCASE(decl, printf("decl:\n"));
     PCASE(module, printf("module:\n"));
   });
@@ -204,27 +214,11 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(RETURN_STMT);
     N(FIELD);
     N(STRUCT);
+    N(FIELD_INST);
+    N(STRUCT_INST);
     N(DECL);
     N(MODULE);
   }
   panicf("Unknown node kind: %d", kind)
 }
 #undef N
-
-StructID add_struct(RandomAllocator *allocator, StructList *list) {
-  StructID id = list->length;
-  list->data = ra_recalloc(allocator, list->data, sizeof(StructInfo) * (list->length + 1));
-  list->length++;
-  return id;
-}
-
-bool get_field_type(StructInfo *_struct, Name name, Type *out_type) {
-  for (size_t i = 0; i < _struct->fields.length; i++) {
-    FieldInfo field = _struct->fields.data[i];
-    if (name_eq(field.name, name)) {
-      *out_type = field.type;
-      return true;
-    }
-  }
-  return false;
-}

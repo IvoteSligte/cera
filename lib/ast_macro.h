@@ -19,8 +19,12 @@
 #define NODE_return_stmt aRETURN_STMT
 #define NODE_field aFIELD
 #define NODE__struct aSTRUCT
+#define NODE_field_inst aFIELD_INST
+#define NODE_struct_inst aSTRUCT_INST
 #define NODE_decl aDECL
 #define NODE_module aMODULE
+
+//#define AS($type, $value) (*($type *)($value))
 
 #define SWITCH($node, $cases)                                                  \
   {                                                                            \

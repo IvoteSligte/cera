@@ -283,6 +283,21 @@ PARSER(function_call, {
   RETURN(function_call, {.function = function, .args = args});
 });
 
+PARSER(field_inst, {
+  MUST_PARSE(name, name);
+  EXPECT(tCOL);
+  MUST_PARSE(expr, expr);
+  RETURN(field_inst, {.name = name, .expr = expr});
+});
+
+PARSER(struct_inst, {
+  MUST_PARSE(name, type);
+  EXPECT(tLBRACE);
+  ZERO_OR_MORE_SEPARATED(field_inst, fields, tCOMMA);
+  EXPECT(tRBRACE);
+  RETURN(struct_inst, {.type = type, .fields = fields});
+});
+
 PARSER(boolean, {
   EXPECT(tTRUE, tFALSE);
   RETURN(boolean, {.text = token.text, .length = token.length});
@@ -297,9 +312,10 @@ PARSER(paren_expr, {
 });
 
 PARSER(primary, {
-  // `function_call` must be tried before `name` because `name` is a prefix of
-  // `function_call`
+  // `function_call` and `struct_inst` must be tried before `name` because
+  // `name` is their prefix
   TRY_PARSE(function_call);
+  TRY_PARSE(struct_inst);
   TRY_PARSE(name);
   TRY_PARSE(integer);
   TRY_PARSE(boolean);

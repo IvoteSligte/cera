@@ -8,13 +8,12 @@
   static ASTNode $NAME##_NODE = {                                              \
       .type = $type,                                                           \
       .kind = aDECL,                                                           \
-      .decl = {.is_constant = true, .static_value = $value}};                  \
+      .decl = {.is_constant = true, .static_value = $value}};              \
   static Symbol $NAME##_SYMBOL = {                                             \
       .name = NEW_NAME($name), .node = &$NAME##_NODE, .is_static = true}
 
 #define PRIM_SYMBOL($name, $NAME)                                              \
-  BUILTIN_SYMBOL($name, $NAME, PRIM_TYPE(tyTYPE),                              \
-                 {.type = PRIM_TYPE(ty##$NAME)});
+BUILTIN_SYMBOL($name, $NAME, PRIM_TYPE(tyTYPE), {.type = PRIM_TYPE(ty##$NAME)});
 
 PRIM_SYMBOL(void, VOID);
 PRIM_SYMBOL(int, INT);
@@ -24,12 +23,12 @@ PRIM_SYMBOL(string, STRING);
 static ASTNode PRINT_STRING_NODE = {
     .type = {.kind = tyFUNCTION,
              .is_constant = true,
-             .function = {.params = {.data =
-                                         &STRING_NODE.decl.static_value.type,
-                                     .length = 1},
-                          ._return = &VOID_NODE.decl.static_value.type}},
+             .function =
+                 {.params = {.data = &STRING_NODE.decl.static_value.type,
+                             .length = 1},
+                  ._return = &VOID_NODE.decl.static_value.type}},
     .kind = aDECL,
-    .decl = {.is_constant = 1, .static_value = {.builtin_id = PRINT_STRING}}};
+    .decl = {.is_constant = 1, .static_value = { .builtin_id = PRINT_STRING }}};
 
 static Symbol PRINT_STRING_SYMBOL = {
     .name = NEW_NAME(print_string), .node = &PRINT_STRING_NODE, .is_static = 1};
@@ -51,7 +50,7 @@ bool get_builtin(Name name, Symbol *out) {
 
 // Adds a symbol to the table, returning false if NAME was already in the table.
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
-                ASTNode *node, bool is_static, size_t local_index) {
+                ASTNode *node, bool is_static, size_t stack_offset) {
   if (table->parent == NULL) {
     Symbol builtin;
     if (get_builtin(name, &builtin)) {
@@ -68,7 +67,7 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
       ra_recalloc(allocator, table->data, sizeof(Symbol) * (table->length + 1));
   table->data[table->length] = (Symbol){.name = name,
                                         .is_static = is_static,
-                                        .local_index = local_index,
+                                        .stack_offset = stack_offset,
                                         .node = node};
   table->length++;
   return true;

@@ -29,7 +29,6 @@ typedef enum {
 typedef struct {
   Allocator *allocator;
   AnalyzeErrorArray *error_data;
-  StructList struct_list;
   bool anything_changed;
   bool error_on_block;
 } State;
@@ -42,7 +41,7 @@ typedef struct {
 
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
-    return analyze_##$name(state, node, table, return_type, local_count,       \
+    return analyze_##$name(state, node, table, return_type, frame_length,      \
                            is_static);                                         \
   })
 
@@ -50,7 +49,7 @@ typedef struct {
 #define TRY_ANALYZE($node, $name)                                              \
   {                                                                            \
     Result result = analyze_node(state, $node, table, return_type,             \
-                                 local_count, is_static);                      \
+                                 frame_length, is_static);                     \
     if (result == rERROR)                                                      \
       FAIL;                                                                    \
     blocked |= result == rBLOCKED;                                             \
@@ -112,7 +111,7 @@ typedef enum {
 
 #define ANALYZER_SIGNATURE($name)                                              \
   Result analyze_##$name(State *state, Node *node, Table *table,               \
-                         Type return_type, size_t *local_count,                \
+                         Type return_type, size_t *frame_length,               \
                          bool is_static)
 
 #define ANALYZER($name, ...)                                                   \
@@ -125,7 +124,7 @@ typedef enum {
     UNUSED(return_type);                                                       \
     UNUSED(is_static);                                                         \
     UNUSED(blocked);                                                           \
-    UNUSED(local_count);                                                       \
+    UNUSED(frame_length);                                                      \
   }
 
 ANALYZER_SIGNATURE(node);
@@ -145,7 +144,7 @@ ANALYZER(name, {
     assert(symbol.node->kind == aDECL);
     name->static_value_ptr = &symbol.node->decl.static_value;
   } else {
-    name->local_index = symbol.local_index;
+    name->local_index = symbol.stack_offset; // FIXME: fix local indices
   }
   if (symbol.node->type.kind == tyUNKNOWN)
     BLOCK;
@@ -285,12 +284,67 @@ ANALYZER(function_call, {
   OK;
 });
 
+ANALYZER(field_inst, {
+  ANALYZE(field_inst->expr, expr);
+  node->type = expr_type;
+  OK;
+});
+
+Type get_type_value(ASTNode *type_node) {
+  assert(type_node->kind == aNAME);
+  assert(type_node->type.kind != tyTYPE);
+  assert(type_node->name.static_value_ptr != NULL);
+  return type_node->name.static_value_ptr->type;
+}
+
+ANALYZER(struct_inst, {
+  ANALYZE_TYPE(struct_inst->type, struct);
+  assert(struct_type.kind != tyUNKNOWN);
+  EXPECT(struct_type.kind == tySTRUCT, struct_inst->type,
+         ssprintf("expected struct type, but found %s",
+                  type_name(struct_type.kind)));
+
+  ASTNode *_struct_node = struct_type._struct;
+  __auto_type _struct = &_struct_node->_struct;
+
+  bool used[_struct->fields.length];
+  memset(used, 0, sizeof(used));
+
+  struct_inst->local_index = *frame_length;
+  *frame_length += _struct->flat_length;
+
+  ITER_ARRAY(struct_inst->fields, field_inst_node, {
+    __auto_type field_inst = &field_inst_node->field_inst;
+    Type expected_type = {0};
+
+    ITER_ARRAY(_struct->fields, field_node, {
+      __auto_type field = &field_node->field;
+      if (name_eq(field->name->name.name, field_inst->name->name.name)) {
+        EXPECT(!used[i], field_inst_node, strdup("duplicate field"));
+        used[i] = true;
+        expected_type = get_type_value(field->type);
+        break;
+      }
+    });
+    // NOTE: not sure if tyUNKNOWN can be the field type normally as well
+    EXPECT(expected_type.kind != tyUNKNOWN, field_inst->name,
+           strdup("unknown field"));
+    ANALYZE(field_inst_node, found);
+    EXPECT(type_eq(expected_type, found_type), field_inst->expr,
+           ssprintf("expression type mismatch: expected %s, but found %s",
+                    FMT_TYPE(expected_type), FMT_TYPE(found_type)));
+  });
+  node->type = struct_type;
+  OK;
+});
+
 ANALYZER(param, {
   NAME_OF(param);
   if (!param->symbol_added) {
-    EXPECT(add_symbol(state->allocator, table, name, node, false, *local_count),
-           node, strdup("duplicate parameter name"));
-    *local_count += 1;
+    EXPECT(
+        add_symbol(state->allocator, table, name, node, false, *frame_length),
+        node, strdup("duplicate parameter name"));
+    *frame_length += 1;
     param->symbol_added = true;
   }
   ANALYZE_TYPE(param->type, param);
@@ -306,7 +360,7 @@ ANALYZER(function, {
   function->table.parent = table;
   Table *table = &function->table;
   Type *type = &node->type;
-  size_t *local_count = &function->local_count;
+  size_t *frame_length = &function->frame_length;
 
   if (type->kind == tyUNKNOWN) {
     type->is_constant = true;
@@ -411,25 +465,28 @@ ANALYZER(field, {
   OK;
 });
 
+size_t flat_length(Type type) {
+  assert(type.kind != tyUNKNOWN);
+  if (type.kind == tySTRUCT) {
+    return type._struct->_struct.flat_length;
+  } else if (type.kind == tyVOID) {
+    return 0;
+  } else {
+    return 1;
+  }
+}
+
 ANALYZER(_struct, {
   EXPECT(IS_GLOBAL, node,
          strdup("structs can only be defined in the global scope"));
   EXPECT(is_static, node, strdup("structs can only be defined as constants"));
 
-  _struct->id = add_struct(state->allocator, &state->struct_list);
-  node->type =
-      (Type){.kind = tySTRUCT, .is_constant = true, ._struct = _struct->id};
-  StructInfo *info = &state->struct_list.data[_struct->id];
+  node->type = (Type){.kind = tySTRUCT, .is_constant = true, ._struct = node};
+  _struct->flat_length = 0;
 
-  if (info->fields.data == NULL) {
-    info->fields = (FieldInfoArray){
-        .data = ALLOC(sizeof(FieldInfo) * _struct->fields.length),
-        .length = _struct->fields.length};
-  }
   ITER_ARRAY(_struct->fields, field_node, {
     ANALYZE(field_node, field);
-    info->fields.data[i] = (FieldInfo){
-        .name = field_node->field.name->name.name, .type = field_type};
+    _struct->flat_length += flat_length(field_type);
   });
   OK;
 });
@@ -444,11 +501,11 @@ ANALYZER(decl, {
   bool is_static = IS_GLOBAL || decl->is_constant;
 
   if (!decl->symbol_added) {
-    size_t local_index = *local_count;
+    size_t local_index = *frame_length;
     EXPECT(
         add_symbol(state->allocator, table, name, node, is_static, local_index),
         decl->name, strdup("duplicate declaration"));
-    *local_count += 1;
+    *frame_length += 1;
     decl->symbol_added = true;
     decl->local_index = local_index;
   }
@@ -494,6 +551,8 @@ ANALYZER_SIGNATURE(node) {
     ACASE(return_stmt);
     ACASE(field);
     ACASE(_struct);
+    ACASE(field_inst);
+    ACASE(struct_inst);
     ACASE(decl);
     ACASE(module);
   });

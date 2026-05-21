@@ -25,7 +25,9 @@ typedef enum {
   aRETURN_STMT,
   aFIELD,
   aSTRUCT,
-  aDECL, // variable declaration
+  aFIELD_INST,  // field instantiation
+  aSTRUCT_INST, // struct instantiation
+  aDECL,        // variable declaration
   aMODULE,
 } ASTNodeKind;
 
@@ -60,11 +62,9 @@ typedef enum {
 } TypeKind;
 
 typedef enum {
-  NOT_BUILTIN = 0,
+  NOT_BUILTIN = 0UL,
   PRINT_STRING,
 } BuiltinID;
-
-typedef size_t StructID;
 
 typedef struct Type Type;
 
@@ -84,7 +84,7 @@ typedef struct Type {
       TypeArray params;
       Type *_return;
     } function;
-    StructID _struct;
+    ASTNode *_struct;
   };
 } Type;
 
@@ -94,9 +94,21 @@ typedef struct {
   size_t length;
 } String;
 
-typedef union {
-  bool boolean;
-  ssize_t integer;
+// Currently always pointer-sized so alignment is not an issue
+typedef ssize_t Bool;
+typedef ssize_t Int;
+
+typedef struct {
+  // non-zero if this is a builtin function
+  BuiltinID builtin_id;
+  ASTNode *function;
+} FunctionPtr;
+
+typedef union Value Value;
+
+typedef union Value {
+  Bool _bool;
+  Int _int;
   String string;
   Type type;
   struct {
@@ -104,13 +116,12 @@ typedef union {
     BuiltinID builtin_id;
     ASTNode *function;
   };
-  StructID _struct;
 } Value;
 
 typedef struct {
   Name name;
   bool is_static;
-  size_t local_index;
+  size_t stack_offset;
   ASTNode *node;
 } Symbol;
 
@@ -120,25 +131,6 @@ typedef struct SymbolTable {
   Symbol *data;
   size_t length;
 } SymbolTable;
-
-typedef struct {
-  Name name;
-  Type type;
-} FieldInfo;
-
-typedef struct {
-  FieldInfo *data;
-  size_t length;
-} FieldInfoArray;
-
-typedef struct {
-  FieldInfoArray fields;
-} StructInfo;
-
-typedef struct {
-  StructInfo *data;
-  size_t length;
-} StructList;
 
 typedef struct ASTNode {
   Span span;
@@ -153,19 +145,19 @@ typedef struct ASTNode {
       Name name;
       bool is_static;
       union {
-        Value* static_value_ptr;
+        Value *static_value_ptr;
         size_t local_index;
       };
     } name;
     struct {
       const char *text;
       size_t length;
-      ssize_t value;
+      Int value;
     } integer;
     struct {
       const char *text;
       size_t length;
-      bool value;
+      Bool value;
     } boolean;
     struct {
       const char *text;
@@ -197,8 +189,8 @@ typedef struct ASTNode {
       ASTNode *return_type; // nullable
       ASTNodeArray stmts;
       SymbolTable table;
-      // The total number of local variables in this function.
-      size_t local_count;
+      // Number of values in the function's stack frame.
+      size_t frame_length;
     } function;
     struct {
       ASTNode *cond;
@@ -228,11 +220,22 @@ typedef struct ASTNode {
     } return_stmt;
     struct {
       ASTNode *name;
+      ASTNode *expr;
+    } field_inst;
+    struct {
+      ASTNode *type;
+      ASTNodeArray fields;
+      size_t local_index;
+    } struct_inst;
+    struct {
+      ASTNode *name;
       ASTNode *type;
     } field;
     struct {
       ASTNodeArray fields;
-      StructID id;
+      // The total number of values this struct contains,
+      // including in nested structs.
+      size_t flat_length;
     } _struct;
     struct {
       bool is_constant;
@@ -271,6 +274,3 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
                 ASTNode *node, bool is_static, size_t local_index);
 bool get_symbol(SymbolTable *table, Name name, Symbol *out);
 SymbolTable get_top_table(SymbolTable table);
-
-StructID add_struct(RandomAllocator *allocator, StructList *list);
-bool get_field_type(StructInfo *list, Name name, Type *out_type);
