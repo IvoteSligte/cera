@@ -213,7 +213,7 @@ const char *ast_node_name(ASTNodeKind kind) {
 
 StructID add_struct(RandomAllocator *allocator, StructList *list) {
   StructID id = list->length;
-  list->data = ra_recalloc(allocator, list->data, list->length + 1);
+  list->data = ra_recalloc(allocator, list->data, sizeof(StructInfo) * (list->length + 1));
   list->length++;
   return id;
 }
