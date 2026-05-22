@@ -262,7 +262,7 @@ EVALUATOR(name, {
     size_t local_index = name->value.local_index;
     printf("dynamic %zu `%.*s` at %p: %zd\n", local_index, FMT(name->name),
            &stack_frame[local_index], stack_frame[local_index]._int);
-    return;
+    RETURN(&stack_frame[name->value.local_index]);
   }
   }
   panicf("unreachable");

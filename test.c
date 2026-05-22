@@ -17,6 +17,9 @@ size_t stdout_size = 0;
 
 // Used by lib/evaluator.c to capture stdout.
 void print_string(const char *text, size_t length) {
+  if (text == NULL) {
+    panicf("Tried to print NULL string.");
+  }
   stdout_buffer = realloc(stdout_buffer, stdout_size + length);
   memcpy(&stdout_buffer[stdout_size], text, length);
   stdout_size += length;
