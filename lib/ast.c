@@ -157,34 +157,35 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
   panicf("visit not implemented for node: %s", ast_node_name(node->kind));
 }
 
+// TODO: output stream as parameter
 static void print_node(ASTNode *node, size_t depth, void *data) {
   UNUSED(data);
-  printf("%*.*s", (int)depth, (int)depth, " ");
+  eprintf("%*.*s", (int)depth, (int)depth, " ");
   SWITCH(node, {
     PCASE(name,
-          printf("name: %.*s\n", (int)name->name.length, name->name.text));
+          eprintf("name: %.*s\n", (int)name->name.length, name->name.text));
     PCASE(integer,
-          printf("integer: %.*s\n", (int)integer->length, integer->text));
+          eprintf("integer: %.*s\n", (int)integer->length, integer->text));
     PCASE(boolean,
-          printf("boolean: %.*s\n", (int)boolean->length, boolean->text));
+          eprintf("boolean: %.*s\n", (int)boolean->length, boolean->text));
     PCASE(string,
-          printf("string: \"%.*s\"\n", (int)string->length, string->text));
-    PCASE(unary, printf("unary: `%s`\n", token_name(unary->op)));
-    PCASE(binary, printf("binary: `%s`\n", token_name(binary->op)));
-    PCASE(function_call, printf("function_call:\n"));
-    PCASE(function, printf("function:\n"));
-    PCASE(param, printf("param:\n"));
-    PCASE(if_stmt, printf("if_stmt:\n"));
-    PCASE(while_loop, printf("while_loop:\n"));
-    PCASE(for_loop, printf("for_loop:\n"));
-    PCASE(assign, printf("assign: `%s`\n", token_name(assign->op)));
-    PCASE(return_stmt, printf("return_stmt:\n"));
-    PCASE(field, printf("field:\n"));
-    PCASE(_struct, printf("struct:\n"));
-    PCASE(field_inst, printf("field_inst:\n"));
-    PCASE(struct_inst, printf("struct_inst:\n"));
-    PCASE(decl, printf("decl:\n"));
-    PCASE(module, printf("module:\n"));
+          eprintf("string: \"%.*s\"\n", (int)string->length, string->text));
+    PCASE(unary, eprintf("unary: `%s`\n", token_name(unary->op)));
+    PCASE(binary, eprintf("binary: `%s`\n", token_name(binary->op)));
+    PCASE(function_call, eprintf("function_call:\n"));
+    PCASE(function, eprintf("function:\n"));
+    PCASE(param, eprintf("param:\n"));
+    PCASE(if_stmt, eprintf("if_stmt:\n"));
+    PCASE(while_loop, eprintf("while_loop:\n"));
+    PCASE(for_loop, eprintf("for_loop:\n"));
+    PCASE(assign, eprintf("assign: `%s`\n", token_name(assign->op)));
+    PCASE(return_stmt, eprintf("return_stmt:\n"));
+    PCASE(field, eprintf("field:\n"));
+    PCASE(_struct, eprintf("struct:\n"));
+    PCASE(field_inst, eprintf("field_inst:\n"));
+    PCASE(struct_inst, eprintf("struct_inst:\n"));
+    PCASE(decl, eprintf("decl:\n"));
+    PCASE(module, eprintf("module:\n"));
   });
   panicf("print not implemented for node: %s", ast_node_name(node->kind));
 }

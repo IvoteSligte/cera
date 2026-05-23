@@ -47,33 +47,39 @@ void backtrace_abort(void) { abort(); }
 
 #endif
 
-char *read_file(const char *path) {
-  FILE *fptr = fopen(path, "r");
-
-  if (fptr == NULL) {
-    pprintf("Failed to open file `%s`", path);
-    return NULL;
-  }
+char *read_open_file(FILE *fptr, const char *path) {
+  assert(fptr != NULL);
+  assert(path != NULL);
   if (fseek(fptr, 0L, SEEK_END) != 0) {
-    pprintf("Failed to seek to end of file `%s`", path);
+    pprintf("Failed to seek to end of file `%s`.", path);
     return NULL;
   }
   size_t size = ftell(fptr);
   if (fseek(fptr, 0L, SEEK_SET) != 0) {
-    pprintf("Failed to seek to start of file `%s`", path);
+    pprintf("Failed to seek to start of file `%s`.", path);
     return NULL;
   }
   char *data = malloc(size + 1);
 
   if (fread(data, 1, size, fptr) != size) {
-    pprintf("Reading file `%s` returned an unexpected number of bytes", path);
+    pprintf("Reading file `%s` returned an unexpected number of bytes.", path);
     free(data);
     return NULL;
   }
   data[size] = '\0';
+  return data;
+}
 
+char *read_file(const char *path) {
+  FILE *fptr = fopen(path, "r");
+
+  if (fptr == NULL) {
+    pprintf("Failed to open file `%s`.", path);
+    return NULL;
+  }
+  char *data = read_open_file(fptr, path);
   if (fclose(fptr) != 0) {
-    pprintf("Failed to close file `%s`", path);
+    pprintf("Failed to close file `%s`.", path);
   }
   return data;
 }

@@ -4,16 +4,12 @@
 #include "ast.h"
 #include "ast_macro.h"
 
-#ifdef TEST
-extern void print_string(const char *text, size_t length);
-#endif
-
 #ifdef DEBUG_EVALUATOR
 #include "offset.h"
 #define LOG_ENTER                                                              \
   {                                                                            \
     OffsetInfo oi = get_offset_info(node->source, node->span.offset);          \
-    printf("%-3zu %-2zu | %.*s | %s\n", oi.line_number, recursion_depth,       \
+    eprintf("%-3zu %-2zu | %.*s | %s\n", oi.line_number, recursion_depth,       \
            (int)oi.line_length, oi.line, ast_node_name(node->kind));           \
   }
 #else
@@ -159,7 +155,7 @@ EVALUATOR(assign, {
 
 EVALUATOR(return_stmt, {
   EVALUATE(return_stmt->expr, expr_value);
-  printf("returning %zd\n", expr_value->_int);
+  eprintf("returning %zd\n", expr_value->_int);
   *function_out = *expr_value;
   RETURN(cRETURN);
 });
@@ -206,13 +202,9 @@ void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
     assert(args.length == 1);
     EVALUATE(args.data[0], arg_value);
     String arg_string = arg_value->string;
-#ifdef TEST
-    print_string(arg_string.text, arg_string.length);
-#else
     // Using fwrite instead of printf because printf can only print
     // non-zero-delimited strings of up to INT_MAX characters in length.
     fwrite(arg_string.text, arg_string.length, 1, stdout);
-#endif
     *out = (Value){0};
     return;
   }
@@ -261,23 +253,23 @@ const char *symbol_value_name(int kind) {
 }
 
 EVALUATOR(name, {
-  printf("evaluating name %.*s (%s %s)\n", FMT(name->name),
+  eprintf("evaluating name %.*s (%s %s)\n", FMT(name->name),
          symbol_value_name(name->value.kind), type_name(node->type.kind));
   switch (name->value.kind) {
   case symBUILTIN: {
-    printf("builtin `%.*s`: %zd\n", FMT(name->name), name->value.builtin._int);
+    eprintf("builtin `%.*s`: %zd\n", FMT(name->name), name->value.builtin._int);
     RETURN(&name->value.builtin);
   }
   case symSTATIC: {
     if (name->value.static_ptr == NULL)
       panicf("static_ptr == NULL");
-    printf("static `%.*s`: %zd\n", FMT(name->name),
+    eprintf("static `%.*s`: %zd\n", FMT(name->name),
            name->value.static_ptr->_int);
     RETURN(name->value.static_ptr);
   }
   case symDYNAMIC: {
     size_t local_index = name->value.local_index;
-    printf("dynamic %zu `%.*s` at %p: %zd\n", local_index, FMT(name->name),
+    eprintf("dynamic %zu `%.*s` at %p: %zd\n", local_index, FMT(name->name),
            &stack_frame[local_index], stack_frame[local_index]._int);
     RETURN(&stack_frame[local_index]);
   }
@@ -333,7 +325,7 @@ EVALUATOR(binary, {
   default:
     panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
   }
-  printf("%zd %s %zd -> %zd\n", left_value->_int,
+  eprintf("%zd %s %zd -> %zd\n", left_value->_int,
          token_display_name(binary->op), right_value->_int, value._int);
   RETURN_ONE(value);
 });
@@ -351,16 +343,16 @@ EVALUATOR(function_call, {
   // C requires that a variable-sized array contains at least 1 element.
   Value new_stack_frame[MAX(function->frame_length, 1)];
   memset(new_stack_frame, 0, sizeof(new_stack_frame));
-  printf("function call (%zu locals, %zu params, stack frame at %p)\n",
+  eprintf("function call (%zu locals, %zu params, stack frame at %p)\n",
          function->frame_length, function->params.length, new_stack_frame);
 
   size_t arg_local_index = 0;
   ITER_ARRAY(function_call->args, arg_node, {
-    printf("evaluating arg %zu\n", i);
+    eprintf("evaluating arg %zu\n", i);
     Value *arg_value = &new_stack_frame[arg_local_index];
     evaluate_expr(arg_node, recursion_depth + 1, stack_frame, arg_value);
     arg_local_index += flat_length(arg_node->type);
-    printf("set param %zu at %p to %zd\n", i, arg_value, arg_value->_int);
+    eprintf("set param %zu at %p to %zd\n", i, arg_value, arg_value->_int);
   });
   // Assumes that parameter values have been set.
   Value function_out[MAX(flat_length(node->type), 1)];

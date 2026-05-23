@@ -10,7 +10,12 @@
 __attribute__((noreturn)) void backtrace_abort(void);
 
 // Reads a file to a string, returning NULL and printing the error on failure.
-char *read_file(const char *path);
+char *read_file(const char *path) __attribute__((nonnull));
+
+// Reads an open file to a string, returning NULL and printing the error on
+// failure. Starts reading at the file pointer and does not reset the pointer or
+// close the filewhen done.
+char *read_open_file(FILE *fptr, const char *path) __attribute__((nonnull));
 
 #define eprintf(format, ...) fprintf(stderr, format __VA_OPT__(, ) __VA_ARGS__)
 #define panicf(format, ...)                                                    \
@@ -22,7 +27,7 @@ char *read_file(const char *path);
 #define pprintf($format, $args...)                                             \
   {                                                                            \
     eprintf($format, $args);                                                   \
-    perror("");                                                                \
+    perror(" Error");                                                          \
   }
 
 #define UNUSED(x) (void)(x)

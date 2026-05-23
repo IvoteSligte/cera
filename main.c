@@ -31,7 +31,7 @@ int main() {
   }
   free_token_stream(&stream);
 
-  printf("Parse success.\n");
+  eprintf("Parse success.\n");
   ast_print_nodes(ast.head);
 
   AnalyzeErrorArray type_errors = {0};
