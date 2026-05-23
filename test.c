@@ -11,6 +11,19 @@
 #include "lib/parser.h"
 #include "lib/util.h"
 
+// TODO: no colors on terminals that do not support it?
+
+// ANSI color codes
+#define COL(num, s) "\e[0;" #num "m" s "\e[0m"
+#define BLACK(s) COL(30, s)
+#define RED(s) COL(31, s)
+#define GREEN(s) COL(32, s)
+#define YELLOW(s) COL(33, s)
+#define BLUE(s) COL(34, s)
+#define MAGENTA(s) COL(35, s)
+#define CYAN(s) COL(36, s)
+#define WHITE(s) COL(37, s)
+
 void compile_regex(const char *pattern, regex_t *regex) {
   int result = regcomp(regex, pattern, REG_EXTENDED);
   if (result) {
@@ -164,7 +177,6 @@ int main(int argc, const char *argv[]) {
       TestFile test_file = read_test_file(path);
       assert(test_file.source != NULL);
       num_tests++;
-      printf("- running test %s\n", name);
 
       // Only captures stdout, leaving stderr as log file in /tmp/cm-test-<name>
       char *cmd = strdup(argv[0]);
@@ -178,7 +190,7 @@ int main(int argc, const char *argv[]) {
       char *stdout_string = read_stream(stdout);
       int status = pclose(stdout);
       if (status != 0) {
-        printf("- test %s failed\n", name);
+        printf("- test %-20s " RED("failed") "\n", name);
         free_test_file(&test_file);
         free(stdout_string);
         free(name);
@@ -193,14 +205,14 @@ int main(int argc, const char *argv[]) {
                 expected_output);
         eprintf("Actual   (%zu bytes): `%.*s`\n", stdout_size, (int)stdout_size,
                 stdout_string);
-        printf("- test %s failed\n", name);
+        printf("- test %-20s " RED("failed") "\n", name);
         free_test_file(&test_file);
         free(stdout_string);
         free(name);
         continue;
       }
       num_succeeded++;
-      printf("- test %s succeeded\n", name);
+      printf("- test %-20s " GREEN("succeeded") "\n", name);
       free_test_file(&test_file);
       free(stdout_string);
     }
