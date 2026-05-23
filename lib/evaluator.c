@@ -247,13 +247,30 @@ void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
     return;                                                                    \
   }
 
+const char *symbol_value_name(int kind) {
+  switch (kind) {
+  case symBUILTIN:
+    return "BUILTIN";
+  case symSTATIC:
+    return "STATIC";
+  case symDYNAMIC:
+    return "DYNAMIC";
+  default:
+    return "<unknown kind>";
+  }
+}
+
 EVALUATOR(name, {
+  printf("evaluating name %.*s (%s %s)\n", FMT(name->name),
+         symbol_value_name(name->value.kind), type_name(node->type.kind));
   switch (name->value.kind) {
   case symBUILTIN: {
     printf("builtin `%.*s`: %zd\n", FMT(name->name), name->value.builtin._int);
     RETURN(&name->value.builtin);
   }
   case symSTATIC: {
+    if (name->value.static_ptr == NULL)
+      panicf("static_ptr == NULL");
     printf("static `%.*s`: %zd\n", FMT(name->name),
            name->value.static_ptr->_int);
     RETURN(name->value.static_ptr);
@@ -262,7 +279,7 @@ EVALUATOR(name, {
     size_t local_index = name->value.local_index;
     printf("dynamic %zu `%.*s` at %p: %zd\n", local_index, FMT(name->name),
            &stack_frame[local_index], stack_frame[local_index]._int);
-    RETURN(&stack_frame[name->value.local_index]);
+    RETURN(&stack_frame[local_index]);
   }
   }
   panicf("unreachable");
@@ -339,6 +356,7 @@ EVALUATOR(function_call, {
 
   size_t arg_local_index = 0;
   ITER_ARRAY(function_call->args, arg_node, {
+    printf("evaluating arg %zu\n", i);
     Value *arg_value = &new_stack_frame[arg_local_index];
     evaluate_expr(arg_node, recursion_depth + 1, stack_frame, arg_value);
     arg_local_index += flat_length(arg_node->type);

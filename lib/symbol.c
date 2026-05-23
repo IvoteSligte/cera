@@ -66,10 +66,12 @@ static SymbolValue get_node_value(ASTNode *node, bool is_global) {
   if (node->kind == aDECL) {
     bool is_static = node->decl.is_constant || is_global;
     out.kind = is_static ? symSTATIC : symDYNAMIC;
-    if (is_static)
+    if (is_static) {
       out.static_ptr = node->decl.static_value_ptr;
-    else
+      assert(out.static_ptr != NULL);
+    } else {
       out.local_index = node->decl.local_index;
+    }
   } else {
     assert(node->kind == aPARAM);
     out.kind = symDYNAMIC;
