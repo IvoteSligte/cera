@@ -6,21 +6,7 @@
 #include "evaluator.h"
 #include "offset.h"
 
-#include <stdarg.h>
-#include <string.h>
-
 // TODO: more efficient local_index allocation
-
-// Creates a string like sprintf, but panics on failure.
-char *ssprintf(const char *fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-  char *out = NULL;
-  // TODO: non-GNU alternative to asprintf
-  if (vasprintf(&out, fmt, args) < 0)
-    panicf("Failed to ssprintf.");
-  return out;
-}
 
 typedef enum {
   ANYTHING_CHANGED = 1 << 0,

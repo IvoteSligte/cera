@@ -1,4 +1,5 @@
 #include "util.h"
+#include <stdarg.h>
 
 #ifdef __linux__
 
@@ -82,4 +83,18 @@ char *read_file(const char *path) {
     pprintf("Failed to close file `%s`.", path);
   }
   return data;
+}
+
+char *ssprintf(const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  char *out = NULL;
+  // TODO: non-GNU alternative to asprintf
+  if (vasprintf(&out, fmt, args) < 0)
+    panicf("Failed to ssprintf.");
+  return out;
+}
+
+bool str_eq(const char *left, const char *right) {
+  return strcmp(left, right) == 0;
 }

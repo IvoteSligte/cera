@@ -30,6 +30,12 @@ char *read_open_file(FILE *fptr, const char *path) __attribute__((nonnull));
     perror(" Error");                                                          \
   }
 
+// Creates a string like sprintf, but panics on failure.
+char *ssprintf(const char *fmt, ...);
+
+// Compares strings for equality.
+bool str_eq(const char* left, const char* right);
+
 #define UNUSED(x) (void)(x)
 
 #define _GET_MACRO(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, NAME, ...) NAME

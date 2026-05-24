@@ -110,11 +110,6 @@ void free_test_file(TestFile *test_file) {
   *test_file = (TestFile){0};
 }
 
-char *dyn_strcat(char *dest, const char *source) {
-  dest = realloc(dest, strlen(dest) + strlen(source) + 1);
-  return strcat(dest, source);
-}
-
 char *read_stream(FILE *stream) {
   assert(stream != NULL);
   char *string = malloc(256);
@@ -130,30 +125,92 @@ char *read_stream(FILE *stream) {
   return string;
 }
 
+typedef struct {
+  const char *file;
+  bool show_logs;
+  const char *pattern;
+} Options;
+
+#define IS_OPTION($arg, $short, $long)                                         \
+  (!finished_options && (str_eq($arg, $long) || str_eq($arg, $short)))
+
+Options parse_options(int argc, const char *argv[]) {
+  Options options = {0};
+  bool finished_options = false;
+
+  for (int i = 1; i < argc; i++) {
+    if (str_eq(argv[i], "--")) {
+      finished_options = true;
+      continue;
+    }
+    if (IS_OPTION(argv[i], "-h", "--help")) {
+      eprintf("Usage: %s [pattern] [option]...\n", argv[0]);
+      eprintf("\t-h, --help\n");
+      eprintf("\t\tPrint this menu.\n");
+      eprintf("\n");
+      eprintf("\t-f, --file <file_path>\n");
+      eprintf("\t\tExecute a test by file path. Status indicates success.\n");
+      eprintf("\n");
+      eprintf("\t-s, --show-logs\n");
+      eprintf("\t\tPrints compiler logs to the console instead of to '/tmp/cm-test-<test_name>'.\n");
+      eprintf("\n");
+      exit(0);
+    }
+    if (IS_OPTION(argv[i], "-f", "--file")) {
+      if (argc < i + 2) {
+        eprintf("No file specified for '--file' option.\n");
+        exit(1);
+      }
+      if (argv[i + 1][0] == '-') {
+        eprintf("File expected following '--file', but option found.\n");
+        exit(1);
+      }
+      if (options.file != NULL) {
+        eprintf("Duplicate file argument.\n");
+        exit(1);
+      }
+      options.file = argv[i + 1];
+      i++;
+      continue;
+    }
+    if (IS_OPTION(argv[i], "-s", "--show-logs")) {
+      options.show_logs = true;
+      continue;
+    }
+    if (!finished_options && argv[i][0] == '-') {
+      eprintf("Invalid option '%s'\n", argv[i]);
+      exit(1);
+    }
+    if (options.pattern != NULL) {
+      eprintf("Duplicate pattern parameter.\n");
+      exit(1);
+    }
+    options.pattern = argv[i];
+  }
+  if (options.file != NULL && options.pattern != NULL) {
+    eprintf("Cannot mix file and pattern options.\n");
+    exit(1);
+  }
+  return options;
+}
+
 // The first argument is an optional regex pattern that matches test names to
 // run.
 int main(int argc, const char *argv[]) {
+  Options options = parse_options(argc, argv);
+
+  if (options.file != 0) {
+    TestFile test_file = read_test_file(options.file);
+    int status = evaluate(test_file.source) ? 0 : 1;
+    free_test_file(&test_file);
+    return status;
+  }
   size_t num_tests = 0;
   size_t num_succeeded = 0;
   regex_t regex = {0};
-  bool has_regex = false;
-  if (argc > 1) {
-    if (strcmp(argv[1], "--file") == 0) {
-      if (argc < 3) {
-        eprintf("Usage: %s --file <test_file>\n", argv[0]);
-        return 1;
-      }
-      const char *path = argv[2];
-      TestFile test_file = read_test_file(path);
-      int status = evaluate(test_file.source) ? 0 : 1;
-      free_test_file(&test_file);
-      return status;
-    }
-    const char *pattern = argv[1];
-    compile_regex(pattern, &regex);
-    has_regex = true;
+  if (options.pattern != NULL) {
+    compile_regex(options.pattern, &regex);
   }
-
   DIR *dir = opendir("test/");
   if (dir == NULL) {
     printf("Could not open test/ directory.");
@@ -166,25 +223,24 @@ int main(int argc, const char *argv[]) {
     const char *file_name = dir_entry->d_name;
     strcpy(&path[5], file_name);
     const char *file_extension = strrchr(file_name, '.');
-    if (strcmp(file_extension, FILE_EXTENSION) != 0) {
+    if (!str_eq(file_extension, FILE_EXTENSION)) {
       continue;
     }
     char *name = file_extension == NULL
                      ? strdup(file_name)
                      : strndup(file_name, file_extension - file_name);
     regmatch_t match;
-    if (!has_regex || match_regex(&regex, name, &match)) {
+    if (options.pattern == NULL || match_regex(&regex, name, &match)) {
       TestFile test_file = read_test_file(path);
       assert(test_file.source != NULL);
       num_tests++;
 
-      // Only captures stdout, leaving stderr as log file in /tmp/cm-test-<name>
-      char *cmd = strdup(argv[0]);
-      cmd = dyn_strcat(cmd, " --file ");
-      cmd = dyn_strcat(cmd, path);
-      cmd = dyn_strcat(cmd, " 2>/tmp/cm-test-");
-      cmd = dyn_strcat(cmd, name);
-
+      // Run the test as a separate process.
+      // Only capture stdout, leaving stderr as log file in /tmp/cm-test-<name>
+      char *cmd =
+          options.show_logs
+              ? ssprintf("%s --file %s", argv[0], path)
+              : ssprintf("%s --file %s 2>/tmp/cm-test-%s", argv[0], path, name);
       FILE *stdout = popen(cmd, "r"); // TODO: cross-platform
       free(cmd);
       char *stdout_string = read_stream(stdout);
@@ -196,10 +252,10 @@ int main(int argc, const char *argv[]) {
         free(name);
         continue;
       }
-      // compare output with expected output
+      // Compare output with expected output.
       const char *expected_output = test_file.expected_output;
       size_t stdout_size = strlen(stdout_string);
-      if (strcmp(stdout_string, expected_output) != 0) {
+      if (!str_eq(stdout_string, expected_output)) {
         eprintf("Expected output does not match actual output.\n");
         eprintf("Expected (%zu bytes): `%s`\n", strlen(expected_output),
                 expected_output);
@@ -222,7 +278,7 @@ int main(int argc, const char *argv[]) {
 
   printf("[%zu/%zu] tests succeeded\n", num_succeeded, num_tests);
 
-  if (has_regex) {
+  if (options.pattern != NULL) {
     regfree(&regex);
   }
   return num_succeeded < num_tests ? 1 : 0;
