@@ -63,6 +63,10 @@ bool evaluate(const char *source) {
   ParseError parse_error = {0};
   AnalyzeErrorArray type_errors = {0};
 
+#ifdef DEBUG_EVALUATOR
+  evaluator_source = source;
+#endif
+
   if (!(fill_token_stream(source, &stream, &lex_error))) {
     print_lex_error(lex_error);
     free_token_stream(&stream);

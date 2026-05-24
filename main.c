@@ -10,6 +10,10 @@ int main() {
     return 1;
   }
 
+#ifdef DEBUG_EVALUATOR
+  program_source = source;
+#endif
+
   LexError lex_error = {0};
   TokenStream stream = {0};
   if (!fill_token_stream(source, &stream, &lex_error)) {

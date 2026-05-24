@@ -9,4 +9,5 @@ typedef struct {
   size_t line_number;
 } OffsetInfo;
 
-OffsetInfo get_offset_info(const char *source, size_t offset);
+OffsetInfo get_offset_info(const char *source, size_t offset)
+    __attribute__((nonnull));

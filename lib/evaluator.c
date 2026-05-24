@@ -6,9 +6,12 @@
 
 #ifdef DEBUG_EVALUATOR
 #include "offset.h"
+
+const char *evaluator_source;
+
 #define LOG_ENTER                                                              \
   {                                                                            \
-    OffsetInfo oi = get_offset_info(node->source, node->span.offset);          \
+    OffsetInfo oi = get_offset_info(evaluator_source, node->span.offset);      \
     eprintf("%-3zu %-2zu | %.*s | %s\n", oi.line_number, recursion_depth,      \
             (int)oi.line_length, oi.line, ast_node_name(node->kind));          \
   }
