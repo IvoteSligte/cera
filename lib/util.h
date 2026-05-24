@@ -33,8 +33,14 @@ char *read_open_file(FILE *fptr, const char *path) __attribute__((nonnull));
 // Creates a string like sprintf, but panics on failure.
 char *ssprintf(const char *fmt, ...);
 
+#define assert_or($condition, $on_failure)                                     \
+  if (!($condition)) {                                                           \
+    $on_failure;                                                               \
+    panicf("assertion '" #$condition "' failed");                              \
+  }
+
 // Compares strings for equality.
-bool str_eq(const char* left, const char* right);
+bool str_eq(const char *left, const char *right);
 
 #define UNUSED(x) (void)(x)
 

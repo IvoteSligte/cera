@@ -68,7 +68,9 @@ static SymbolValue get_node_value(ASTNode *node, bool is_global) {
     out.kind = is_static ? symSTATIC : symDYNAMIC;
     if (is_static) {
       out.static_ptr = node->decl.static_value_ptr;
-      assert(out.static_ptr != NULL);
+      assert_or(out.static_ptr != NULL, {
+        eprintf(">> for declaration '%.*s':\n", FMT(node->decl.name->name.name));
+      });
     } else {
       out.local_index = node->decl.local_index;
     }
