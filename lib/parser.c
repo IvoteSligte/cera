@@ -189,19 +189,19 @@ int log_indent = 0;
 #define PARSE($name, $node_ptr) parse_##$name(state, token_index, $node_ptr)
 
 // Try to parse and return on failure.
-#define MUST_PARSE($name, $node)                                               \
+#define MUST_PARSE($parser, $node)                                             \
   Node *$node = NULL;                                                          \
-  if (!PARSE($name, &$node))                                                   \
+  if (!PARSE($parser, &$node))                                                 \
     FAIL;
 
 // Try to parse and continue regardless of failure or success.
-#define MAY_PARSE($name, $node)                                                \
+#define MAY_PARSE($parser, $node)                                              \
   Node *$node = NULL;                                                          \
-  PARSE($name, &$node);
+  PARSE($parser, &$node);
 
 // Try to parse and return on success.
-#define TRY_PARSE($name)                                                       \
-  if (PARSE($name, out))                                                       \
+#define TRY_PARSE($parser)                                                     \
+  if (PARSE($parser, out))                                                     \
     OK;
 
 #define ZERO_OR_MORE($element, $nodes)                                         \
@@ -228,8 +228,8 @@ int log_indent = 0;
                                sizeof(ASTNode *) * ($nodes.length + 1));       \
       $nodes.data[$nodes.length] = node;                                       \
       $nodes.length++;                                                         \
-      /* NOTE: should EXTEND_SPAN not be used for every node parsed normally as \
-       * well? */                                                              \
+      /* NOTE: should EXTEND_SPAN not be used for every node parsed normally   \
+       * as well? */                                                           \
       EXTEND_SPAN(node->span);                                                 \
       TRY_TOKEN(break, $separators);                                           \
     }                                                                          \
@@ -313,8 +313,8 @@ PARSER(paren_expr, {
 });
 
 PARSER(primary, {
-  // `function_call` and `struct_inst` must be tried before `name` because
-  // `name` is their prefix
+  // `function_call`, `struct_inst`, and `member` must be tried before `name`
+  // because `name` is their prefix
   TRY_PARSE(function_call);
   TRY_PARSE(struct_inst);
   TRY_PARSE(name);
@@ -323,13 +323,31 @@ PARSER(primary, {
   TRY_PARSE(string);
   TRY_PARSE(paren_expr);
   FAIL;
-})
+});
+
+PARSER(member, {
+  MAY_PARSE(primary, expr);
+
+  // TODO: nested member access 'a.b.c' -> '(a.b).c'
+  TRY_TOKEN(
+      {
+        if (expr == NULL) {
+          FAIL;
+        } else {
+          *out = expr;          
+          OK;
+        }
+      },
+      tDOT);
+  MUST_PARSE(name, name);
+  RETURN(member, {.expr = expr, .name = name});
+});
 
 PARSER(unary, {
-  TRY_PARSE(primary);
+  TRY_PARSE(member);
 
   EXPECT_OP(tMINUS);
-  MUST_PARSE(primary, expr);
+  MUST_PARSE(member, expr);
   RETURN(unary, {.op = op, .expr = expr});
 });
 

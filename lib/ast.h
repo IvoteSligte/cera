@@ -27,6 +27,7 @@ typedef enum {
   aSTRUCT,
   aFIELD_INST,  // field instantiation
   aSTRUCT_INST, // struct instantiation
+  aMEMBER,      // struct member access
   aDECL,        // variable declaration
   aMODULE,
 } ASTNodeKind;
@@ -235,6 +236,13 @@ typedef struct ASTNode {
       ASTNode *type;
       ASTNodeArray fields;
     } struct_inst;
+    struct {
+      ASTNode *expr;
+      ASTNode *name;
+      size_t struct_value_length;
+      size_t field_offset;
+      size_t field_length;      
+    } member;
     struct {
       ASTNode *name;
       ASTNode *type;

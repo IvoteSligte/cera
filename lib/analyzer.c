@@ -276,9 +276,10 @@ ANALYZER(field_inst, {
   OK;
 });
 
+// Returns the value of a type expression.
 Type get_type_value(ASTNode *node) {
   assert(node->kind == aNAME);
-  assert(node->type.kind != tyTYPE);
+  assert(node->type.kind == tyTYPE);
   assert(node->name.value.kind != symDYNAMIC);
   return node->name.value.kind == symBUILTIN
              ? node->name.value.builtin.type
@@ -310,7 +311,6 @@ ANALYZER(struct_inst, {
         break;
       }
     });
-    // NOTE: not sure if tyUNKNOWN can be the field type normally as well
     EXPECT(expected_type.kind != tyUNKNOWN, field_inst->name,
            strdup("unknown field"));
     ANALYZE(field_inst_node, found);
@@ -320,6 +320,28 @@ ANALYZER(struct_inst, {
   });
   node->type = struct_type;
   OK;
+});
+
+ANALYZER(member, {
+  ANALYZE(member->expr, expr);
+  EXPECT(expr_type.kind == tySTRUCT, member->expr,
+         ssprintf("expected struct, but found %s", type_name(expr_type.kind)));
+
+  ASTNode *struct_node = expr_type._struct;
+  __auto_type _struct = &struct_node->_struct;
+  member->struct_value_length = flat_length(struct_node->type);
+  member->field_offset = 0;
+  ITER_ARRAY(_struct->fields, field_node, {
+    __auto_type field = &field_node->field;
+    if (name_eq(field->name->name.name, member->name->name.name)) {
+      node->type = get_type_value(field->type);
+      assert(node->type.kind != tyUNKNOWN);
+      member->field_length += flat_length(field_node->type);
+      OK;
+    }
+    member->field_offset += flat_length(field_node->type);
+  });
+  EXPECT(false, member->name, strdup("field does not exist"));
 });
 
 ANALYZER(param, {
@@ -531,6 +553,7 @@ ANALYZER_SIGNATURE(node) {
     ACASE(_struct);
     ACASE(field_inst);
     ACASE(struct_inst);
+    ACASE(member);
     ACASE(decl);
     ACASE(module);
   });

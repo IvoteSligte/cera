@@ -148,6 +148,10 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
       VISIT(struct_inst->type);
       VISIT_ARRAY(struct_inst->fields);
     });
+    PCASE(member, {
+      VISIT(member->expr);
+      VISIT(member->name);
+    });
     PCASE(decl, {
       VISIT(decl->name);
       VISIT(decl->expr);
@@ -184,6 +188,7 @@ static void print_node(ASTNode *node, size_t depth, void *data) {
     PCASE(_struct, eprintf("struct:\n"));
     PCASE(field_inst, eprintf("field_inst:\n"));
     PCASE(struct_inst, eprintf("struct_inst:\n"));
+    PCASE(member, eprintf("member:\n"));
     PCASE(decl, eprintf("decl:\n"));
     PCASE(module, eprintf("module:\n"));
   });
@@ -217,6 +222,7 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(STRUCT);
     N(FIELD_INST);
     N(STRUCT_INST);
+    N(MEMBER);
     N(DECL);
     N(MODULE);
   }
@@ -234,4 +240,3 @@ size_t flat_length(Type type) {
     return 1;
   }
 }
-

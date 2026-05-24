@@ -381,6 +381,14 @@ EVALUATOR(struct_inst, {
   OK;
 });
 
+EVALUATOR(member, {
+  Value struct_value[MAX(member->struct_value_length, 1)];
+  memset(struct_value, 0, sizeof(struct_value));
+  evaluate_expr(member->expr, recursion_depth, stack_frame, struct_value);
+  copy(out, &struct_value[member->field_offset], member->field_length);
+  OK;
+});
+
 #define ECASE($name)                                                           \
   CASE($name, return evaluate_##$name(node, recursion_depth, stack_frame, out))
 
@@ -397,8 +405,9 @@ void evaluate_expr(ASTNode *node, size_t recursion_depth, Value *stack_frame,
     ECASE(function);
     ECASE(_struct);
     ECASE(struct_inst);
+    ECASE(member);
   default:
-    panicf("not an expression: %s", ast_node_name(node->kind));
+    panicf("unknown expression: %s", ast_node_name(node->kind));
   });
 }
 

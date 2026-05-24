@@ -1,0 +1,21 @@
+
+Config :: struct {
+    one: bool;
+    two: int;
+}
+
+main :: () {
+    config := Config.{
+        one: true,
+        two: 10,
+    };
+    if config.one; {
+        print_string("config.one == true\n");
+    }
+    if config.two == 10; {
+        print_string("config.two == 10\n");
+    }
+}
+===
+config.one == true
+config.two == 10
