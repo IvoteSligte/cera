@@ -38,7 +38,7 @@ void error_data_add(ParseError *data, size_t token_index,
     }
   }
   if (data->num_expected >= MAX_NUM_EXPECTED) {
-    panicf("error_data->num_expected exceeds MAX_NUM_EXPECTED\n");
+    panicf("error_data->num_expected exceeds MAX_NUM_EXPECTED");
   }
   data->expected[data->num_expected] = expected_kind;
   data->num_expected += 1;

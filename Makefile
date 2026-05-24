@@ -12,13 +12,16 @@ SRC_debug = $(LIB_SRC) main.c
 SRC_test = $(LIB_SRC) test.c
 
 OBJ = $(SRC_$(BUILD):%.c=build/$(BUILD)/%.o)
+DEP = $(OBJ:.o=.d) # header dependency files
 
 build/$(BUILD)/%.o: %.c
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 build/$(BUILD).out: $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $(OBJ)
 
 clean:
 	rm -r build/
+
+-include $(DEP)
