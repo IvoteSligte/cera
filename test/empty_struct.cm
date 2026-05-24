@@ -2,6 +2,6 @@
 Empty :: struct {}
 
 main :: () {
-    Empty.{}
+    Empty.{};
 }
 

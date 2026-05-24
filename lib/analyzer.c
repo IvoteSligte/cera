@@ -291,11 +291,10 @@ ANALYZER(struct_inst, {
   EXPECT(struct_type.kind == tySTRUCT, struct_inst->type,
          ssprintf("expected struct type, but found %s",
                   type_name(struct_type.kind)));
-
   ASTNode *_struct_node = struct_type._struct;
   __auto_type _struct = &_struct_node->_struct;
 
-  bool used[_struct->fields.length];
+  bool used[MAX(_struct->fields.length, 1)];
   memset(used, 0, sizeof(used));
 
   ITER_ARRAY(struct_inst->fields, field_inst_node, {
@@ -455,7 +454,7 @@ ANALYZER(_struct, {
          strdup("structs can only be defined in the global scope"));
   EXPECT(is_static, node, strdup("structs can only be defined as constants"));
 
-  node->type = (Type){.kind = tySTRUCT, .is_constant = true, ._struct = node};
+  node->type = PRIM_TYPE(tyTYPE);
   _struct->flat_length = 0;
 
   ITER_ARRAY(_struct->fields, field_node, {
@@ -480,9 +479,10 @@ ANALYZER(decl, {
     decl->symbol_added = true;
   }
   TRY_ANALYZE(decl->expr, expr);
-  // function type can sometimes be determined even if there are blocking unknowns
+  // function type can sometimes be determined even if there are blocking
+  // unknowns
   node->type = expr_type;
-  
+
   if (node->type.kind != tyUNKNOWN) {
     // determine value location
     size_t value_length = flat_length(node->type);

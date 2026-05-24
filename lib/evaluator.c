@@ -368,7 +368,7 @@ EVALUATOR(function, {
 
 EVALUATOR(_struct, {
   UNUSED(_struct);
-  RETURN_ONE({._struct = node});
+  RETURN_ONE({.type = {.kind = tySTRUCT, ._struct = node}});
 });
 
 EVALUATOR(struct_inst, {
@@ -395,8 +395,8 @@ void evaluate_expr(ASTNode *node, size_t recursion_depth, Value *stack_frame,
     ECASE(binary);
     ECASE(function_call);
     ECASE(function);
-    /* ECASE(_struct); */
-    /* ECASE(struct_inst);     */
+    ECASE(_struct);
+    ECASE(struct_inst);
   default:
     panicf("not an expression: %s", ast_node_name(node->kind));
   });

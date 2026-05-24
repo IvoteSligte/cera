@@ -84,6 +84,7 @@ typedef struct Type {
       TypeArray params;
       Type *_return;
     } function;
+    // Pointer to the struct definition.
     ASTNode *_struct;
   };
 } Type;
@@ -110,8 +111,6 @@ typedef union Value {
     BuiltinID builtin_id;
     ASTNode *function;
   };
-  // Value of a struct definition, not instance.
-  ASTNode *_struct;
 } Value;
 
 typedef struct {

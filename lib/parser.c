@@ -228,7 +228,7 @@ int log_indent = 0;
                                sizeof(ASTNode *) * ($nodes.length + 1));       \
       $nodes.data[$nodes.length] = node;                                       \
       $nodes.length++;                                                         \
-      /*NOTE: should EXTEND_SPAN not be used for every node parsed normally as \
+      /* NOTE: should EXTEND_SPAN not be used for every node parsed normally as \
        * well? */                                                              \
       EXTEND_SPAN(node->span);                                                 \
       TRY_TOKEN(break, $separators);                                           \
@@ -292,6 +292,7 @@ PARSER(field_inst, {
 
 PARSER(struct_inst, {
   MUST_PARSE(name, type);
+  EXPECT(tDOT);
   EXPECT(tLBRACE);
   ZERO_OR_MORE_SEPARATED(field_inst, fields, tCOMMA);
   EXPECT(tRBRACE);

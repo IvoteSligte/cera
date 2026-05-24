@@ -3,7 +3,7 @@
 #include "ast.h"
 #include "lexer.h"
 
-#define MAX_NUM_EXPECTED 20
+#define MAX_NUM_EXPECTED 32
 
 typedef struct {
   // Index of the first unparsed token.
