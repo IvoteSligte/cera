@@ -9,8 +9,8 @@
 #define LOG_ENTER                                                              \
   {                                                                            \
     OffsetInfo oi = get_offset_info(node->source, node->span.offset);          \
-    eprintf("%-3zu %-2zu | %.*s | %s\n", oi.line_number, recursion_depth,       \
-           (int)oi.line_length, oi.line, ast_node_name(node->kind));           \
+    eprintf("%-3zu %-2zu | %.*s | %s\n", oi.line_number, recursion_depth,      \
+            (int)oi.line_length, oi.line, ast_node_name(node->kind));          \
   }
 #else
 #define LOG_ENTER
@@ -254,7 +254,7 @@ const char *symbol_value_name(int kind) {
 
 EVALUATOR(name, {
   eprintf("evaluating name %.*s (%s %s)\n", FMT(name->name),
-         symbol_value_name(name->value.kind), type_name(node->type.kind));
+          symbol_value_name(name->value.kind), type_name(node->type.kind));
   switch (name->value.kind) {
   case symBUILTIN: {
     eprintf("builtin `%.*s`: %zd\n", FMT(name->name), name->value.builtin._int);
@@ -263,14 +263,13 @@ EVALUATOR(name, {
   case symSTATIC: {
     if (name->value.static_ptr == NULL)
       panicf("static_ptr == NULL");
-    eprintf("static `%.*s`: %zd\n", FMT(name->name),
-           name->value.static_ptr->_int);
+    eprintf("static `%.*s` at %p\n", FMT(name->name), name->value.static_ptr);
     RETURN(name->value.static_ptr);
   }
   case symDYNAMIC: {
     size_t local_index = name->value.local_index;
-    eprintf("dynamic %zu `%.*s` at %p: %zd\n", local_index, FMT(name->name),
-           &stack_frame[local_index], stack_frame[local_index]._int);
+    eprintf("dynamic %zu `%.*s` at %p\n", local_index, FMT(name->name),
+            &stack_frame[local_index]);
     RETURN(&stack_frame[local_index]);
   }
   }
@@ -326,7 +325,7 @@ EVALUATOR(binary, {
     panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
   }
   eprintf("%zd %s %zd -> %zd\n", left_value->_int,
-         token_display_name(binary->op), right_value->_int, value._int);
+          token_display_name(binary->op), right_value->_int, value._int);
   RETURN_ONE(value);
 });
 
@@ -344,7 +343,7 @@ EVALUATOR(function_call, {
   Value new_stack_frame[MAX(function->frame_length, 1)];
   memset(new_stack_frame, 0, sizeof(new_stack_frame));
   eprintf("function call (%zu locals, %zu params, stack frame at %p)\n",
-         function->frame_length, function->params.length, new_stack_frame);
+          function->frame_length, function->params.length, new_stack_frame);
 
   size_t arg_local_index = 0;
   ITER_ARRAY(function_call->args, arg_node, {

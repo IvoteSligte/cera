@@ -480,21 +480,25 @@ ANALYZER(decl, {
     decl->symbol_added = true;
   }
   TRY_ANALYZE(decl->expr, expr);
-  // function type can be determined despite blocking
+  // function type can sometimes be determined even if there are blocking unknowns
   node->type = expr_type;
+  
+  if (node->type.kind != tyUNKNOWN) {
+    // determine value location
+    size_t value_length = flat_length(node->type);
+    if (is_static) {
+      decl->static_value_ptr = ALLOC(sizeof(Value) * value_length);
+      evaluate_expr(decl->expr, 0, NULL, decl->static_value_ptr);
+    } else {
+      decl->local_index = *frame_length;
+      *frame_length += value_length;
+    }
+  }
   if (blocked)
     BLOCK;
-  decl->local_index = *frame_length;
-  size_t value_length = flat_length(node->type);
-  *frame_length += value_length;
-
   if (name_eq_string(decl->name->name.name, "main")) {
     EXPECT(type_eq(expr_type, MAIN_FUNCTION_TYPE), decl->name,
            ssprintf("invalid `main` function type, expected `() -> void`"));
-  }
-  if (is_static) {
-    decl->static_value_ptr = ALLOC(sizeof(Value) * value_length);
-    evaluate_expr(decl->expr, 0, NULL, decl->static_value_ptr);
   }
   OK;
 });

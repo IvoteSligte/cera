@@ -250,14 +250,15 @@ typedef struct ASTNode {
       bool is_constant;
       ASTNode *name;
       ASTNode *expr;
+      // True if the symbol has been added to the declaration table.
+      bool symbol_added;
+      // Value location
       union {
         // Value of the declaration if it is static.
         Value *static_value_ptr;
         // Local index of the declaration if it is dynamic.
         size_t local_index;
       };
-      // True if the symbol has been added to the declaration table.
-      bool symbol_added;
     } decl;
     struct {
       ASTNodeArray decls;
