@@ -239,7 +239,6 @@ typedef struct ASTNode {
     struct {
       ASTNode *expr;
       ASTNode *name;
-      size_t struct_value_length;
       size_t field_offset;
       size_t field_length;      
     } member;

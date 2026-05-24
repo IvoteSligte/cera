@@ -329,7 +329,6 @@ ANALYZER(member, {
 
   ASTNode *struct_node = expr_type._struct;
   __auto_type _struct = &struct_node->_struct;
-  member->struct_value_length = flat_length(struct_node->type);
   member->field_offset = 0;
   ITER_ARRAY(_struct->fields, field_node, {
     __auto_type field = &field_node->field;

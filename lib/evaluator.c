@@ -382,7 +382,7 @@ EVALUATOR(struct_inst, {
 });
 
 EVALUATOR(member, {
-  Value struct_value[MAX(member->struct_value_length, 1)];
+  Value struct_value[MAX(flat_length(member->expr->type), 1)];
   memset(struct_value, 0, sizeof(struct_value));
   evaluate_expr(member->expr, recursion_depth, stack_frame, struct_value);
   copy(out, &struct_value[member->field_offset], member->field_length);
