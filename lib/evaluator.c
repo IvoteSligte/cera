@@ -242,7 +242,7 @@ void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
   }
 
 #define FRAME($name, $length)                                                  \
-  /* C requires that a variable-sized array contains at least 1 element.*/     \
+  /* C requires that a variable-length array contains at least 1 element.*/    \
   Value $name[MAX($length, 1)];                                                \
   memset($name, 0, sizeof($name))
 
