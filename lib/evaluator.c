@@ -237,10 +237,16 @@ void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
 
 #define RETURN_ONE($value...)                                                  \
   {                                                                            \
-    Value __value = $value;                                                    \
-    copy(out, &__value, flat_length(node->type));                              \
-    return;                                                                    \
+    *out = (Value)$value;                                                      \
+    OK;                                                                        \
   }
+
+#define FRAME($name, $length)                                                  \
+  /* C requires that a variable-sized array contains at least 1 element.*/     \
+  Value $name[MAX($length, 1)];                                                \
+  memset($name, 0, sizeof($name))
+
+#define SLOT($name, $type) FRAME($name, flat_length($type))
 
 const char *symbol_value_name(int kind) {
   switch (kind) {
@@ -280,9 +286,7 @@ EVALUATOR(name, {
 });
 
 EVALUATOR(integer, { RETURN_ONE({._int = integer->value}); });
-
 EVALUATOR(boolean, { RETURN_ONE({._bool = boolean->value}); });
-
 EVALUATOR(string, { RETURN_ONE({.string = string->value}); });
 
 EVALUATOR(unary, {
@@ -297,33 +301,37 @@ EVALUATOR(unary, {
   value.$out_member = left_value->$in_member $op right_value->$in_member;      \
   break;
 
+#define ARITH_BIN($op) BIN(_int, _int, $op)
+#define CMP_BIN($op) BIN(_bool, _int, $op)
+#define BOOL_BIN($op) BIN(_bool, _bool, $op)
+
 EVALUATOR(binary, {
   EVALUATE(binary->left, left_value);
   EVALUATE(binary->right, right_value);
   Value value = {0};
   switch (binary->op) {
   case tPLUS:
-    BIN(_int, _int, +);
+    ARITH_BIN(+);
   case tMINUS:
-    BIN(_int, _int, -);
+    ARITH_BIN(-);
   case tSTAR:
-    BIN(_int, _int, *);
+    ARITH_BIN(*);
   case tSLASH:
-    BIN(_int, _int, /);
+    ARITH_BIN(/);
   case tLT:
-    BIN(_bool, _int, <);
+    CMP_BIN(<);
   case tGT:
-    BIN(_bool, _int, >);
+    CMP_BIN(>);
   case tLT_EQ:
-    BIN(_bool, _int, <=);
+    CMP_BIN(<=);
   case tGT_EQ:
-    BIN(_bool, _int, >=);
+    CMP_BIN(>=);
   case tEQ_EQ:
-    BIN(_bool, _int, ==);
+    CMP_BIN(==);
   case tAMP_AMP:
-    BIN(_bool, _bool, &&);
+    BOOL_BIN(&&);
   case tBAR_BAR:
-    BIN(_bool, _bool, ||);
+    BOOL_BIN(||);
   default:
     panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
   }
@@ -342,9 +350,7 @@ EVALUATOR(function_call, {
   }
   assert(function_value->function->kind == aFUNCTION);
   __auto_type function = &function_value->function->function;
-  // C requires that a variable-sized array contains at least 1 element.
-  Value new_stack_frame[MAX(function->frame_length, 1)];
-  memset(new_stack_frame, 0, sizeof(new_stack_frame));
+  FRAME(new_stack_frame, function->frame_length);
   eprintf("function call (%zu locals, %zu params, stack frame at %p)\n",
           function->frame_length, function->params.length, new_stack_frame);
 
@@ -357,7 +363,7 @@ EVALUATOR(function_call, {
     eprintf("set param %zu at %p to %zd\n", i, arg_value, arg_value->_int);
   });
   // Assumes that parameter values have been set.
-  Value function_out[MAX(flat_length(node->type), 1)];
+  SLOT(function_out, node->type);
   memset(function_out, 0, sizeof(function_out));
   evaluate_stmts(function->stmts, recursion_depth + 1, new_stack_frame,
                  function_out);
@@ -385,7 +391,7 @@ EVALUATOR(struct_inst, {
 });
 
 EVALUATOR(member, {
-  Value struct_value[MAX(flat_length(member->expr->type), 1)];
+  SLOT(struct_value, member->expr->type);
   memset(struct_value, 0, sizeof(struct_value));
   evaluate_expr(member->expr, recursion_depth, stack_frame, struct_value);
   copy(out, &struct_value[member->field_offset], member->field_length);
@@ -425,9 +431,7 @@ void evaluate_module(Node *node) {
       assert(decl->expr->kind == aFUNCTION);
       __auto_type function = &decl->expr->function;
 
-      Value stack_frame[MAX(function->frame_length, 1)];
-      memset(stack_frame, 0, sizeof(stack_frame));
-
+      FRAME(stack_frame, function->frame_length);
       Value function_out = {0};
       evaluate_stmts(function->stmts, 0, stack_frame, &function_out);
       return;
