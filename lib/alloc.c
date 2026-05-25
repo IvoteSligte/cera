@@ -1,5 +1,7 @@
 #include "alloc.h"
 
+// --- list allocator ---
+
 void *la_calloc(ListAllocator *allocator, size_t size) {
   allocator->data =
       realloc(allocator->data, sizeof(void *) * (allocator->length + 1));
@@ -34,8 +36,10 @@ void la_shrink(ListAllocator *allocator, size_t new_length) {
 void la_free_all(ListAllocator *allocator) {
   la_shrink(allocator, 0);
   free(allocator->data);
-  allocator->data = NULL;
+  *allocator = (ListAllocator){0};
 }
+
+// --- random allocator ---
 
 void *ra_calloc(RandomAllocator *allocator, size_t size) {
   allocator->data =
@@ -70,5 +74,47 @@ void ra_free_all(RandomAllocator *allocator) {
     free(allocator->data[i].ptr);
   }
   free(allocator->data);
-  allocator->length = 0;
+  *allocator = (RandomAllocator){0};
+}
+
+// --- stack allocator ---
+
+const size_t CHUNK_SIZE = 1 << 16;
+
+static void *sa_add_chunk(StackAllocator *allocator) {
+  allocator->chunks =
+      realloc(allocator->chunks, sizeof(void *) * (allocator->length + 1));
+  allocator->current = calloc(CHUNK_SIZE, 1);
+  allocator->chunks[allocator->length] = allocator->current;
+  allocator->length += 1;
+  allocator->offset = 0;
+  return allocator->current;
+}
+
+void *sa_calloc(StackAllocator *allocator, size_t size) {
+  if (allocator->current == NULL || allocator->offset + size > CHUNK_SIZE) {
+    assert(size <= CHUNK_SIZE);
+    return sa_add_chunk(allocator);
+  }
+  allocator->offset = allocator->offset + size;
+  return allocator->current + allocator->offset;
+}
+
+void sa_shrink(StackAllocator *allocator, size_t size) {
+  while (size > allocator->offset) {
+    free(allocator->current);
+    size -= allocator->offset;
+    assert(allocator->length > 0);
+    allocator->length -= 1;
+    allocator->current = allocator->chunks[allocator->length];
+  }
+  allocator->offset -= size;
+}
+
+void sa_free_all(StackAllocator *allocator) {
+  for (size_t i = 0; i < allocator->length; i++) {
+    free(allocator->chunks[i]);
+  }
+  free(allocator->chunks);
+  *allocator = (StackAllocator){0};
 }
