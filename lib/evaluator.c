@@ -36,9 +36,15 @@ static void copy(Value *dest, Value *src, size_t length) {
     dest[i] = src[i];
 }
 
+#define FRAME($name, $length)                                                  \
+  /* C requires that a variable-length array contains at least 1 element.*/    \
+  Value $name[MAX($length, 1)];                                                \
+  memset($name, 0, sizeof($name))
+
+#define SLOT($name, $type) FRAME($name, flat_length($type))
+
 #define EVALUATE($node, $name)                                                 \
-  Value $name[MAX(flat_length($node->type), 1)];                               \
-  memset($name, 0, sizeof($name));                                             \
+  SLOT($name, $node->type);                               \
   evaluate_expr($node, recursion_depth, stack_frame, $name);
 
 #define EVALUATE_ARRAY($array)                                                 \
@@ -185,7 +191,7 @@ ControlFlow evaluate_stmt(PARAMS) {
     ECASE(return_stmt);
     ECASE(decl);
   default: {
-    Value value[MAX(flat_length(node->type), 1)];
+    SLOT(value, node->type);
     evaluate_expr(node, recursion_depth, stack_frame, value);
     RETURN(cNEXT);
   }
@@ -240,13 +246,6 @@ void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
     *out = (Value)$value;                                                      \
     OK;                                                                        \
   }
-
-#define FRAME($name, $length)                                                  \
-  /* C requires that a variable-length array contains at least 1 element.*/    \
-  Value $name[MAX($length, 1)];                                                \
-  memset($name, 0, sizeof($name))
-
-#define SLOT($name, $type) FRAME($name, flat_length($type))
 
 const char *symbol_value_name(int kind) {
   switch (kind) {
@@ -437,5 +436,5 @@ void evaluate_module(Node *node) {
       return;
     }
   });
-  eprintf("`main` function not found.\n");
+  panicf("`main` function not found.\n");
 }
