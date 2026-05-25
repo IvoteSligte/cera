@@ -88,7 +88,7 @@ int log_indent = 0;
 // prints token index, number of nodes, depth
 #define LOG(format, ...)                                                       \
   eprintf("%-3zu %-3zu %-2d %*.*s" format "\n", *token_index,                  \
-          allocator->length, log_indent, log_indent, log_indent,               \
+          state->allocator->length, log_indent, log_indent, log_indent,               \
           " " __VA_OPT__(, ) __VA_ARGS__)
 
 #define LOG_ENTER                                                              \
