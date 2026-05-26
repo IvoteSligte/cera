@@ -230,7 +230,7 @@ const char *ast_node_name(ASTNodeKind kind) {
 }
 #undef N
 
-size_t flat_length(Type type) {
+size_t length_of(Type type) {
   assert(type.kind != tyUNKNOWN);
   if (type.kind == tySTRUCT) {
     return type._struct->_struct.flat_length;

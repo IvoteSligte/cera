@@ -41,7 +41,7 @@ static void copy(Value *dest, Value *src, size_t length) {
   Value $name[MAX($length, 1)];                                                \
   memset($name, 0, sizeof($name))
 
-#define SLOT($name, $type) FRAME($name, flat_length($type))
+#define SLOT($name, $type) FRAME($name, length_of($type))
 
 #define EVALUATE($node, $name)                                                 \
   SLOT($name, $node->type);                               \
@@ -173,7 +173,7 @@ EVALUATOR(decl, {
   // FIXME: should be is_static
   if (!decl->is_constant) {
     EVALUATE(decl->expr, value);
-    copy(&stack_frame[decl->local_index], value, flat_length(node->type));
+    copy(&stack_frame[decl->local_index], value, length_of(node->type));
   }
   RETURN(cNEXT);
 });
@@ -237,7 +237,7 @@ void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
 
 #define RETURN($value...)                                                      \
   {                                                                            \
-    copy(out, $value, flat_length(node->type));                                \
+    copy(out, $value, length_of(node->type));                                \
     OK;                                                                        \
   }
 
@@ -358,7 +358,7 @@ EVALUATOR(function_call, {
     eprintf("evaluating arg %zu\n", i);
     Value *arg_value = &new_stack_frame[arg_local_index];
     evaluate_expr(arg_node, recursion_depth + 1, stack_frame, arg_value);
-    arg_local_index += flat_length(arg_node->type);
+    arg_local_index += length_of(arg_node->type);
     eprintf("set param %zu at %p to %zd\n", i, arg_value, arg_value->_int);
   });
   // Assumes that parameter values have been set.
@@ -384,7 +384,7 @@ EVALUATOR(struct_inst, {
   ITER_ARRAY(struct_inst->fields, field_inst_node, {
     evaluate_expr(field_inst_node->field_inst.expr, recursion_depth,
                   stack_frame, &out[out_index]);
-    out_index += flat_length(field_inst_node->type);
+    out_index += length_of(field_inst_node->type);
   });
   OK;
 });

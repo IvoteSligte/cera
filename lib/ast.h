@@ -292,4 +292,4 @@ bool get_symbol(SymbolTable *table, Name name, SymbolData *out);
 SymbolTable get_top_table(SymbolTable table);
 
 // Number of `Value`s large a value of this type is. Flattens structs.
-size_t flat_length(Type type);
+size_t length_of(Type type);

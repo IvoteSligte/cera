@@ -335,10 +335,10 @@ ANALYZER(member, {
     if (name_eq(field->name->name.name, member->name->name.name)) {
       node->type = get_type_value(field->type);
       assert(node->type.kind != tyUNKNOWN);
-      member->field_length += flat_length(field_node->type);
+      member->field_length += length_of(field_node->type);
       OK;
     }
-    member->field_offset += flat_length(field_node->type);
+    member->field_offset += length_of(field_node->type);
   });
   EXPECT(false, member->name, strdup("field does not exist"));
 });
@@ -353,7 +353,7 @@ ANALYZER(param, {
   ANALYZE_TYPE(param->type, param);
   node->type = param_type;
   param->local_index = *frame_length;
-  *frame_length += flat_length(node->type);
+  *frame_length += length_of(node->type);
   OK;
 });
 
@@ -480,7 +480,7 @@ ANALYZER(_struct, {
 
   ITER_ARRAY(_struct->fields, field_node, {
     ANALYZE(field_node, field);
-    _struct->flat_length += flat_length(field_type);
+    _struct->flat_length += length_of(field_type);
   });
   OK;
 });
@@ -506,7 +506,7 @@ ANALYZER(decl, {
 
   if (node->type.kind != tyUNKNOWN) {
     // determine value location
-    size_t value_length = flat_length(node->type);
+    size_t value_length = length_of(node->type);
     if (is_static) {
       decl->static_value_ptr = ALLOC(sizeof(Value) * value_length);
       evaluate_expr(decl->expr, 0, NULL, decl->static_value_ptr);
