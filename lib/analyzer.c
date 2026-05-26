@@ -57,9 +57,7 @@ typedef struct {
     ANALYZE($node, $name##_type);                                              \
     EXPECT(($name##_type_type.kind == tyTYPE), $node,                          \
            ssprintf("not a type: %s", type_name($name##_type_type.kind)));     \
-    Value $name##_value = {0};                                                 \
-    evaluate_expr($node, 0, &$name##_value, &$name##_value);                   \
-    $name##_type = $name##_value.type;                                         \
+    evaluate_expr($node, 0, NULL, (char *)&$name##_type);                      \
   }
 
 #define ANALYZE_ARRAY($array)                                                  \
@@ -283,7 +281,7 @@ Type get_type_value(ASTNode *node) {
   assert(node->name.value.kind != symDYNAMIC);
   return node->name.value.kind == symBUILTIN
              ? node->name.value.builtin.type
-             : node->name.value.static_ptr->type;
+             : AS(node->name.value.static_ptr, Type);
 }
 
 ANALYZER(struct_inst, {
@@ -335,10 +333,10 @@ ANALYZER(member, {
     if (name_eq(field->name->name.name, member->name->name.name)) {
       node->type = get_type_value(field->type);
       assert(node->type.kind != tyUNKNOWN);
-      member->field_length += length_of(field_node->type);
+      member->field_size += size_of(field_node->type);
       OK;
     }
-    member->field_offset += length_of(field_node->type);
+    member->field_offset += size_of(field_node->type);
   });
   EXPECT(false, member->name, strdup("field does not exist"));
 });
@@ -353,7 +351,7 @@ ANALYZER(param, {
   ANALYZE_TYPE(param->type, param);
   node->type = param_type;
   param->local_index = *frame_length;
-  *frame_length += length_of(node->type);
+  *frame_length += size_of(node->type);
   OK;
 });
 
@@ -476,11 +474,11 @@ ANALYZER(_struct, {
   EXPECT(is_static, node, strdup("structs can only be defined as constants"));
 
   node->type = PRIM_TYPE(tyTYPE);
-  _struct->flat_length = 0;
+  _struct->size = 0;
 
   ITER_ARRAY(_struct->fields, field_node, {
     ANALYZE(field_node, field);
-    _struct->flat_length += length_of(field_type);
+    _struct->size += size_of(field_type);
   });
   OK;
 });
@@ -506,13 +504,16 @@ ANALYZER(decl, {
 
   if (node->type.kind != tyUNKNOWN) {
     // determine value location
-    size_t value_length = length_of(node->type);
+    size_t value_size = size_of(node->type);
     if (is_static) {
-      decl->static_value_ptr = ALLOC(sizeof(Value) * value_length);
+      decl->static_value_ptr = ALLOC(value_size);
+      eprintf("size of value: %zu; align of Value: %zu; ptr %% align: %zu\n",
+              value_size, _Alignof(Value),
+              (uintptr_t)decl->static_value_ptr % _Alignof(Value));
       evaluate_expr(decl->expr, 0, NULL, decl->static_value_ptr);
     } else {
       decl->local_index = *frame_length;
-      *frame_length += value_length;
+      *frame_length += value_size;
     }
   }
   if (blocked)

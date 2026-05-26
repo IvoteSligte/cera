@@ -7,7 +7,7 @@
 extern const char *evaluator_source;
 #endif
 
-void evaluate_expr(ASTNode *node, size_t recursion_depth, Value* stack_frame, Value* out);
+void evaluate_expr(ASTNode *node, size_t recursion_depth, char* stack_frame, char* out);
 void evaluate_module(ASTNode *node);
 
 

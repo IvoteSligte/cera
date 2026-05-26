@@ -4,6 +4,8 @@
 #include "ast.h"
 #include "ast_macro.h"
 
+#include <stdalign.h> // TODO: remove dependency
+
 #ifdef DEBUG_EVALUATOR
 #include "offset.h"
 
@@ -31,27 +33,29 @@ typedef enum {
     return control_flow;                                                       \
   }
 
-static void copy(Value *dest, Value *src, size_t length) {
-  for (size_t i = 0; i < length; i++)
-    dest[i] = src[i];
-}
-
-#define FRAME($name, $length)                                                  \
+// TODO: alignment dependent on value(s) stored
+#define FRAME($name, $size)                                                    \
   /* C requires that a variable-length array contains at least 1 element.*/    \
-  Value $name[MAX($length, 1)];                                                \
-  memset($name, 0, sizeof($name))
+  char $name##__buf[MAX($size + (alignof(Value) - 1), 1)];                     \
+  char *$name = $name##__buf;                                                  \
+  {                                                                            \
+    size_t __offset = alignof(Value) - (uintptr_t)$name % alignof(Value);      \
+    if (__offset != alignof(Value))                                            \
+      $name = $name + __offset;                                                \
+  }                                                                            \
+  memset($name##__buf, 0, sizeof($name##__buf))
 
-#define SLOT($name, $type) FRAME($name, length_of($type))
+#define SLOT($name, $type) FRAME($name, size_of($type))
 
 #define EVALUATE($node, $name)                                                 \
-  SLOT($name, $node->type);                               \
+  SLOT($name, $node->type);                                                    \
   evaluate_expr($node, recursion_depth, stack_frame, $name);
 
 #define EVALUATE_ARRAY($array)                                                 \
   ITER_ARRAY($array, element, { EVALUATE(element, element); });
 
 #define PARAMS                                                                 \
-  Node *node, size_t recursion_depth, Value *stack_frame, Value *function_out
+  Node *node, size_t recursion_depth, char *stack_frame, char *function_out
 
 #define EVALUATE_STMT($stmt)                                                   \
   evaluate_stmt($stmt, recursion_depth, stack_frame, function_out)
@@ -61,7 +65,7 @@ static void copy(Value *dest, Value *src, size_t length) {
 ControlFlow evaluate_stmt(PARAMS);
 
 ControlFlow evaluate_stmts(NodeArray stmts, size_t recursion_depth,
-                           Value *stack_frame, Value *function_out) {
+                           char *stack_frame, char *function_out) {
   ITER_ARRAY(stmts, stmt_node, {
     ControlFlow control = EVALUATE_STMT(stmt_node);
     if (control == cRETURN)
@@ -70,7 +74,7 @@ ControlFlow evaluate_stmts(NodeArray stmts, size_t recursion_depth,
   return cNEXT;
 }
 
-Value *evaluate_target(Node *node, Value *stack_frame) {
+char *evaluate_target(Node *node, char *stack_frame) {
   SWITCH(node, {
     CASE(name, {
       switch (name->value.kind) {
@@ -101,7 +105,7 @@ Value *evaluate_target(Node *node, Value *stack_frame) {
 EVALUATOR(if_stmt, {
   EVALUATE(if_stmt->cond, cond_value);
   ControlFlow control = 0;
-  if (cond_value->_bool) {
+  if (AS(cond_value, bool)) {
     control = EVALUATE_STMTS(if_stmt->then_stmts);
   } else {
     control = EVALUATE_STMTS(if_stmt->else_stmts);
@@ -112,7 +116,7 @@ EVALUATOR(if_stmt, {
 EVALUATOR(while_loop, {
   while (true) {
     EVALUATE(while_loop->cond, cond_value);
-    if (!cond_value->_bool)
+    if (!AS(cond_value, bool))
       break;
     ControlFlow control = EVALUATE_STMTS(while_loop->stmts);
     if (control == cRETURN)
@@ -125,7 +129,7 @@ EVALUATOR(for_loop, {
   EVALUATE_STMT(for_loop->init);
   while (true) {
     EVALUATE(for_loop->cond, cond_value);
-    if (!cond_value->_bool)
+    if (!AS(cond_value, bool))
       break;
     ControlFlow control = EVALUATE_STMTS(for_loop->stmts);
     if (control == cRETURN)
@@ -135,14 +139,14 @@ EVALUATOR(for_loop, {
   RETURN(cNEXT);
 });
 
-#define BIN_ASSIGN($op) target->_int $op expr_value->_int
+#define BIN_ASSIGN($op) AS(target, ssize_t) $op AS(expr_value, ssize_t)
 
 EVALUATOR(assign, {
-  Value *target = evaluate_target(assign->target, stack_frame);
+  char *target = evaluate_target(assign->target, stack_frame);
   EVALUATE(assign->expr, expr_value);
   switch (assign->op) {
   case tEQ:
-    *target = *expr_value;
+    AS(target, bool) = AS(expr_value, bool);
     break;
   case tPLUS_EQ:
     BIN_ASSIGN(+=);
@@ -164,7 +168,7 @@ EVALUATOR(assign, {
 
 EVALUATOR(return_stmt, {
   EVALUATE(return_stmt->expr, expr_value);
-  eprintf("returning %zd\n", expr_value->_int);
+  eprintf("returning %zd\n", AS(expr_value, ssize_t));
   *function_out = *expr_value;
   RETURN(cRETURN);
 });
@@ -173,7 +177,7 @@ EVALUATOR(decl, {
   // FIXME: should be is_static
   if (!decl->is_constant) {
     EVALUATE(decl->expr, value);
-    copy(&stack_frame[decl->local_index], value, length_of(node->type));
+    memcpy(&stack_frame[decl->local_index], value, size_of(node->type));
   }
   RETURN(cNEXT);
 });
@@ -203,18 +207,17 @@ ControlFlow evaluate_stmt(PARAMS) {
 #undef ECASE
 
 void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
-                      Value *stack_frame, Value *out) {
+                      char *stack_frame) {
   switch (id) {
   case NOT_BUILTIN:
     panicf("unreachable");
   case PRINT_STRING: {
     assert(args.length == 1);
     EVALUATE(args.data[0], arg_value);
-    String arg_string = arg_value->string;
+    String arg_string = AS(arg_value, String);
     // Using fwrite instead of printf because printf can only print
     // non-zero-delimited strings of up to INT_MAX characters in length.
     fwrite(arg_string.text, arg_string.length, 1, stdout);
-    *out = (Value){0};
     return;
   }
   default:
@@ -223,8 +226,8 @@ void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
 }
 
 #define EVALUATOR($name, ...)                                                  \
-  void evaluate_##$name(Node *node, size_t recursion_depth,                    \
-                        Value *stack_frame, Value *out) {                      \
+  void evaluate_##$name(Node *node, size_t recursion_depth, char *stack_frame, \
+                        char *out) {                                           \
     LOG_ENTER;                                                                 \
     __auto_type $name = &node->$name;                                          \
     UNUSED($name);                                                             \
@@ -237,13 +240,13 @@ void evaluate_builtin(NodeArray args, BuiltinID id, size_t recursion_depth,
 
 #define RETURN($value...)                                                      \
   {                                                                            \
-    copy(out, $value, length_of(node->type));                                \
+    memcpy(out, $value, size_of(node->type));                                  \
     OK;                                                                        \
   }
 
 #define RETURN_ONE($value...)                                                  \
   {                                                                            \
-    *out = (Value)$value;                                                      \
+    AS(out, typeof($value)) = $value;                                          \
     OK;                                                                        \
   }
 
@@ -284,25 +287,26 @@ EVALUATOR(name, {
   panicf("unreachable");
 });
 
-EVALUATOR(integer, { RETURN_ONE({._int = integer->value}); });
-EVALUATOR(boolean, { RETURN_ONE({._bool = boolean->value}); });
-EVALUATOR(string, { RETURN_ONE({.string = string->value}); });
+EVALUATOR(integer, { RETURN_ONE(integer->value); });
+EVALUATOR(boolean, { RETURN_ONE(boolean->value); });
+EVALUATOR(string, { RETURN_ONE(string->value); });
 
 EVALUATOR(unary, {
   EVALUATE(unary->expr, expr_value);
   if (unary->op == tMINUS) {
-    RETURN_ONE({._int = -expr_value->_int});
+    RETURN_ONE(-AS(expr_value, ssize_t));
   }
   panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
 });
 
-#define BIN($out_member, $in_member, $op)                                      \
-  value.$out_member = left_value->$in_member $op right_value->$in_member;      \
+#define BIN($out_type, $in_type, $op)                                          \
+  AS(&value, $out_type) =                                                      \
+      AS(left_value, $in_type) $op AS(right_value, $in_type);                  \
   break;
 
-#define ARITH_BIN($op) BIN(_int, _int, $op)
-#define CMP_BIN($op) BIN(_bool, _int, $op)
-#define BOOL_BIN($op) BIN(_bool, _bool, $op)
+#define ARITH_BIN($op) BIN(ssize_t, ssize_t, $op)
+#define CMP_BIN($op) BIN(bool, ssize_t, $op)
+#define BOOL_BIN($op) BIN(bool, ssize_t, $op)
 
 EVALUATOR(binary, {
   EVALUATE(binary->left, left_value);
@@ -334,21 +338,22 @@ EVALUATOR(binary, {
   default:
     panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
   }
-  eprintf("%zd %s %zd -> %zd\n", left_value->_int,
-          token_display_name(binary->op), right_value->_int, value._int);
-  RETURN_ONE(value);
+  eprintf("%zd %s %zd -> %zd\n", AS(left_value, ssize_t),
+          token_display_name(binary->op), AS(right_value, ssize_t), value._int);
+  RETURN(&value);
 });
 
 EVALUATOR(function_call, {
-  EVALUATE(function_call->function, function_value);
+  EVALUATE(function_call->function, value);
+  FunctionValue function_value = AS(value, FunctionValue);
 
-  if (function_value->builtin_id != NOT_BUILTIN) {
-    evaluate_builtin(function_call->args, function_value->builtin_id,
-                     recursion_depth + 1, stack_frame, out);
+  if (function_value.builtin != NOT_BUILTIN) {
+    evaluate_builtin(function_call->args, function_value.builtin,
+                     recursion_depth + 1, stack_frame);
     OK;
   }
-  assert(function_value->function->kind == aFUNCTION);
-  __auto_type function = &function_value->function->function;
+  assert(function_value.ptr->kind == aFUNCTION);
+  __auto_type function = &function_value.ptr->function;
   FRAME(new_stack_frame, function->frame_length);
   eprintf("function call (%zu locals, %zu params, stack frame at %p)\n",
           function->frame_length, function->params.length, new_stack_frame);
@@ -356,14 +361,14 @@ EVALUATOR(function_call, {
   size_t arg_local_index = 0;
   ITER_ARRAY(function_call->args, arg_node, {
     eprintf("evaluating arg %zu\n", i);
-    Value *arg_value = &new_stack_frame[arg_local_index];
+    char *arg_value = &new_stack_frame[arg_local_index];
     evaluate_expr(arg_node, recursion_depth + 1, stack_frame, arg_value);
-    arg_local_index += length_of(arg_node->type);
-    eprintf("set param %zu at %p to %zd\n", i, arg_value, arg_value->_int);
+    arg_local_index += size_of(arg_node->type);
+    eprintf("set param %zu at %p to %zd\n", i, arg_value,
+            AS(arg_value, ssize_t));
   });
   // Assumes that parameter values have been set.
   SLOT(function_out, node->type);
-  memset(function_out, 0, sizeof(function_out));
   evaluate_stmts(function->stmts, recursion_depth + 1, new_stack_frame,
                  function_out);
   RETURN(function_out);
@@ -371,12 +376,12 @@ EVALUATOR(function_call, {
 
 EVALUATOR(function, {
   UNUSED(function);
-  RETURN_ONE({.function = node});
+  RETURN_ONE((FunctionValue){.ptr = node});
 });
 
 EVALUATOR(_struct, {
   UNUSED(_struct);
-  RETURN_ONE({.type = {.kind = tySTRUCT, ._struct = node}});
+  RETURN_ONE((Type){.kind = tySTRUCT, ._struct = node});
 });
 
 EVALUATOR(struct_inst, {
@@ -384,24 +389,23 @@ EVALUATOR(struct_inst, {
   ITER_ARRAY(struct_inst->fields, field_inst_node, {
     evaluate_expr(field_inst_node->field_inst.expr, recursion_depth,
                   stack_frame, &out[out_index]);
-    out_index += length_of(field_inst_node->type);
+    out_index += size_of(field_inst_node->type);
   });
   OK;
 });
 
 EVALUATOR(member, {
   SLOT(struct_value, member->expr->type);
-  memset(struct_value, 0, sizeof(struct_value));
   evaluate_expr(member->expr, recursion_depth, stack_frame, struct_value);
-  copy(out, &struct_value[member->field_offset], member->field_length);
+  memcpy(out, &struct_value[member->field_offset], member->field_size);
   OK;
 });
 
 #define ECASE($name)                                                           \
   CASE($name, return evaluate_##$name(node, recursion_depth, stack_frame, out))
 
-void evaluate_expr(ASTNode *node, size_t recursion_depth, Value *stack_frame,
-                   Value *out) {
+void evaluate_expr(ASTNode *node, size_t recursion_depth, char *stack_frame,
+                   char *out) {
   SWITCH(node, {
     ECASE(name);
     ECASE(integer);
@@ -431,8 +435,7 @@ void evaluate_module(Node *node) {
       __auto_type function = &decl->expr->function;
 
       FRAME(stack_frame, function->frame_length);
-      Value function_out = {0};
-      evaluate_stmts(function->stmts, 0, stack_frame, &function_out);
+      evaluate_stmts(function->stmts, 0, stack_frame, NULL);
       return;
     }
   });

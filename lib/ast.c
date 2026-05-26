@@ -230,13 +230,26 @@ const char *ast_node_name(ASTNodeKind kind) {
 }
 #undef N
 
-size_t length_of(Type type) {
-  assert(type.kind != tyUNKNOWN);
-  if (type.kind == tySTRUCT) {
-    return type._struct->_struct.flat_length;
-  } else if (type.kind == tyVOID) {
+size_t size_of(Type type) {
+  switch (type.kind) {
+  case tyUNKNOWN:
+    panicf("Cannot determine size of unknown type.");
+  case tyVOID:
     return 0;
-  } else {
-    return 1;
+  case tyINT:
+    return sizeof(ssize_t);
+  case tyBOOL:
+    return sizeof(ssize_t); // TODO: shrink 1 and take into account alignment
+  case tySTRING:
+    return sizeof(String);
+  case tyFUNCTION:
+    return sizeof(FunctionValue);
+  case tySTRUCT:
+    return type._struct->_struct.size;
+  case tyUNION:
+    panicf("unimplemented");
+  case tyTYPE:
+    return sizeof(Type);
   }
+  panicf("unreachable");
 }

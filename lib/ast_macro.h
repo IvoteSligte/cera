@@ -25,7 +25,7 @@
 #define NODE_decl aDECL
 #define NODE_module aMODULE
 
-//#define AS($type, $value) (*($type *)($value))
+#define AS($ptr, $type) (*($type *)($ptr))
 
 #define SWITCH($node, $cases)                                                  \
   {                                                                            \

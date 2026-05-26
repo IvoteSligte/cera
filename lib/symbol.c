@@ -17,7 +17,8 @@ PRIM_SYMBOL(BOOL);
 PRIM_SYMBOL(STRING);
 
 static SymbolData PRINT_STRING_SYMBOL = {
-    .value = {.kind = symBUILTIN, .builtin = {.builtin_id = PRINT_STRING}},
+    .value = {.kind = symBUILTIN,
+              .builtin = {.function = {.builtin = PRINT_STRING}}},
     .type = {.kind = tyFUNCTION,
              .is_constant = true,
              .function = {.params = {.data = &STRING_SYMBOL.value.builtin.type,

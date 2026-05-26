@@ -96,22 +96,20 @@ typedef struct {
   size_t length;
 } String;
 
-// Currently always pointer-sized so alignment is not an issue.
-typedef ssize_t Bool;
-typedef ssize_t Int;
-
 typedef union Value Value;
 
+typedef struct {
+  // Non-zero if this is a builtin function.
+  BuiltinID builtin;
+  ASTNode *ptr;
+} FunctionValue;
+
 typedef union Value {
-  Bool _bool;
-  Int _int;
+  bool _bool;
+  ssize_t _int;
   String string;
   Type type;
-  struct {
-    // Non-zero if this is a builtin function.
-    BuiltinID builtin_id;
-    ASTNode *function;
-  };
+  FunctionValue function;
 } Value;
 
 typedef struct {
@@ -127,7 +125,7 @@ typedef struct {
   } kind;
   union {
     Value builtin;
-    Value *static_ptr;
+    char *static_ptr;
     size_t local_index;
   };
 } SymbolValue;
@@ -158,12 +156,12 @@ typedef struct ASTNode {
     struct {
       const char *text;
       size_t length;
-      Int value;
+      ssize_t value;
     } integer;
     struct {
       const char *text;
       size_t length;
-      Bool value;
+      bool value;
     } boolean;
     struct {
       const char *text;
@@ -237,7 +235,7 @@ typedef struct ASTNode {
       ASTNode *expr;
       ASTNode *name;
       size_t field_offset;
-      size_t field_length;      
+      size_t field_size;
     } member;
     struct {
       ASTNode *name;
@@ -245,9 +243,8 @@ typedef struct ASTNode {
     } field;
     struct {
       ASTNodeArray fields;
-      // The total number of values this struct contains,
-      // including in nested structs.
-      size_t flat_length;
+      // The total size in bytes of this struct, including nested structs.
+      size_t size;
     } _struct;
     struct {
       bool is_constant;
@@ -255,10 +252,9 @@ typedef struct ASTNode {
       ASTNode *expr;
       // True if the symbol has been added to the declaration table.
       bool symbol_added;
-      // Value location
       union {
-        // Value of the declaration if it is static.
-        Value *static_value_ptr;
+        // Pointer to the value of the declaration if it is static.
+        char *static_value_ptr;
         // Local index of the declaration if it is dynamic.
         size_t local_index;
       };
@@ -291,5 +287,5 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
 bool get_symbol(SymbolTable *table, Name name, SymbolData *out);
 SymbolTable get_top_table(SymbolTable table);
 
-// Number of `Value`s large a value of this type is. Flattens structs.
-size_t length_of(Type type);
+// This type's size in bytes. Flattens structs.
+size_t size_of(Type type);
