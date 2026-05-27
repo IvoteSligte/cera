@@ -126,7 +126,7 @@ typedef struct {
   union {
     Value builtin;
     char *static_ptr;
-    size_t local_index;
+    size_t local_offset;
   };
 } SymbolValue;
 
@@ -187,15 +187,15 @@ typedef struct ASTNode {
       ASTNode *type;
       // True if the symbol has been added to the declaration table.
       bool symbol_added;
-      size_t local_index;
+      size_t local_offset;
     } param;
     struct {
       ASTNodeArray params;
       ASTNode *return_type; // nullable
       ASTNodeArray stmts;
       SymbolTable table;
-      // Number of values in the function's stack frame.
-      size_t frame_length;
+      // Size of this function's stack frame in bytes.
+      size_t frame_size;
     } function;
     struct {
       ASTNode *cond;
@@ -243,8 +243,10 @@ typedef struct ASTNode {
     } field;
     struct {
       ASTNodeArray fields;
-      // The total size in bytes of this struct, including nested structs.
+      // The total size of this struct in bytes, including nested structs.
       size_t size;
+      // The alignment of this struct in bytes.
+      size_t align;
     } _struct;
     struct {
       bool is_constant;
@@ -256,7 +258,7 @@ typedef struct ASTNode {
         // Pointer to the value of the declaration if it is static.
         char *static_value_ptr;
         // Local index of the declaration if it is dynamic.
-        size_t local_index;
+        size_t local_offset;
       };
     } decl;
     struct {
@@ -287,5 +289,8 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
 bool get_symbol(SymbolTable *table, Name name, SymbolData *out);
 SymbolTable get_top_table(SymbolTable table);
 
-// This type's size in bytes. Flattens structs.
+// The given type's size in bytes. Flattens structs.
 size_t size_of(Type type);
+
+// The given type's alignment in bytes.
+size_t align_of(Type type);

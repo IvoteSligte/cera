@@ -6,7 +6,7 @@
 #include "evaluator.h"
 #include "offset.h"
 
-// TODO: more efficient local_index allocation
+// TODO: more efficient local_offset allocation
 
 typedef enum {
   ANYTHING_CHANGED = 1 << 0,
@@ -29,15 +29,15 @@ typedef struct {
 
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
-    return analyze_##$name(state, node, table, return_type, frame_length,      \
+    return analyze_##$name(state, node, table, return_type, frame_size,        \
                            is_static);                                         \
   })
 
 // Analyze a node, only returning on error.
 #define TRY_ANALYZE($node, $name)                                              \
   {                                                                            \
-    Result result = analyze_node(state, $node, table, return_type,             \
-                                 frame_length, is_static);                     \
+    Result result =                                                            \
+        analyze_node(state, $node, table, return_type, frame_size, is_static); \
     if (result == rERROR)                                                      \
       FAIL;                                                                    \
     blocked |= result == rBLOCKED;                                             \
@@ -102,8 +102,7 @@ typedef enum {
 
 #define ANALYZER_SIGNATURE($name)                                              \
   Result analyze_##$name(State *state, Node *node, Table *table,               \
-                         Type return_type, size_t *frame_length,               \
-                         bool is_static)
+                         Type return_type, size_t *frame_size, bool is_static)
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
@@ -115,7 +114,7 @@ typedef enum {
     UNUSED(return_type);                                                       \
     UNUSED(is_static);                                                         \
     UNUSED(blocked);                                                           \
-    UNUSED(frame_length);                                                      \
+    UNUSED(frame_size);                                                        \
   }
 
 ANALYZER_SIGNATURE(node);
@@ -350,8 +349,8 @@ ANALYZER(param, {
   }
   ANALYZE_TYPE(param->type, param);
   node->type = param_type;
-  param->local_index = *frame_length;
-  *frame_length += size_of(node->type);
+  param->local_offset = *frame_size;
+  *frame_size += size_of(node->type);
   OK;
 });
 
@@ -363,7 +362,7 @@ ANALYZER(function, {
   function->table.parent = table;
   Table *table = &function->table;
   Type *type = &node->type;
-  size_t *frame_length = &function->frame_length;
+  size_t *frame_size = &function->frame_size;
 
   if (type->kind == tyUNKNOWN) {
     type->is_constant = true;
@@ -475,10 +474,12 @@ ANALYZER(_struct, {
 
   node->type = PRIM_TYPE(tyTYPE);
   _struct->size = 0;
+  _struct->align = 1;
 
   ITER_ARRAY(_struct->fields, field_node, {
     ANALYZE(field_node, field);
     _struct->size += size_of(field_type);
+    _struct->align = MAX(_struct->align, align_of(field_type));
   });
   OK;
 });
@@ -512,8 +513,8 @@ ANALYZER(decl, {
               (uintptr_t)decl->static_value_ptr % _Alignof(Value));
       evaluate_expr(decl->expr, 0, NULL, decl->static_value_ptr);
     } else {
-      decl->local_index = *frame_length;
-      *frame_length += value_size;
+      decl->local_offset = *frame_size;
+      *frame_size += value_size;
     }
   }
   if (blocked)

@@ -3,8 +3,8 @@ CC = gcc
 # set via CLI/justfile
 BUILD ?= debug
 
-CFLAGS_debug = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DDEBUG_PARSER
-CFLAGS_test = -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DTEST -DDEBUG_EVALUATOR
+CFLAGS_debug = -std=gnu11 -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DDEBUG_PARSER
+CFLAGS_test = -std=gnu11 -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DTEST -DDEBUG_EVALUATOR
 CFLAGS = $(CFLAGS_$(BUILD))
 
 LIB_SRC = $(wildcard lib/*.c)

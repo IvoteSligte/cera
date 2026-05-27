@@ -74,12 +74,12 @@ static SymbolValue get_node_value(ASTNode *node, bool is_global) {
                 FMT(node->decl.name->name.name), type_name(node->type.kind));
       });
     } else {
-      out.local_index = node->decl.local_index;
+      out.local_offset = node->decl.local_offset;
     }
   } else {
     assert(node->kind == aPARAM);
     out.kind = symDYNAMIC;
-    out.local_index = node->param.local_index;
+    out.local_offset = node->param.local_offset;
   }
   return out;
 }

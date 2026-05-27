@@ -4,7 +4,7 @@
 #include "ast.h"
 #include "ast_macro.h"
 
-#include <stdalign.h> // TODO: remove dependency
+#include <stdalign.h>
 
 #ifdef DEBUG_EVALUATOR
 #include "offset.h"
@@ -21,6 +21,8 @@ const char *evaluator_source;
 #define LOG_ENTER
 #endif
 
+#define FRAME_ALIGN sizeof(max_align_t)
+
 typedef ASTNodeArray NodeArray;
 
 typedef enum {
@@ -33,19 +35,19 @@ typedef enum {
     return control_flow;                                                       \
   }
 
-// TODO: alignment dependent on value(s) stored
-#define FRAME($name, $size)                                                    \
+#define FRAME($name, $size, $align)                                            \
   /* C requires that a variable-length array contains at least 1 element.*/    \
-  char $name##__buf[MAX($size + (alignof(Value) - 1), 1)];                     \
+  size_t $name##__align = $align;                                              \
+  char $name##__buf[MAX($size + $name##__align, 1)];                           \
   char *$name = $name##__buf;                                                  \
   {                                                                            \
-    size_t __offset = alignof(Value) - (uintptr_t)$name % alignof(Value);      \
-    if (__offset != alignof(Value))                                            \
+    size_t __offset = $name##__align - (uintptr_t)$name % $name##__align;      \
+    if (__offset != $name##__align)                                            \
       $name = $name + __offset;                                                \
   }                                                                            \
   memset($name##__buf, 0, sizeof($name##__buf))
 
-#define SLOT($name, $type) FRAME($name, size_of($type))
+#define SLOT($name, $type) FRAME($name, size_of($type), align_of($type))
 
 #define EVALUATE($node, $name)                                                 \
   SLOT($name, $node->type);                                                    \
@@ -81,7 +83,7 @@ char *evaluate_target(Node *node, char *stack_frame) {
       case symBUILTIN:
         panicf("cannot take address of builtin");
       case symDYNAMIC:
-        return &stack_frame[name->value.local_index];
+        return &stack_frame[name->value.local_offset];
       case symSTATIC:
         return name->value.static_ptr;
       }
@@ -177,7 +179,7 @@ EVALUATOR(decl, {
   // FIXME: should be is_static
   if (!decl->is_constant) {
     EVALUATE(decl->expr, value);
-    memcpy(&stack_frame[decl->local_index], value, size_of(node->type));
+    memcpy(&stack_frame[decl->local_offset], value, size_of(node->type));
   }
   RETURN(cNEXT);
 });
@@ -278,10 +280,10 @@ EVALUATOR(name, {
     RETURN(name->value.static_ptr);
   }
   case symDYNAMIC: {
-    size_t local_index = name->value.local_index;
-    eprintf("dynamic %zu `%.*s` at %p\n", local_index, FMT(name->name),
-            &stack_frame[local_index]);
-    RETURN(&stack_frame[local_index]);
+    size_t local_offset = name->value.local_offset;
+    eprintf("dynamic `%.*s` at %p (offset %zu)\n", FMT(name->name),
+            &stack_frame[local_offset], local_offset);
+    RETURN(&stack_frame[local_offset]);
   }
   }
   panicf("unreachable");
@@ -311,7 +313,10 @@ EVALUATOR(unary, {
 EVALUATOR(binary, {
   EVALUATE(binary->left, left_value);
   EVALUATE(binary->right, right_value);
-  Value value = {0};
+  union {
+    ssize_t _int;
+    bool _bool;
+  } value = {0};
   switch (binary->op) {
   case tPLUS:
     ARITH_BIN(+);
@@ -354,16 +359,20 @@ EVALUATOR(function_call, {
   }
   assert(function_value.ptr->kind == aFUNCTION);
   __auto_type function = &function_value.ptr->function;
-  FRAME(new_stack_frame, function->frame_length);
+  FRAME(new_stack_frame, function->frame_size, FRAME_ALIGN);
   eprintf("function call (%zu locals, %zu params, stack frame at %p)\n",
-          function->frame_length, function->params.length, new_stack_frame);
+          function->frame_size, function->params.length, new_stack_frame);
 
-  size_t arg_local_index = 0;
+  size_t arg_local_offset = 0;
   ITER_ARRAY(function_call->args, arg_node, {
     eprintf("evaluating arg %zu\n", i);
-    char *arg_value = &new_stack_frame[arg_local_index];
+    size_t align = align_of(arg_node->type);
+    if (arg_local_offset % align != 0) {
+      arg_local_offset += align - arg_local_offset % align;
+    }
+    char *arg_value = &new_stack_frame[arg_local_offset];
     evaluate_expr(arg_node, recursion_depth + 1, stack_frame, arg_value);
-    arg_local_index += size_of(arg_node->type);
+    arg_local_offset += size_of(arg_node->type);
     eprintf("set param %zu at %p to %zd\n", i, arg_value,
             AS(arg_value, ssize_t));
   });
@@ -434,7 +443,7 @@ void evaluate_module(Node *node) {
       assert(decl->expr->kind == aFUNCTION);
       __auto_type function = &decl->expr->function;
 
-      FRAME(stack_frame, function->frame_length);
+      FRAME(stack_frame, function->frame_size, FRAME_ALIGN);
       evaluate_stmts(function->stmts, 0, stack_frame, NULL);
       return;
     }

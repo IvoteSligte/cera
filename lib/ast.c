@@ -1,6 +1,8 @@
 #include "ast.h"
 #include "ast_macro.h"
 
+#include <stdalign.h>
+
 Span token_span(Token token) {
   return (Span){.offset = token.offset, .length = token.length};
 }
@@ -250,6 +252,32 @@ size_t size_of(Type type) {
     panicf("unimplemented");
   case tyTYPE:
     return sizeof(Type);
+  }
+  panicf("unreachable");
+}
+
+size_t align_of(Type type) {
+  switch (type.kind) {
+  case tyUNKNOWN:
+    panicf("Cannot determine alignment of UNKNOWN type.");
+  case tyVOID:
+    return 1; // prevents underflow errors when subtracting 1
+  case tyINT:
+    return alignof(ssize_t);
+  case tyBOOL:
+    return alignof(bool);
+  case tySTRING:
+    return alignof(String);
+  case tyFUNCTION:
+    // TODO: split tyFUNCTION into tyBUILTIN and tyFUNCTION?
+    // this would shrink the size of function values to half
+    return alignof(FunctionValue);
+  case tySTRUCT:
+    return type._struct->_struct.align;
+  case tyUNION:
+    panicf("unimplemented");
+  case tyTYPE:
+    return alignof(Type);
   }
   panicf("unreachable");
 }

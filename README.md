@@ -2,6 +2,8 @@
 
 ## Dependencies
 
+GNU C11
+
 ### Debugging
 
 Sanitizers: `libasan`, `libubsan`
