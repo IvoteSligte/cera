@@ -1,0 +1,8 @@
+
+main :: () {
+    square(10);
+}
+
+square :: (x: int) -> int {
+    return x * x;
+}

@@ -1,31 +1,30 @@
 CC = gcc
 
-# set via CLI/justfile
-BUILD ?= debug
+# CFLAGS = -std=gnu11 -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic
+CFLAGS = -std=gnu11 -Wall -Wextra -g -O0 -rdynamic
 
-CFLAGS_debug = -std=gnu11 -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DDEBUG_PARSER
-CFLAGS_test = -std=gnu11 -Wall -Wextra -fsanitize=address,undefined -g -O0 -rdynamic -DTEST -DDEBUG_EVALUATOR
-CFLAGS_lib = -std=gnu11 -Wall -Wextra
-CFLAGS = $(CFLAGS_$(BUILD))
-
-SRC_lib = $(wildcard lib/*.c)
-SRC_debug = $(SRC_lib) main.c
-SRC_test = $(SRC_lib) test.c
-
-OBJ = $(SRC_$(BUILD):%.c=build/$(BUILD)/%.o)
+SRC = $(wildcard lib/*.c)
+OBJ = $(SRC:%.c=build/%.o)
 DEP = $(OBJ:.o=.d) # header dependency files
 
-build/$(BUILD)/%.o: %.c
+build/%.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-build/$(BUILD).out: $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $(OBJ)
+debug: $(OBJ)
+	$(CC) $(CFLAGS) main.c -o $@ $(OBJ)
 
-build/lib.o: $(OBJ)
-	$(CC) $(CFLAGS) -c -o $@ $(OBJ)
+test: $(OBJ)
+	$(CC) $(CFLAGS) test.c -o $@ $(OBJ)
+
+lib.a: $(OBJ)
+	ar rcs lib.a $(OBJ)
 
 clean:
 	rm -r build/
+	rm debug test lib.a
+
+.PHONY: clean
 
 -include $(DEP)
+

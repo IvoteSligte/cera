@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
 	"unsafe"
 
 	"github.com/owenrumney/go-lsp/document"
@@ -10,9 +12,13 @@ import (
 	"github.com/owenrumney/go-lsp/server"
 )
 
-//go:generate make -C .. build/lib.o BUILD=lib
+//go:generate make lib.a -C ..
+
 /*
+#cgo CFLAGS: -I../lib
+#cgo LDFLAGS: -L.. -l:lib.a
 #include "compiler.h"
+#include <string.h>
 */
 import "C"
 
@@ -63,17 +69,24 @@ func (h *handler) DidSave(ctx context.Context, params *lsp.DidSaveTextDocumentPa
 			var errors []C.CompileError = unsafe.Slice(cerrors.data, cerrors.length)
 			for _, error := range errors {
 				sev := lsp.SeverityError
+				line := int(error.line) - 1
+				column := int(error.column)
+				message := C.GoString(error.message)
+				fmt.Fprintln(os.Stderr, "Line: ", line)
+				fmt.Fprintln(os.Stderr, "Column: ", column)
+				fmt.Fprintln(os.Stderr, "Message: ", message)
 				diags = append(diags, lsp.Diagnostic{
 					Range: lsp.Range{
-						Start: lsp.Position{Line: int(error.line), Character: int(error.column)},
-						End:   lsp.Position{Line: int(error.line), Character: int(error.column) + 1},
+						Start: lsp.Position{Line: line, Character: column},
+						End:   lsp.Position{Line: line, Character: column + 1},
 					},
 					Severity: &sev,
 					Source:   "compiler",
-					Message:  "TODO found",
+					Message:  message,
 				})
 			}
 		}
+		C.free_compile_errors(&cerrors)
 		C.free(unsafe.Pointer(ctext))
 	}
 	return h.client.PublishDiagnostics(ctx, &lsp.PublishDiagnosticsParams{

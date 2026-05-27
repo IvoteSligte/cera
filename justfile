@@ -1,18 +1,21 @@
 
 run *args: build
-    ./build/debug.out {{args}}
+    ./debug {{args}}
 
 test *args: build-test
-    ./build/test.out {{args}}
+    ./test {{args}}
 
 check:
     cc -fsyntax-only *.c lib/*.c -Wall -Wextra
 
 build:
-    make build/debug.out BUILD=debug
+    make debug
 
 build-test:
-    make build/test.out BUILD=test
+    make test
+
+build-lib:
+    make lib.a
 
 clean:
     make clean

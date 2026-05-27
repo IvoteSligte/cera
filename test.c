@@ -156,7 +156,8 @@ Options parse_options(int argc, const char *argv[]) {
       eprintf("\t\tExecute a test by file path. Status indicates success.\n");
       eprintf("\n");
       eprintf("\t-s, --show-logs\n");
-      eprintf("\t\tPrints compiler logs to the console instead of to '/tmp/cm-test-<test_name>'.\n");
+      eprintf("\t\tPrints compiler logs to the console instead of to "
+              "'/tmp/cm-test-<test_name>'.\n");
       eprintf("\n");
       exit(0);
     }
@@ -215,17 +216,17 @@ int main(int argc, const char *argv[]) {
   if (options.pattern != NULL) {
     compile_regex(options.pattern, &regex);
   }
-  DIR *dir = opendir("test/");
+  DIR *dir = opendir("tests/");
   if (dir == NULL) {
-    printf("Could not open test/ directory.");
+    printf("Could not open tests/ directory.");
     return 1;
   }
   struct dirent *dir_entry = NULL;
   // 256 is the max size of a filename on Linux
-  char path[5 + 256] = "test/";
+  char path[sizeof("tests/") - 1 + 256] = "tests/";
   while ((dir_entry = readdir(dir)) != NULL) {
     const char *file_name = dir_entry->d_name;
-    strcpy(&path[5], file_name);
+    strcpy(&path[sizeof("tests/") - 1], file_name);
     const char *file_extension = strrchr(file_name, '.');
     if (!str_eq(file_extension, FILE_EXTENSION)) {
       continue;
@@ -241,10 +242,9 @@ int main(int argc, const char *argv[]) {
 
       // Run the test as a separate process.
       // Only capture stdout, leaving stderr as log file in /tmp/cm-test-<name>
-      char *cmd =
-          options.show_logs
-              ? ssprintf("%s --file %s", argv[0], path)
-              : ssprintf("%s --file %s 2>/tmp/cm-test-%s", argv[0], path, name);
+      char *cmd = options.show_logs ? ssprintf("%s --file %s", argv[0], path)
+                                    : ssprintf("%s --file %s 2>/tmp/cm-test-%s",
+                                               argv[0], path, name);
       FILE *stdout = popen(cmd, "r"); // TODO: cross-platform
       free(cmd);
       char *stdout_string = read_stream(stdout);
