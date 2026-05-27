@@ -5,7 +5,7 @@
 #include "lib/parser.h"
 
 int main() {
-  char *source = read_file("test.ex");
+  char *source = read_file("test.cm");
   if (source == NULL) {
     return 1;
   }
