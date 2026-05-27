@@ -85,6 +85,7 @@ LexResult lex(const char *source, size_t *offset, Token *out,
               LexError *error_data);
 
 void print_lex_error(LexError error);
+void get_lex_error_info(LexError error, char** out_message, size_t* out_line, size_t* out_column);
 
 typedef struct {
   const char *source;

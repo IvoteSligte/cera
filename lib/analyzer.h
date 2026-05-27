@@ -14,5 +14,8 @@ typedef struct {
 
 bool analyze(AST *ast, AnalyzeErrorArray *error_data);
 
-void print_analyze_errors(const char* source, AnalyzeErrorArray type_errors);
-void free_analyze_errors(AnalyzeErrorArray *type_errors);
+void print_analyze_errors(const char *source, AnalyzeErrorArray errors);
+void get_analyze_error_info(const char *source, AnalyzeError error,
+                            char **out_message, size_t *out_line,
+                            size_t *out_column);
+void free_analyze_errors(AnalyzeErrorArray *errors);

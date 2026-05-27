@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"log"
-	"strings"
+	"unsafe"
 
 	"github.com/owenrumney/go-lsp/document"
 	"github.com/owenrumney/go-lsp/lsp"
 	"github.com/owenrumney/go-lsp/server"
 )
+
+//go:generate make -C .. build/lib.o BUILD=lib
+/*
+#include "compiler.h"
+*/
+import "C"
 
 type handler struct {
 	docs   *document.Store
@@ -47,28 +53,29 @@ func (h *handler) DidSave(ctx context.Context, params *lsp.DidSaveTextDocumentPa
 		Type:    lsp.MessageTypeInfo,
 		Message: "document saved: " + string(params.TextDocument.URI),
 	})
-
-	var diags []lsp.Diagnostic
 	text, ok := h.docs.Text(params.TextDocument.URI)
+	var diags []lsp.Diagnostic
 	if ok {
-		for i, line := range strings.Split(text, "\n") {
-			idx := strings.Index(line, "TODO")
-			if idx < 0 {
-				continue
+		ctext := C.CString(text)
+		cast := C.AST{}
+		cerrors := C.CompileErrors{}
+		if !C.compile(ctext, &cast, &cerrors) {
+			var errors []C.CompileError = unsafe.Slice(cerrors.data, cerrors.length)
+			for _, error := range errors {
+				sev := lsp.SeverityError
+				diags = append(diags, lsp.Diagnostic{
+					Range: lsp.Range{
+						Start: lsp.Position{Line: int(error.line), Character: int(error.column)},
+						End:   lsp.Position{Line: int(error.line), Character: int(error.column) + 1},
+					},
+					Severity: &sev,
+					Source:   "compiler",
+					Message:  "TODO found",
+				})
 			}
-			sev := lsp.SeverityWarning
-			diags = append(diags, lsp.Diagnostic{
-				Range: lsp.Range{
-					Start: lsp.Position{Line: i, Character: idx},
-					End:   lsp.Position{Line: i, Character: idx + 4},
-				},
-				Severity: &sev,
-				Source:   "todo-checker",
-				Message:  "TODO found",
-			})
 		}
+		C.free(unsafe.Pointer(ctext))
 	}
-
 	return h.client.PublishDiagnostics(ctx, &lsp.PublishDiagnosticsParams{
 		URI:         params.TextDocument.URI,
 		Diagnostics: diags,
