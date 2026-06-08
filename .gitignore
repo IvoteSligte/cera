@@ -1,4 +1,5 @@
 build/
 debug
+debug.o
 test
-lib.o
+test.o

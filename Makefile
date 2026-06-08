@@ -11,18 +11,15 @@ build/%.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-debug: $(OBJ)
-	$(CC) $(CFLAGS) main.c -o $@ $(OBJ)
+debug: $(OBJ) main.o
+	$(CC) $(CFLAGS) -o $@ $(OBJ) main.o
 
-test: $(OBJ)
-	$(CC) $(CFLAGS) test.c -o $@ $(OBJ)
-
-lib.a: $(OBJ)
-	ar rcs lib.a $(OBJ)
+test: $(OBJ) test.o
+	$(CC) $(CFLAGS) -o $@ $(OBJ) test.o
 
 clean:
-	rm -r build/
-	rm debug test lib.a
+	rm -rf build/
+	rm -f debug test lsp lib.a
 
 .PHONY: clean
 
