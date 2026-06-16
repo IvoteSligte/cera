@@ -2,20 +2,20 @@
 Config :: struct {
     one: bool;
     two: int;
+    three: string;
 }
 
 main :: () {
     config := Config.{
         one: true,
         two: 10,
+        three: "three",
     };
-    if config.one; {
-        print_string("config.one == true\n");
-    }
-    if config.two == 10; {
-        print_string("config.two == 10\n");
-    }
+    print_bool(config.one); print_string("\n");
+    print_int(config.two); print_string("\n");
+    print_string(config.three); print_string("\n");
 }
 ===
-config.one == true
-config.two == 10
+true
+10
+three

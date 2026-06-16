@@ -1,0 +1,11 @@
+main :: () {
+    print_bool(false); print_string("\n");
+    print_bool(true); print_string("\n");
+    print_int(-25432); print_string("\n");
+    print_string("Hello, World!\n");
+}
+===
+false
+true
+-25432
+Hello, World!

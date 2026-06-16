@@ -25,6 +25,8 @@
 #define NODE_decl aDECL
 #define NODE_module aMODULE
 
+#define auto __auto_type
+
 #define AS($ptr, $type) (*($type *)($ptr))
 
 #define SWITCH($node, $cases)                                                  \
@@ -50,7 +52,7 @@
 
 #define ITER_ARRAY($array, $element, ...)                                      \
   for (size_t i = 0; i < ($array).length; i++) {                               \
-    ASTNode *$element = ($array).data[i];                                      \
+    __auto_type $element = ($array).data[i];                                   \
     {                                                                          \
       __VA_ARGS__;                                                             \
     }                                                                          \

@@ -1,8 +1,9 @@
 
 #include "lib/analyzer.h"
-#include "lib/evaluator.h"
+#include "lib/generator.h"
 #include "lib/lexer.h"
 #include "lib/parser.h"
+#include <llvm-c/Core.h>
 
 int main() {
   char *source = read_file("test.cm");
@@ -46,7 +47,7 @@ int main() {
     free(source);
     return 1;
   }
-  evaluate_module(ast.head);
+  generate_and_evaluate(ast.head);
   free_ast(&ast);
   free(source);
   return 0;

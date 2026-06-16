@@ -64,7 +64,13 @@ typedef enum {
 
 typedef enum {
   NOT_BUILTIN = 0UL,
-  PRINT_STRING,
+  bVOID,
+  bINT,
+  bBOOL,
+  bSTRING,
+  bPRINT_BOOL,
+  bPRINT_INT,
+  bPRINT_STRING,
 } BuiltinID;
 
 typedef struct Type Type;
@@ -80,12 +86,11 @@ typedef struct Type {
   // true if bound to a fixed location in memory
   bool is_bound;
   union {
-    Name name;
     struct {
       TypeArray params;
       Type *_return;
     } function;
-    // Pointer to the struct definition.
+    // Pointer to the struct declaration (aDECL).
     ASTNode *_struct;
   };
 } Type;
@@ -99,42 +104,9 @@ typedef struct {
 typedef union Value Value;
 
 typedef struct {
-  // Non-zero if this is a builtin function.
-  BuiltinID builtin;
-  ASTNode *ptr;
-} FunctionValue;
-
-typedef union Value {
-  bool _bool;
-  ssize_t _int;
-  String string;
-  Type type;
-  FunctionValue function;
-} Value;
-
-typedef struct {
   Name name;
   ASTNode *node;
 } Symbol;
-
-typedef struct {
-  enum {
-    symBUILTIN,
-    symSTATIC,
-    symDYNAMIC,
-  } kind;
-  union {
-    Value builtin;
-    char *static_ptr;
-    size_t local_offset;
-  };
-} SymbolValue;
-
-// Data retrieved from a symbol on query.
-typedef struct {
-  SymbolValue value;
-  Type type;
-} SymbolData;
 
 typedef struct SymbolTable SymbolTable;
 typedef struct SymbolTable {
@@ -143,15 +115,24 @@ typedef struct SymbolTable {
   size_t length;
 } SymbolTable;
 
+// These prevent having this header depend on LLVM.
+typedef struct LLVMOpaqueValue *LLVMValueRef;
+typedef struct LLVMOpaqueType *LLVMTypeRef;
+
 typedef struct ASTNode {
   Span span;
   bool is_analyzed;
   Type type;
+  // LLVM representation of the value this node represents.
+  // For decl/param this is a *pointer* to the value.
+  LLVMValueRef llvm_value;
   ASTNodeKind kind;
   union {
     struct {
       Name name;
-      SymbolValue value;
+      // Either decl != NULL or builtin != 0.
+      ASTNode *decl;
+      BuiltinID builtin;
     } name;
     struct {
       const char *text;
@@ -187,15 +168,12 @@ typedef struct ASTNode {
       ASTNode *type;
       // True if the symbol has been added to the declaration table.
       bool symbol_added;
-      size_t local_offset;
     } param;
     struct {
       ASTNodeArray params;
       ASTNode *return_type; // nullable
       ASTNodeArray stmts;
       SymbolTable table;
-      // Size of this function's stack frame in bytes.
-      size_t frame_size;
     } function;
     struct {
       ASTNode *cond;
@@ -234,8 +212,8 @@ typedef struct ASTNode {
     struct {
       ASTNode *expr;
       ASTNode *name;
-      size_t field_offset;
-      size_t field_size;
+      // Index of the field within the struct.
+      size_t field_index;
     } member;
     struct {
       ASTNode *name;
@@ -243,23 +221,15 @@ typedef struct ASTNode {
     } field;
     struct {
       ASTNodeArray fields;
-      // The total size of this struct in bytes, including nested structs.
-      size_t size;
-      // The alignment of this struct in bytes.
-      size_t align;
+      LLVMTypeRef llvm_type;
     } _struct;
     struct {
       bool is_constant;
-      ASTNode *name;
-      ASTNode *expr;
+      bool is_global;
       // True if the symbol has been added to the declaration table.
       bool symbol_added;
-      union {
-        // Pointer to the value of the declaration if it is static.
-        char *static_value_ptr;
-        // Local index of the declaration if it is dynamic.
-        size_t local_offset;
-      };
+      ASTNode *name;
+      ASTNode *expr;
     } decl;
     struct {
       ASTNodeArray decls;
@@ -286,11 +256,15 @@ const char *ast_node_name(ASTNodeKind kind);
 
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
                 ASTNode *node);
-bool get_symbol(SymbolTable *table, Name name, SymbolData *out);
-SymbolTable get_top_table(SymbolTable table);
+bool get_builtin(Name name, Type *out_type, BuiltinID *out_builtin);
+bool get_builtin_type(Name name, Type *out_builtin_type);
 
-// The given type's size in bytes. Flattens structs.
-size_t size_of(Type type);
+// Returns true if the symbol with the given name exists.
+// Fills out_type and either out_node or out_builtin depending on whether the
+// symbol is user-defined or builtin.
+bool get_symbol(SymbolTable *table, Name name, Type *out_type,
+                ASTNode **out_node, BuiltinID *out_builtin);
 
-// The given type's alignment in bytes.
-size_t align_of(Type type);
+extern Type PRINT_BOOL_TYPE;
+extern Type PRINT_INT_TYPE;
+extern Type PRINT_STRING_TYPE;

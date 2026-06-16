@@ -3,10 +3,7 @@
 #include "analyzer_shared.h"
 #include "ast.h"
 #include "ast_macro.h"
-#include "evaluator.h"
 #include "offset.h"
-
-// TODO: more efficient local_offset allocation
 
 typedef enum {
   ANYTHING_CHANGED = 1 << 0,
@@ -29,15 +26,13 @@ typedef struct {
 
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
-    return analyze_##$name(state, node, table, return_type, frame_size,        \
-                           is_static);                                         \
+    return analyze_##$name(state, node, table, return_type, is_static);        \
   })
 
 // Analyze a node, only returning on error.
 #define TRY_ANALYZE($node, $name)                                              \
   {                                                                            \
-    Result result =                                                            \
-        analyze_node(state, $node, table, return_type, frame_size, is_static); \
+    Result result = analyze_node(state, $node, table, return_type, is_static); \
     if (result == rERROR)                                                      \
       FAIL;                                                                    \
     blocked |= result == rBLOCKED;                                             \
@@ -57,7 +52,8 @@ typedef struct {
     ANALYZE($node, $name##_type);                                              \
     EXPECT(($name##_type_type.kind == tyTYPE), $node,                          \
            ssprintf("not a type: %s", type_name($name##_type_type.kind)));     \
-    evaluate_expr($node, 0, NULL, (char *)&$name##_type);                      \
+    $name##_type = get_type_value($node);                                      \
+    assert($name##_type.kind != tyUNKNOWN);                                    \
   }
 
 #define ANALYZE_ARRAY($array)                                                  \
@@ -102,7 +98,7 @@ typedef enum {
 
 #define ANALYZER_SIGNATURE($name)                                              \
   Result analyze_##$name(State *state, Node *node, Table *table,               \
-                         Type return_type, size_t *frame_size, bool is_static)
+                         Type return_type, bool is_static)
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
@@ -114,25 +110,24 @@ typedef enum {
     UNUSED(return_type);                                                       \
     UNUSED(is_static);                                                         \
     UNUSED(blocked);                                                           \
-    UNUSED(frame_size);                                                        \
   }
 
 ANALYZER_SIGNATURE(node);
 
 ANALYZER(name, {
-  SymbolData symbol = {0};
-  if (!get_symbol(table, name->name, &symbol)) {
+  if (!get_symbol(table, name->name, &node->type, &name->decl,
+                  &name->builtin)) {
     eprintf("INFO: compilation blocked by undefined symbol `%.*s` \n",
             (int)name->name.length, name->name.text);
     EXPECT(!state->error_on_block, node, strdup("undefined symbol"));
     BLOCK;
   }
-  EXPECT((!is_static || symbol.value.kind != symDYNAMIC), node,
-         strdup("static declaration refers to runtime variable"));
-  name->value = symbol.value;
-  if (symbol.type.kind == tyUNKNOWN)
+  /* TODO: EXPECT((!is_static || symbol.value.kind != symDYNAMIC), node, */
+  /*        strdup("static declaration refers to runtime variable")); */
+  if (node->type.kind == tyUNKNOWN)
     BLOCK;
-  node->type = symbol.type;
+  /* TODO (only for variables): EXPECT(node->type.kind != tyFUNCTION, node,
+   * strdup("cannot get address of function")); */
   node->type.is_bound = true;
   OK;
 });
@@ -186,8 +181,9 @@ ANALYZER(string, {
 ANALYZER(unary, {
   ANALYZE(unary->expr, expr);
   if (unary->op == tMINUS) {
-    EXPECT((expr_type.kind != tyINT), unary->expr,
-           strdup("cannot apply unary operator `-` to non-numeric type"));
+    EXPECT((expr_type.kind == tyINT), unary->expr,
+           ssprintf("cannot apply unary operator `-` to non-numeric type %s",
+                    type_name(expr_type.kind)));
     node->type = expr_type;
     OK;
   }
@@ -275,22 +271,37 @@ ANALYZER(field_inst, {
 
 // Returns the value of a type expression.
 Type get_type_value(ASTNode *node) {
-  assert(node->kind == aNAME);
-  assert(node->type.kind == tyTYPE);
-  assert(node->name.value.kind != symDYNAMIC);
-  return node->name.value.kind == symBUILTIN
-             ? node->name.value.builtin.type
-             : AS(node->name.value.static_ptr, Type);
+  if (node->type.kind != tyTYPE) {
+    panicf("get_type_value called with non-type %s (expected tyTYPE)\n",
+           type_name(node->type.kind));
+  }
+  assert(node->kind == aNAME); // Type expressions can currently only be names.
+  auto name = node->name;
+
+  // builtin type
+  Type builtin_type = {0};
+  if (get_builtin_type(name.name, &builtin_type)) {
+    return builtin_type;
+  }
+  // user-defined type
+  assert(name.decl != NULL);
+  assert(name.decl->kind == aDECL);
+  SWITCH(name.decl->decl.expr, {
+    CASE(_struct, { return (Type){.kind = tySTRUCT, ._struct = name.decl}; });
+  default:
+    panicf("not a type (get_type_value): %s", ast_node_name(name.decl->kind));
+  });
 }
 
 ANALYZER(struct_inst, {
   ANALYZE_TYPE(struct_inst->type, struct);
-  assert(struct_type.kind != tyUNKNOWN);
   EXPECT(struct_type.kind == tySTRUCT, struct_inst->type,
          ssprintf("expected struct type, but found %s",
                   type_name(struct_type.kind)));
-  ASTNode *_struct_node = struct_type._struct;
-  __auto_type _struct = &_struct_node->_struct;
+  assert(struct_type._struct->kind == aDECL);
+  ASTNode *struct_node = struct_type._struct->decl.expr;
+  assert(struct_node->kind == aSTRUCT);
+  __auto_type _struct = &struct_node->_struct;
 
   bool used[MAX(_struct->fields.length, 1)];
   memset(used, 0, sizeof(used));
@@ -324,18 +335,19 @@ ANALYZER(member, {
   EXPECT(expr_type.kind == tySTRUCT, member->expr,
          ssprintf("expected struct, but found %s", type_name(expr_type.kind)));
 
-  ASTNode *struct_node = expr_type._struct;
-  __auto_type _struct = &struct_node->_struct;
-  member->field_offset = 0;
+  ASTNode *struct_decl_node = expr_type._struct;
+  assert(struct_decl_node->kind == aDECL);
+  auto struct_node = struct_decl_node->decl.expr;
+  assert(struct_node->kind == aSTRUCT);
+  auto _struct = &struct_node->_struct;
   ITER_ARRAY(_struct->fields, field_node, {
-    __auto_type field = &field_node->field;
+    auto field = &field_node->field;
     if (name_eq(field->name->name.name, member->name->name.name)) {
       node->type = get_type_value(field->type);
       assert(node->type.kind != tyUNKNOWN);
-      member->field_size += size_of(field_node->type);
+      member->field_index = i;
       OK;
     }
-    member->field_offset += size_of(field_node->type);
   });
   EXPECT(false, member->name, strdup("field does not exist"));
 });
@@ -349,8 +361,6 @@ ANALYZER(param, {
   }
   ANALYZE_TYPE(param->type, param);
   node->type = param_type;
-  param->local_offset = *frame_size;
-  *frame_size += size_of(node->type);
   OK;
 });
 
@@ -362,7 +372,6 @@ ANALYZER(function, {
   function->table.parent = table;
   Table *table = &function->table;
   Type *type = &node->type;
-  size_t *frame_size = &function->frame_size;
 
   if (type->kind == tyUNKNOWN) {
     type->is_constant = true;
@@ -473,14 +482,8 @@ ANALYZER(_struct, {
   EXPECT(is_static, node, strdup("structs can only be defined as constants"));
 
   node->type = PRIM_TYPE(tyTYPE);
-  _struct->size = 0;
-  _struct->align = 1;
 
-  ITER_ARRAY(_struct->fields, field_node, {
-    ANALYZE(field_node, field);
-    _struct->size += size_of(field_type);
-    _struct->align = MAX(_struct->align, align_of(field_type));
-  });
+  ITER_ARRAY(_struct->fields, field_node, ANALYZE(field_node, field));
   OK;
 });
 
@@ -492,6 +495,7 @@ static Type MAIN_FUNCTION_TYPE = {.kind = tyFUNCTION,
 ANALYZER(decl, {
   NAME_OF(decl);
   bool is_static = IS_GLOBAL || decl->is_constant;
+  decl->is_global = IS_GLOBAL;
 
   if (!decl->symbol_added) {
     EXPECT(add_symbol(state->allocator, table, name, node), decl->name,
@@ -502,21 +506,6 @@ ANALYZER(decl, {
   // function type can sometimes be determined even if there are blocking
   // unknowns
   node->type = expr_type;
-
-  if (node->type.kind != tyUNKNOWN) {
-    // determine value location
-    size_t value_size = size_of(node->type);
-    if (is_static) {
-      decl->static_value_ptr = ALLOC(value_size);
-      eprintf("size of value: %zu; align of Value: %zu; ptr %% align: %zu\n",
-              value_size, _Alignof(Value),
-              (uintptr_t)decl->static_value_ptr % _Alignof(Value));
-      evaluate_expr(decl->expr, 0, NULL, decl->static_value_ptr);
-    } else {
-      decl->local_offset = *frame_size;
-      *frame_size += value_size;
-    }
-  }
   if (blocked)
     BLOCK;
   if (name_eq_string(decl->name->name.name, "main")) {
@@ -597,15 +586,13 @@ void free_analyze_errors(AnalyzeErrorArray *type_errors) {
 
 bool analyze(AST *ast, AnalyzeErrorArray *error_data) {
   Table table = {0};
-  size_t global_count = 0;
   State state = {.allocator = &ast->random_allocator, .error_data = error_data};
   Result result = rBLOCKED;
   for (size_t i = 0;; i++) {
     eprintf("INFO: analysis iteration: %zu\n", i);
     // TODO: make sure the symbol tables (also allocated using random_allocator)
     // are freed, but the static values are not
-    result =
-        analyze_node(&state, ast->head, &table, (Type){0}, &global_count, true);
+    result = analyze_node(&state, ast->head, &table, (Type){0}, true);
     if (result != rBLOCKED)
       break;
 

@@ -79,7 +79,7 @@ static size_t lex_eof(const char *text) {
 }
 
 #define CM($name, $display_name, $function)                                    \
-  {t##$name, #$name, $display_name, $function}
+  [t##$name] = {t##$name, #$name, $display_name, $function}
 #define M($name, $display_name) CM($name, $display_name, NULL)
 
 // assumes that tokens are in the same order as in the TokenKind definition
@@ -103,10 +103,6 @@ const Matcher MATCHERS[] = {
     M(MINUS, "-"),
     M(STAR, "*"),
     M(SLASH, "/"),
-    M(PLUS_EQ, "+="),
-    M(MINUS_EQ, "-="),
-    M(STAR_EQ, "*="),
-    M(SLASH_EQ, "/="),
     M(LT, "<"),
     M(GT, ">"),
     M(LT_EQ, "<="),
@@ -114,6 +110,10 @@ const Matcher MATCHERS[] = {
     M(EQ_EQ, "=="),
     M(AMP_AMP, "&&"),
     M(BAR_BAR, "||"),
+    M(PLUS_EQ, "+="),
+    M(MINUS_EQ, "-="),
+    M(STAR_EQ, "*="),
+    M(SLASH_EQ, "/="),
     // misc symbols
     M(HASHTAG, "#"),
     M(SEMI, ";"),
@@ -156,7 +156,7 @@ int token_precedence(TokenKind kind) {
   case tGT:
   case tLT_EQ:
   case tGT_EQ:
-  case tEQ_EQ:    
+  case tEQ_EQ:
     return 2;
   case tPLUS:
   case tMINUS:
@@ -216,10 +216,11 @@ void print_lex_error(LexError error) {
       oi.line_number, oi.column_number, length, &error.source[error.offset]);
 }
 
-void get_lex_error_info(LexError error, char** out_message, size_t* out_line, size_t* out_column) {
+void get_lex_error_info(LexError error, char **out_message, size_t *out_line,
+                        size_t *out_column) {
   OffsetInfo oi = get_offset_info(error.source, error.offset);
   *out_line = oi.line_number;
-  *out_column = oi.column_number;  
+  *out_column = oi.column_number;
   *out_message = strdup("failed to match token");
 }
 

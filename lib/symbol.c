@@ -2,50 +2,77 @@
 #include "ast.h"
 #include "ast_macro.h"
 
-#define NEW_NAME($name) ((Name){.text = #$name, .length = sizeof(#$name) - 1})
+#define DEF_PRIM_TYPE($NAME) static Type $NAME##_TYPE = PRIM_TYPE(ty##$NAME)
 
-#define BUILTIN_SYMBOL($NAME, $type, $value)                                   \
-  static SymbolData $NAME##_SYMBOL = {                                         \
-      .value = {.kind = symBUILTIN, .builtin = $value}, .type = $type}
+DEF_PRIM_TYPE(TYPE);
+DEF_PRIM_TYPE(VOID);
+DEF_PRIM_TYPE(INT);
+DEF_PRIM_TYPE(BOOL);
+DEF_PRIM_TYPE(STRING);
 
-#define PRIM_SYMBOL($NAME)                                                     \
-  BUILTIN_SYMBOL($NAME, PRIM_TYPE(tyTYPE), {.type = PRIM_TYPE(ty##$NAME)})
+#define DEF_FUNCTION_TYPE($NAME, $type...)                                     \
+  Type $NAME = {.kind = tyFUNCTION, .is_constant = true, .function = $type}
 
-PRIM_SYMBOL(VOID);
-PRIM_SYMBOL(INT);
-PRIM_SYMBOL(BOOL);
-PRIM_SYMBOL(STRING);
+DEF_FUNCTION_TYPE(PRINT_BOOL_TYPE, {.params = {.data = &BOOL_TYPE, .length = 1},
+                                    ._return = &VOID_TYPE});
+DEF_FUNCTION_TYPE(PRINT_INT_TYPE, {.params = {.data = &INT_TYPE, .length = 1},
+                                   ._return = &VOID_TYPE});
+DEF_FUNCTION_TYPE(PRINT_STRING_TYPE,
+                  {.params = {.data = &STRING_TYPE, .length = 1},
+                   ._return = &VOID_TYPE});
 
-static SymbolData PRINT_STRING_SYMBOL = {
-    .value = {.kind = symBUILTIN,
-              .builtin = {.function = {.builtin = PRINT_STRING}}},
-    .type = {.kind = tyFUNCTION,
-             .is_constant = true,
-             .function = {.params = {.data = &STRING_SYMBOL.value.builtin.type,
-                                     .length = 1},
-                          ._return = &VOID_SYMBOL.value.builtin.type}}};
-
-#define MATCH($name, $NAME)                                                    \
-  if (name_eq_string(name, #$name)) {                                          \
-    *out = $NAME##_SYMBOL;                                                     \
+// not using #$name because it maps bool -> "_Bool" instead of "bool" as
+// bool is a macro
+#define MATCH($name, $NAME, $type)                                             \
+  if (name_eq_string(name, $name)) {                                           \
+    *out_type = $type;                                                         \
+    *out_builtin = b##$NAME;                                                   \
     return true;                                                               \
   }
 
-bool get_builtin(Name name, SymbolData *out) {
-  MATCH(void, VOID);
-  MATCH(int, INT);
-  MATCH(bool, BOOL);
-  MATCH(string, STRING);
-  MATCH(print_string, PRINT_STRING);
+#define MATCH_TYPE($name, $NAME) MATCH($name, $NAME, TYPE_TYPE)
+
+bool get_builtin(Name name, Type *out_type, BuiltinID *out_builtin) {
+  MATCH("print_bool", PRINT_BOOL, PRINT_BOOL_TYPE);
+  MATCH("print_int", PRINT_INT, PRINT_INT_TYPE);
+  MATCH("print_string", PRINT_STRING, PRINT_STRING_TYPE);
+  MATCH_TYPE("void", VOID);
+  MATCH_TYPE("int", INT);
+  MATCH_TYPE("bool", BOOL);
+  MATCH_TYPE("string", STRING);
   return false;
+}
+
+#define TO_TYPE($prim)                                                         \
+  case b##$prim:                                                               \
+    *out_builtin_type = $prim##_TYPE;                                          \
+    return true;
+
+bool builtin_to_type(BuiltinID builtin, Type *out_builtin_type) {
+  switch (builtin) {
+    TO_TYPE(VOID);
+    TO_TYPE(INT);
+    TO_TYPE(BOOL);
+    TO_TYPE(STRING);
+  default:
+    return false;
+  }
+}
+
+bool get_builtin_type(Name name, Type *out_builtin_type) {
+  Type type_type = {0};
+  BuiltinID builtin = 0;
+  return get_builtin(name, &type_type, &builtin) &&
+         builtin_to_type(builtin, out_builtin_type);
 }
 
 // Adds a symbol to the table, returning false if NAME was already in the table.
 bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
                 ASTNode *node) {
   if (table->parent == NULL) {
-    SymbolData builtin;
-    if (get_builtin(name, &builtin)) {
+    Type type;
+    BuiltinID builtin;
+    if (get_builtin(name, &type, &builtin)) {
       return false;
     }
   }
@@ -62,46 +89,22 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
   return true;
 }
 
-static SymbolValue get_node_value(ASTNode *node, bool is_global) {
-  SymbolValue out = {0};
-  if (node->kind == aDECL) {
-    bool is_static = node->decl.is_constant || is_global;
-    out.kind = is_static ? symSTATIC : symDYNAMIC;
-    if (is_static) {
-      out.static_ptr = node->decl.static_value_ptr;
-      assert_or(node->type.kind == tyUNKNOWN || out.static_ptr != NULL, {
-        eprintf(">> for declaration '%.*s' (%s):\n",
-                FMT(node->decl.name->name.name), type_name(node->type.kind));
-      });
-    } else {
-      out.local_offset = node->decl.local_offset;
-    }
-  } else {
-    assert(node->kind == aPARAM);
-    out.kind = symDYNAMIC;
-    out.local_offset = node->param.local_offset;
-  }
-  return out;
-}
-
-bool get_symbol(SymbolTable *table, Name name, SymbolData *out) {
-  if (table->parent == NULL && get_builtin(name, out)) {
-    return true;
-  }
+bool get_symbol(SymbolTable *table, Name name, Type *out_type,
+                ASTNode **out_node, BuiltinID *out_builtin) {
   for (size_t i = 0; i < table->length; i++) {
     if (name_eq(table->data[i].name, name)) {
-      Symbol symbol = table->data[i];
-      *out = (SymbolData){
-          .value = get_node_value(symbol.node, table->parent == NULL),
-          .type = symbol.node->type,
-      };
+      *out_type = table->data[i].node->type;
+      *out_node = table->data[i].node;
       return true;
     }
   }
   if (table->parent == NULL) {
+    if (get_builtin(name, out_type, out_builtin)) {
+      return true;
+    }
     return false;
   }
-  return get_symbol(table->parent, name, out);
+  return get_symbol(table->parent, name, out_type, out_node, out_builtin);
 }
 
 SymbolTable get_top_table(SymbolTable table) {

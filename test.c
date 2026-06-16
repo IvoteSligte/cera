@@ -7,7 +7,7 @@
 
 #include "lib/analyzer.h"
 #include "lib/ast.h"
-#include "lib/evaluator.h"
+#include "lib/generator.h"
 #include "lib/parser.h"
 #include "lib/util.h"
 
@@ -86,7 +86,7 @@ bool evaluate(const char *source) {
     free_ast(&ast);
     return false;
   }
-  evaluate_module(ast.head);
+  generate_and_evaluate(ast.head);
 
   free_token_stream(&stream);
   free_ast(&ast);
@@ -199,6 +199,23 @@ Options parse_options(int argc, const char *argv[]) {
   return options;
 }
 
+const char *status_message(int status) {
+  switch (status) {
+  case 124:
+    return "timeout";
+  case 132:
+    return "illegal instruction";
+  case 134:
+    return "panic";
+  case 139:
+    return "segfault";
+  case 0:
+    return "ok";
+  default:
+    return "crash";
+  }
+}
+
 // The first argument is an optional regex pattern that matches test names to
 // run.
 int main(int argc, const char *argv[]) {
@@ -242,19 +259,19 @@ int main(int argc, const char *argv[]) {
 
       // Run the test as a separate process.
       // Only capture stdout, leaving stderr as log file in /tmp/cm-test-<name>
-      char *cmd = options.show_logs ? ssprintf("%s --file %s", argv[0], path)
-                                    : ssprintf("%s --file %s 2>/tmp/cm-test-%s",
-                                               argv[0], path, name);
+      // FIXME: when options.show_logs is true the status code is always 0?
+      char *cmd = options.show_logs
+                      ? ssprintf("timeout 1 %s --file %s", argv[0], path)
+                      : ssprintf("timeout 1 %s --file %s 2>/tmp/cm-test-%s",
+                                 argv[0], path, name);
       FILE *stdout = popen(cmd, "r"); // TODO: cross-platform
       free(cmd);
       char *stdout_string = read_stream(stdout);
-      int status = pclose(stdout);
+      int status = WEXITSTATUS(pclose(stdout));
       if (status != 0) {
-        printf("- test %-20s " RED("failed") "\n", name);
-        free_test_file(&test_file);
-        free(stdout_string);
-        free(name);
-        continue;
+        printf("- test %-20s " RED("failed") " [%3d] (%s) \n", name, status,
+               status_message(status));
+        goto cont;
       }
       // Compare output with expected output.
       const char *expected_output = test_file.expected_output;
@@ -265,14 +282,13 @@ int main(int argc, const char *argv[]) {
                 expected_output);
         eprintf("Actual   (%zu bytes): `%.*s`\n", stdout_size, (int)stdout_size,
                 stdout_string);
-        printf("- test %-20s " RED("failed") "\n", name);
-        free_test_file(&test_file);
-        free(stdout_string);
-        free(name);
-        continue;
+        printf("- test %-20s " RED("failed") " [0  ] (output mismatch) \n",
+               name);
+        goto cont;
       }
       num_succeeded++;
       printf("- test %-20s " GREEN("succeeded") "\n", name);
+    cont:
       free_test_file(&test_file);
       free(stdout_string);
     }

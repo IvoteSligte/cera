@@ -3,6 +3,7 @@
 ## Dependencies
 
 GNU C11
+LLVM
 
 ### Debugging
 

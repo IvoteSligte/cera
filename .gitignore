@@ -3,3 +3,5 @@ debug
 debug.o
 test
 test.o
+main.o
+std.bc
