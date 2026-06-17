@@ -8,6 +8,9 @@ test *args: build-test
 check:
     cc -fsyntax-only *.c lib/*.c -Wall -Wextra
 
+format:
+    make format
+
 build:
     make debug
 

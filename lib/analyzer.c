@@ -64,10 +64,10 @@ static Type MAIN_FUNCTION_TYPE = {.kind = tyFUNCTION,
       BLOCK;                                                                   \
   }
 
-#define DECLARE($node)                                                  \
+#define DECLARE($node)                                                         \
   if (!$node->symbol_added) {                                                  \
-    EXPECT(add_symbol(state->allocator, table, $node->name->name.name, node), $node->name,       \
-           strdup("duplicate declaration"));                                   \
+    EXPECT(add_symbol(state->allocator, table, $node->name->name.name, node),  \
+           $node->name, strdup("duplicate declaration"));                      \
     $node->symbol_added = true;                                                \
   }
 
@@ -373,7 +373,7 @@ ANALYZER(func_decl, {
   EXPECT(is_static, node, strdup("functions can only be defined as constants"));
 
   DECLARE(func_decl);
-  
+
   func_decl->table.parent = table;
   Table *table = &func_decl->table;
   Type *type = &node->type;

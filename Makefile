@@ -18,6 +18,9 @@ debug: $(OBJ) main.o
 test: $(OBJ) test.o
 	$(CC) $(LDFLAGS) -o $@ $(OBJ) test.o $(LDLIBS)
 
+format:
+	clang-format -i $(SRC) main.c test.c
+
 clean:
 	rm -rf build/
 	rm -f debug test
