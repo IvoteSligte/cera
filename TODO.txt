@@ -1,13 +1,27 @@
 
 codebase:
-    remove VLAs
-    make cross-platform (see "TODO: cross-platform" in code)
-    unicode input
+    pointers + null
+    equality operator for all primitive types (int, bool, string)
+    enums (without payloads)
+    arrays
+    chars
+    if-return shorthand
     modules
+    break/continue in loops
+    switch/match
+    foreach element in array
+    foreach element in custom type    
+    tagged unions / enums with payloads
+    generics
     `extern "C"` declarations
     dynamically linking C code
     statically linking C code
+    remove VLAs
+    uint type
+    make cross-platform (see "TODO: cross-platform" in code)
+    unicode input
     no naming conflicts between variables, types, and modules
     pointer-sized integer type
     deduplicate string literals
+    public/private globals
     statically link LLVM
