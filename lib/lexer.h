@@ -19,6 +19,7 @@ typedef enum {
   tLBRACKET,
   tRBRACKET,
   // operators
+  tBANG,
   tPLUS,
   tMINUS,
   tSTAR,
@@ -28,6 +29,7 @@ typedef enum {
   tLT_EQ,
   tGT_EQ,
   tEQ_EQ,
+  tBANG_EQ,  
   tAMP_AMP,
   tBAR_BAR,
   tPLUS_EQ,
@@ -45,7 +47,7 @@ typedef enum {
   tCOL_COL,
   tRARROW,
   // keywords
-  tFUNC,  
+  tFUNC,
   tSTRUCT,
   tUNION,
   tENUM,

@@ -34,7 +34,7 @@ char *read_open_file(FILE *fptr, const char *path) __attribute__((nonnull));
 char *ssprintf(const char *fmt, ...);
 
 #define assert_or($condition, $on_failure)                                     \
-  if (!($condition)) {                                                           \
+  if (!($condition)) {                                                         \
     $on_failure;                                                               \
     panicf("assertion '" #$condition "' failed");                              \
   }
@@ -44,7 +44,9 @@ bool str_eq(const char *left, const char *right);
 
 #define UNUSED(x) (void)(x)
 
-#define _GET_MACRO(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, NAME, ...) NAME
+#define _GET_MACRO(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, NAME,    \
+                   ...)                                                        \
+  NAME
 
 #define _IS_ONE_OF_1(x, a) ((x) == (a))
 #define _IS_ONE_OF_2(x, a, ...) ((x) == (a) || _IS_ONE_OF_1(x, __VA_ARGS__))
@@ -57,11 +59,12 @@ bool str_eq(const char *left, const char *right);
 #define _IS_ONE_OF_9(x, a, ...) ((x) == (a) || _IS_ONE_OF_8(x, __VA_ARGS__))
 #define _IS_ONE_OF_10(x, a, ...) ((x) == (a) || _IS_ONE_OF_9(x, __VA_ARGS__))
 #define _IS_ONE_OF_11(x, a, ...) ((x) == (a) || _IS_ONE_OF_10(x, __VA_ARGS__))
+#define _IS_ONE_OF_12(x, a, ...) ((x) == (a) || _IS_ONE_OF_11(x, __VA_ARGS__))
 
 #define IS_ONE_OF(x, ...)                                                      \
-  _GET_MACRO(__VA_ARGS__, _IS_ONE_OF_11, _IS_ONE_OF_10, _IS_ONE_OF_9,          \
-             _IS_ONE_OF_8, _IS_ONE_OF_7, _IS_ONE_OF_6, _IS_ONE_OF_5,           \
-             _IS_ONE_OF_4, _IS_ONE_OF_3, _IS_ONE_OF_2,                         \
+  _GET_MACRO(__VA_ARGS__, _IS_ONE_OF_12, _IS_ONE_OF_11, _IS_ONE_OF_10,         \
+             _IS_ONE_OF_9, _IS_ONE_OF_8, _IS_ONE_OF_7, _IS_ONE_OF_6,           \
+             _IS_ONE_OF_5, _IS_ONE_OF_4, _IS_ONE_OF_3, _IS_ONE_OF_2,           \
              _IS_ONE_OF_1)(x, __VA_ARGS__)
 
 #define SWAP(a, b)                                                             \

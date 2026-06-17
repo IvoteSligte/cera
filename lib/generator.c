@@ -193,6 +193,9 @@ void generate_node(State *state, Node *node) {
     CASE(unary, {
       GEN(unary->expr, expr_value);
       switch (unary->op) {
+      case tBANG:
+        node->llvm_value = LLVMBuildNot(builder, expr_value, "");
+        break;
       case tMINUS:
         node->llvm_value = LLVMBuildNeg(builder, expr_value, "");
         break;
@@ -213,6 +216,12 @@ void generate_node(State *state, Node *node) {
         CMP(LT_EQ, SLE);
         CMP(GT_EQ, SGE);
         CMP(EQ_EQ, EQ);
+      case tBANG_EQ: {
+        auto eq_value =
+            LLVMBuildICmp(builder, LLVMIntEQ, left_value, right_value, "");
+        node->llvm_value = LLVMBuildNot(builder, eq_value, "");
+        break;
+      }
         BIN(AMP_AMP, And);
         BIN(BAR_BAR, Or);
       default:

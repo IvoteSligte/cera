@@ -99,6 +99,7 @@ const Matcher MATCHERS[] = {
     M(LBRACKET, "["),
     M(RBRACKET, "]"),
     // operators
+    M(BANG, "!"),
     M(PLUS, "+"),
     M(MINUS, "-"),
     M(STAR, "*"),
@@ -108,6 +109,7 @@ const Matcher MATCHERS[] = {
     M(LT_EQ, "<="),
     M(GT_EQ, ">="),
     M(EQ_EQ, "=="),
+    M(BANG_EQ, "!="),
     M(AMP_AMP, "&&"),
     M(BAR_BAR, "||"),
     M(PLUS_EQ, "+="),
@@ -158,6 +160,7 @@ int token_precedence(TokenKind kind) {
   case tLT_EQ:
   case tGT_EQ:
   case tEQ_EQ:
+  case tBANG_EQ:
     return 2;
   case tPLUS:
   case tMINUS:
@@ -165,6 +168,8 @@ int token_precedence(TokenKind kind) {
   case tSTAR:
   case tSLASH:
     return 4;
+  case tBANG:
+    return 5;
   default:
     panicf("Tried to retrieve precedence of non-operator: `%s`",
            token_display_name(kind));

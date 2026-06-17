@@ -188,6 +188,13 @@ ANALYZER(string, {
 
 ANALYZER(unary, {
   ANALYZE(unary->expr, expr);
+  if (unary->op == tBANG) {
+    EXPECT((expr_type.kind == tyBOOL), unary->expr,
+           ssprintf("cannot apply unary operator `-` to non-boolean type %s",
+                    type_name(expr_type.kind)));
+    node->type = PRIM_TYPE(tyBOOL);
+    OK;
+  }
   if (unary->op == tMINUS) {
     EXPECT((expr_type.kind == tyINT), unary->expr,
            ssprintf("cannot apply unary operator `-` to non-numeric type %s",
@@ -223,11 +230,12 @@ ANALYZER(binary, {
         strdup("types on both sides of a comparison operator must be the same"),
         PRIM_TYPE(tyBOOL));
   }
-  if (binary->op == tEQ_EQ) {
+  if (IS_ONE_OF(binary->op, tEQ_EQ, tBANG_EQ)) {
     ANALYZE_BINARY(
         tyINT,
-        ssprintf("cannot apply operator == to non-numeric type (currently)"),
-        strdup("types on both sides of a comparison operator must be the same"),
+        ssprintf(
+            "cannot apply equality operator to non-numeric type (currently)"),
+        strdup("types on both sides of an equality operator must be the same"),
         PRIM_TYPE(tyBOOL));
   }
   if (binary->op == tAMP_AMP) {

@@ -1,5 +1,6 @@
-// OUTPUT: "true"
+// OUTPUT: "truefalse"
 
 func main() {
     print_bool(10 + 2 * 5 == 20);
+    print_bool(10 + 2 * 5 != 20);
 }
