@@ -1,6 +1,5 @@
 
 #include <dirent.h> // TODO: cross-platform
-#include <regex.h>  // TODO: cross-platform
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -23,25 +22,6 @@
 #define MAGENTA(s) COL(35, s)
 #define CYAN(s) COL(36, s)
 #define WHITE(s) COL(37, s)
-
-void compile_regex(const char *pattern, regex_t *regex) {
-  int result = regcomp(regex, pattern, REG_EXTENDED);
-  if (result) {
-    char errbuf[100];
-    regerror(result, regex, errbuf, 100);
-    panicf("Failed to compile regex `%s`. Error: %s", pattern, errbuf);
-  }
-}
-
-bool match_regex(regex_t *regex, const char *string, regmatch_t *out_match) {
-  int result = regexec(regex, string, 1, out_match, 0);
-  if (!IS_ONE_OF(result, REG_NOERROR, REG_NOMATCH)) {
-    char errbuf[100];
-    regerror(result, regex, errbuf, 100);
-    panicf("Failed to run regex. Error: %s", errbuf);
-  }
-  return result == REG_NOERROR; // match
-}
 
 #define TRY($expr)                                                             \
   if (!($expr)) {                                                              \
@@ -257,10 +237,6 @@ int main(int argc, const char *argv[]) {
   }
   size_t num_tests = 0;
   size_t num_succeeded = 0;
-  regex_t regex = {0};
-  if (options.pattern != NULL) {
-    compile_regex(options.pattern, &regex);
-  }
   DIR *dir = opendir("tests/");
   if (dir == NULL) {
     printf("Could not open tests/ directory.");
@@ -279,8 +255,7 @@ int main(int argc, const char *argv[]) {
     char *name = file_extension == NULL
                      ? strdup(file_name)
                      : strndup(file_name, file_extension - file_name);
-    regmatch_t match;
-    if (options.pattern == NULL || match_regex(&regex, name, &match)) {
+    if (options.pattern == NULL || strstr(name, options.pattern)) {
       TestFile test_file = read_test_file(path);
       assert(test_file.source != NULL);
       num_tests++;
@@ -326,8 +301,5 @@ int main(int argc, const char *argv[]) {
 
   printf("[%zu/%zu] tests succeeded\n", num_succeeded, num_tests);
 
-  if (options.pattern != NULL) {
-    regfree(&regex);
-  }
   return num_succeeded < num_tests ? 1 : 0;
 }
