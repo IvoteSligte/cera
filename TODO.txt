@@ -1,5 +1,6 @@
 
 codebase:
+    move expected output of tests to comments at start of file
     remove VLAs
     statically link LLVM
     make cross-platform (see "TODO: cross-platform" in code)

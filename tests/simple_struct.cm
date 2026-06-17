@@ -1,11 +1,10 @@
 
-Config :: struct {
+struct Config {
     one: bool;
     two: int;
     three: string;
 }
-
-main :: () {
+func main() {
     config := Config.{
         one: true,
         two: 10,

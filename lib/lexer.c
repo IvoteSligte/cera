@@ -125,6 +125,7 @@ const Matcher MATCHERS[] = {
     M(COL_COL, "::"),
     M(RARROW, "->"),
     // keywords
+    M(FUNC, "func"),
     M(STRUCT, "struct"),
     M(UNION, "union"),
     M(ENUM, "enum"),

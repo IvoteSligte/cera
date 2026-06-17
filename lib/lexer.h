@@ -45,6 +45,7 @@ typedef enum {
   tCOL_COL,
   tRARROW,
   // keywords
+  tFUNC,  
   tSTRUCT,
   tUNION,
   tENUM,

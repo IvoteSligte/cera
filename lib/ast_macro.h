@@ -9,8 +9,8 @@
 #define NODE_string aSTRING
 #define NODE_unary aUNARY
 #define NODE_binary aBINARY
-#define NODE_function_call aFUNCTION_CALL
-#define NODE_function aFUNCTION
+#define NODE_func_call aFUNC_CALL
+#define NODE_func_decl aFUNC_DECL
 #define NODE_param aPARAM
 #define NODE_if_stmt aIF_STMT
 #define NODE_while_loop aWHILE_LOOP
@@ -18,11 +18,11 @@
 #define NODE_assign aASSIGN
 #define NODE_return_stmt aRETURN_STMT
 #define NODE_field aFIELD
-#define NODE__struct aSTRUCT
+#define NODE_struct_decl aSTRUCT_DECL
 #define NODE_field_inst aFIELD_INST
 #define NODE_struct_inst aSTRUCT_INST
 #define NODE_member aMEMBER
-#define NODE_decl aDECL
+#define NODE_var_decl aVAR_DECL
 #define NODE_module aMODULE
 
 #define auto __auto_type

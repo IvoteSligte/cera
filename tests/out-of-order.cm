@@ -1,8 +1,8 @@
 
-main :: () {
+func main() {
     square(10);
 }
 
-square :: (x: int) -> int {
+func square(x: int) -> int {
     return x * x;
 }

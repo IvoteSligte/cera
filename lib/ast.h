@@ -15,8 +15,8 @@ typedef enum {
   aSTRING,
   aUNARY,
   aBINARY,
-  aFUNCTION_CALL,
-  aFUNCTION,
+  aFUNC_CALL,
+  aFUNC_DECL,
   aPARAM,
   aIF_STMT,
   aWHILE_LOOP,
@@ -24,11 +24,11 @@ typedef enum {
   aASSIGN,
   aRETURN_STMT,
   aFIELD,
-  aSTRUCT,
+  aSTRUCT_DECL,
   aFIELD_INST,  // field instantiation
   aSTRUCT_INST, // struct instantiation
   aMEMBER,      // struct member access
-  aDECL,        // variable declaration
+  aVAR_DECL,    // variable declaration
   aMODULE,
 } ASTNodeKind;
 
@@ -162,19 +162,24 @@ typedef struct ASTNode {
     struct {
       ASTNode *function;
       ASTNodeArray args;
-    } function_call;
+    } func_call;
     struct {
       ASTNode *name;
       ASTNode *type;
+
       // True if the symbol has been added to the declaration table.
       bool symbol_added;
     } param;
     struct {
+      ASTNode *name;
       ASTNodeArray params;
       ASTNode *return_type; // nullable
       ASTNodeArray stmts;
       SymbolTable table;
-    } function;
+
+      // True if the symbol has been added to the declaration table.
+      bool symbol_added;
+    } func_decl;
     struct {
       ASTNode *cond;
       ASTNodeArray then_stmts;
@@ -220,17 +225,21 @@ typedef struct ASTNode {
       ASTNode *type;
     } field;
     struct {
+      ASTNode *name;
       ASTNodeArray fields;
       LLVMTypeRef llvm_type;
-    } _struct;
+
+      // True if the symbol has been added to the declaration table.
+      bool symbol_added;
+    } struct_decl;
     struct {
+      ASTNode *name;
+      ASTNode *expr;
       bool is_constant;
       bool is_global;
       // True if the symbol has been added to the declaration table.
       bool symbol_added;
-      ASTNode *name;
-      ASTNode *expr;
-    } decl;
+    } var_decl;
     struct {
       ASTNodeArray decls;
       SymbolTable table;

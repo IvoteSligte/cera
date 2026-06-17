@@ -18,11 +18,12 @@ typedef struct {
   bool error_on_block;
 } State;
 
-#define ALLOC($size) ra_calloc(state->allocator, $size)
+static Type VOID_TYPE = PRIM_TYPE(tyVOID);
+static Type MAIN_FUNCTION_TYPE = {.kind = tyFUNCTION,
+                                  .is_constant = true,
+                                  .function = {._return = &VOID_TYPE}};
 
-#define NAME_OF($decl)                                                         \
-  assert(($decl)->name->kind == aNAME);                                        \
-  Name name = ($decl)->name->name.name;
+#define ALLOC($size) ra_calloc(state->allocator, $size)
 
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
@@ -61,6 +62,13 @@ typedef struct {
     ITER_ARRAY($array, element, { TRY_ANALYZE(element, element); });           \
     if (blocked)                                                               \
       BLOCK;                                                                   \
+  }
+
+#define DECLARE($node)                                                  \
+  if (!$node->symbol_added) {                                                  \
+    EXPECT(add_symbol(state->allocator, table, $node->name->name.name, node), $node->name,       \
+           strdup("duplicate declaration"));                                   \
+    $node->symbol_added = true;                                                \
   }
 
 void add_error(AnalyzeErrorArray *error_data, Span span, char *message) {
@@ -126,8 +134,8 @@ ANALYZER(name, {
   /*        strdup("static declaration refers to runtime variable")); */
   if (node->type.kind == tyUNKNOWN)
     BLOCK;
-  /* TODO (only for variables): EXPECT(node->type.kind != tyFUNCTION, node,
-   * strdup("cannot get address of function")); */
+  /* TODO (only for variables): EXPECT(node->type.kind != tyFUNC_DECL, node,
+   * strdup("cannot get address of func_decl")); */
   node->type.is_bound = true;
   OK;
 });
@@ -235,10 +243,10 @@ ANALYZER(binary, {
   panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
 });
 
-ANALYZER(function_call, {
+ANALYZER(func_call, {
   EXPECT((!is_static), node, strdup("cannot call function in static code"));
-  ANALYZE(function_call->function, function);
-  EXPECT((function_type.kind == tyFUNCTION), function_call->function,
+  ANALYZE(func_call->function, function);
+  EXPECT((function_type.kind == tyFUNCTION), func_call->function,
          strdup("not a function"));
 
   __auto_type function = function_type.function;
@@ -248,12 +256,12 @@ ANALYZER(function_call, {
   TypeArray param_types = function.params;
 
   size_t expected_length = param_types.length;
-  size_t found_length = function_call->args.length;
+  size_t found_length = func_call->args.length;
   EXPECT((expected_length == found_length), node,
          ssprintf("argument count mismatch: expected %zu, but found %zu",
                   expected_length, found_length));
 
-  ITER_ARRAY(function_call->args, arg, {
+  ITER_ARRAY(func_call->args, arg, {
     ANALYZE(arg, arg);
     Type param_type = param_types.data[i];
     EXPECT((type_eq(arg_type, param_type)), arg,
@@ -285,9 +293,9 @@ Type get_type_value(ASTNode *node) {
   }
   // user-defined type
   assert(name.decl != NULL);
-  assert(name.decl->kind == aDECL);
-  SWITCH(name.decl->decl.expr, {
-    CASE(_struct, { return (Type){.kind = tySTRUCT, ._struct = name.decl}; });
+  SWITCH(name.decl, {
+    CASE(struct_decl,
+         { return (Type){.kind = tySTRUCT, ._struct = name.decl}; });
   default:
     panicf("not a type (get_type_value): %s", ast_node_name(name.decl->kind));
   });
@@ -298,10 +306,8 @@ ANALYZER(struct_inst, {
   EXPECT(struct_type.kind == tySTRUCT, struct_inst->type,
          ssprintf("expected struct type, but found %s",
                   type_name(struct_type.kind)));
-  assert(struct_type._struct->kind == aDECL);
-  ASTNode *struct_node = struct_type._struct->decl.expr;
-  assert(struct_node->kind == aSTRUCT);
-  __auto_type _struct = &struct_node->_struct;
+  assert(struct_type._struct->kind == aSTRUCT_DECL);
+  __auto_type _struct = &struct_type._struct->struct_decl;
 
   bool used[MAX(_struct->fields.length, 1)];
   memset(used, 0, sizeof(used));
@@ -336,11 +342,8 @@ ANALYZER(member, {
          ssprintf("expected struct, but found %s", type_name(expr_type.kind)));
 
   ASTNode *struct_decl_node = expr_type._struct;
-  assert(struct_decl_node->kind == aDECL);
-  auto struct_node = struct_decl_node->decl.expr;
-  assert(struct_node->kind == aSTRUCT);
-  auto _struct = &struct_node->_struct;
-  ITER_ARRAY(_struct->fields, field_node, {
+  assert(struct_decl_node->kind == aSTRUCT_DECL);
+  ITER_ARRAY(struct_decl_node->struct_decl.fields, field_node, {
     auto field = &field_node->field;
     if (name_eq(field->name->name.name, member->name->name.name)) {
       node->type = get_type_value(field->type);
@@ -353,7 +356,7 @@ ANALYZER(member, {
 });
 
 ANALYZER(param, {
-  NAME_OF(param);
+  Name name = param->name->name.name;
   if (!param->symbol_added) {
     EXPECT(add_symbol(state->allocator, table, name, node), node,
            strdup("duplicate parameter name"));
@@ -364,29 +367,31 @@ ANALYZER(param, {
   OK;
 });
 
-ANALYZER(function, {
+ANALYZER(func_decl, {
   EXPECT(IS_GLOBAL, node,
          strdup("functions can only be defined in the global scope"));
   EXPECT(is_static, node, strdup("functions can only be defined as constants"));
 
-  function->table.parent = table;
-  Table *table = &function->table;
+  DECLARE(func_decl);
+  
+  func_decl->table.parent = table;
+  Table *table = &func_decl->table;
   Type *type = &node->type;
 
   if (type->kind == tyUNKNOWN) {
     type->is_constant = true;
     if (type->function.params.data == NULL) {
       type->function.params =
-          (TypeArray){.data = ALLOC(sizeof(Type) * function->params.length),
-                      .length = function->params.length};
+          (TypeArray){.data = ALLOC(sizeof(Type) * func_decl->params.length),
+                      .length = func_decl->params.length};
     }
-    ITER_ARRAY(function->params, param_node, {
+    ITER_ARRAY(func_decl->params, param_node, {
       ANALYZE(param_node, param);
       type->function.params.data[i] = param_type;
     });
     type->function._return = ALLOC(sizeof(Type));
-    if (function->return_type != NULL) {
-      ANALYZE_TYPE(function->return_type, return);
+    if (func_decl->return_type != NULL) {
+      ANALYZE_TYPE(func_decl->return_type, return);
       *type->function._return = return_type;
     } else {
       *type->function._return = PRIM_TYPE(tyVOID);
@@ -397,7 +402,12 @@ ANALYZER(function, {
   }
   bool is_static = false;
   Type return_type = *type->function._return;
-  ANALYZE_ARRAY(function->stmts);
+  ANALYZE_ARRAY(func_decl->stmts);
+
+  if (name_eq_string(func_decl->name->name.name, "main")) {
+    EXPECT(type_eq(node->type, MAIN_FUNCTION_TYPE), func_decl->name,
+           ssprintf("invalid `main` function type, expected `() -> void`"));
+  }
   OK;
 });
 
@@ -476,42 +486,28 @@ ANALYZER(field, {
   OK;
 });
 
-ANALYZER(_struct, {
+ANALYZER(struct_decl, {
   EXPECT(IS_GLOBAL, node,
          strdup("structs can only be defined in the global scope"));
   EXPECT(is_static, node, strdup("structs can only be defined as constants"));
 
+  DECLARE(struct_decl);
   node->type = PRIM_TYPE(tyTYPE);
-
-  ITER_ARRAY(_struct->fields, field_node, ANALYZE(field_node, field));
+  ITER_ARRAY(struct_decl->fields, field_node, ANALYZE(field_node, field));
   OK;
 });
 
-static Type VOID_TYPE = PRIM_TYPE(tyVOID);
-static Type MAIN_FUNCTION_TYPE = {.kind = tyFUNCTION,
-                                  .is_constant = true,
-                                  .function = {._return = &VOID_TYPE}};
+ANALYZER(var_decl, {
+  bool is_static = IS_GLOBAL || var_decl->is_constant;
+  var_decl->is_global = IS_GLOBAL;
 
-ANALYZER(decl, {
-  NAME_OF(decl);
-  bool is_static = IS_GLOBAL || decl->is_constant;
-  decl->is_global = IS_GLOBAL;
-
-  if (!decl->symbol_added) {
-    EXPECT(add_symbol(state->allocator, table, name, node), decl->name,
-           strdup("duplicate declaration"));
-    decl->symbol_added = true;
-  }
-  TRY_ANALYZE(decl->expr, expr);
+  DECLARE(var_decl);
+  TRY_ANALYZE(var_decl->expr, expr);
   // function type can sometimes be determined even if there are blocking
   // unknowns
   node->type = expr_type;
   if (blocked)
     BLOCK;
-  if (name_eq_string(decl->name->name.name, "main")) {
-    EXPECT(type_eq(expr_type, MAIN_FUNCTION_TYPE), decl->name,
-           ssprintf("invalid `main` function type, expected `() -> void`"));
-  }
   OK;
 });
 
@@ -531,8 +527,8 @@ ANALYZER_SIGNATURE(node) {
     ACASE(string);
     ACASE(unary);
     ACASE(binary);
-    ACASE(function_call);
-    ACASE(function);
+    ACASE(func_call);
+    ACASE(func_decl);
     ACASE(param);
     ACASE(if_stmt);
     ACASE(while_loop);
@@ -540,11 +536,11 @@ ANALYZER_SIGNATURE(node) {
     ACASE(assign);
     ACASE(return_stmt);
     ACASE(field);
-    ACASE(_struct);
+    ACASE(struct_decl);
     ACASE(field_inst);
     ACASE(struct_inst);
     ACASE(member);
-    ACASE(decl);
+    ACASE(var_decl);
     ACASE(module);
   });
   panicf("analyze not implemented for node: %s", ast_node_name(node->kind));

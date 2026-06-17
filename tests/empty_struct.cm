@@ -1,7 +1,7 @@
 
-Empty :: struct {}
+struct Empty {}
 
-main :: () {
+func main() {
     Empty.{};
 }
 

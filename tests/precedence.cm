@@ -1,4 +1,4 @@
-main :: () {
+func main() {
     if 10 + 2 * 5 == 20; {
         print_string("correct\n");
     } else {

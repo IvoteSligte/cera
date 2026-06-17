@@ -275,12 +275,12 @@ PARSER(string, {
   RETURN(string, {.text = token.text + 1, .length = token.length - 2});
 });
 
-PARSER(function_call, {
+PARSER(func_call, {
   MUST_PARSE(name, function);
   EXPECT(tLPAREN);
   ZERO_OR_MORE_SEPARATED(expr, args, tCOMMA);
   EXPECT(tRPAREN);
-  RETURN(function_call, {.function = function, .args = args});
+  RETURN(func_call, {.function = function, .args = args});
 });
 
 PARSER(field_inst, {
@@ -313,9 +313,9 @@ PARSER(paren_expr, {
 });
 
 PARSER(primary, {
-  // `function_call`, `struct_inst`, and `member` must be tried before `name`
+  // `func_call`, `struct_inst`, and `member` must be tried before `name`
   // because `name` is their prefix
-  TRY_PARSE(function_call);
+  TRY_PARSE(func_call);
   TRY_PARSE(struct_inst);
   TRY_PARSE(name);
   TRY_PARSE(integer);
@@ -416,14 +416,18 @@ PARSER(return_type, {
   FAIL;
 });
 
-PARSER(function, {
+PARSER(func_decl, {
+  EXPECT(tFUNC);
+  MUST_PARSE(name, name);
   EXPECT(tLPAREN);
   ZERO_OR_MORE_SEPARATED(param, params, tCOMMA);
   EXPECT(tRPAREN);
   MAY_PARSE(return_type, return_type);
   MUST_PARSE_BLOCK(body);
-  RETURN(function,
-         {.params = params, .return_type = return_type, .stmts = body_stmts});
+  RETURN(func_decl, {.name = name,
+                     .params = params,
+                     .return_type = return_type,
+                     .stmts = body_stmts});
 });
 
 PARSER(expr, {
@@ -438,7 +442,7 @@ PARSER(expr_stmt, {
   OK;
 });
 
-PARSER_SIGNATURE(decl);
+PARSER_SIGNATURE(var_decl);
 
 PARSER(assign, {
   MUST_PARSE(name, name);
@@ -474,7 +478,7 @@ PARSER(while_loop, {
 
 PARSER(for_loop, {
   EXPECT(tFOR);
-  MUST_PARSE(decl, init);
+  MUST_PARSE(var_decl, init);
   MUST_PARSE(expr_stmt, cond);
   MUST_PARSE(assign, step);
   MUST_PARSE_BLOCK(body);
@@ -491,30 +495,25 @@ PARSER(field, {
   RETURN(field, {.name = name, .type = type});
 });
 
-PARSER(_struct, {
+PARSER(struct_decl, {
   EXPECT(tSTRUCT);
+  MUST_PARSE(name, name);
   EXPECT(tLBRACE);
   ZERO_OR_MORE(field, fields);
   EXPECT(tRBRACE);
-  RETURN(_struct, {.fields = fields});
+  RETURN(struct_decl, {.name = name, .fields = fields});
 });
 
-PARSER(decl_expr, {
-  TRY_PARSE(function);
-  TRY_PARSE(_struct);
-  TRY_PARSE(expr_stmt);
-  OK;
-});
-
-PARSER(decl, {
+PARSER(var_decl, {
   MUST_PARSE(name, name);
 
   EXPECT(tCOL_COL, tCOL_EQ);
   bool is_constant = token.kind == tCOL_COL;
 
-  MUST_PARSE(decl_expr, expr);
+  MUST_PARSE(expr, expr);
+  EXPECT(tSEMI);
 
-  RETURN(decl, {.is_constant = is_constant, .name = name, .expr = expr});
+  RETURN(var_decl, {.is_constant = is_constant, .name = name, .expr = expr});
 });
 
 PARSER(stmt, {
@@ -524,7 +523,14 @@ PARSER(stmt, {
   TRY_PARSE(for_loop);
   TRY_PARSE(assign);
   TRY_PARSE(return_stmt);
-  TRY_PARSE(decl);
+  TRY_PARSE(var_decl);
+  FAIL;
+});
+
+PARSER(decl, {
+  TRY_PARSE(func_decl);
+  TRY_PARSE(struct_decl);
+  TRY_PARSE(var_decl);
   FAIL;
 });
 

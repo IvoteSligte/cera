@@ -35,19 +35,17 @@ typedef struct State {
 } State;
 
 LLVMTypeRef declare_struct(LLVMContextRef ctx, Node *decl_node) {
-  assert(decl_node->kind == aDECL);
-  auto decl = &decl_node->decl;
-  assert(decl->expr->kind == aSTRUCT);
-  auto _struct = &decl->expr->_struct;
-  if (_struct->llvm_type != NULL) {
-    return _struct->llvm_type;
+  assert(decl_node->kind == aSTRUCT_DECL);
+  auto decl = &decl_node->struct_decl;
+  if (decl->llvm_type != NULL) {
+    return decl->llvm_type;
   }
   char *name =
       strndup(decl->name->name.name.text, decl->name->name.name.length);
-  _struct->llvm_type = LLVMStructCreateNamed(ctx, name);
+  decl->llvm_type = LLVMStructCreateNamed(ctx, name);
 
   free(name);
-  return _struct->llvm_type;
+  return decl->llvm_type;
 }
 
 LLVMTypeRef to_llvm_type(LLVMContextRef ctx, Primitives prim, Type type) {
@@ -72,11 +70,10 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, Primitives prim, Type type) {
                             num_params, false);
   }
   case tySTRUCT: {
-    assert(type._struct->kind == aDECL);
-    auto decl = &type._struct->decl;
-    assert(decl->expr->kind == aSTRUCT);
-    if (decl->expr->_struct.llvm_type != NULL) {
-      return decl->expr->_struct.llvm_type;
+    assert(type._struct->kind == aSTRUCT_DECL);
+    auto decl = &type._struct->struct_decl;
+    if (decl->llvm_type != NULL) {
+      return decl->llvm_type;
     }
     declare_struct(ctx, type._struct);
     break;
@@ -109,14 +106,14 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, Primitives prim, Type type) {
 #define TO_LLVM_TYPE($type) to_llvm_type(state->ctx, state->prim, $type)
 
 LLVMValueRef declare_function(State *state, Node *decl_node) {
+  assert(decl_node->kind == aFUNC_DECL);
   if (decl_node->llvm_value != NULL) {
     return decl_node->llvm_value;
   }
-  assert(decl_node->kind == aDECL);
-  auto decl = &decl_node->decl;
+  auto decl = &decl_node->func_decl;
   char *name =
       strndup(decl->name->name.name.text, decl->name->name.name.length);
-  auto type = TO_LLVM_TYPE(decl->expr->type);
+  auto type = TO_LLVM_TYPE(decl_node->type);
 
   char *type_string = LLVMPrintTypeToString(type);
   eprintf("Generating function decl `%s`: %s\n", name, type_string);
@@ -222,8 +219,8 @@ void generate_node(State *state, Node *node) {
         panicf("unknown binary operator: %s", token_name(binary->op));
       }
     });
-    CASE(function_call, {
-      auto function = function_call->function;
+    CASE(func_call, {
+      auto function = func_call->function;
       assert(function->kind == aNAME);
       LLVMValueRef fn = NULL;
       if (function->name.decl != NULL) {
@@ -243,9 +240,9 @@ void generate_node(State *state, Node *node) {
           panicf("Unknown builtin %d.", function->name.builtin);
         }
       }
-      size_t num_args = function_call->args.length;
+      size_t num_args = func_call->args.length;
       LLVMValueRef args[MAX(num_args, 1)];
-      ITER_ARRAY(function_call->args, arg_node, {
+      ITER_ARRAY(func_call->args, arg_node, {
         GEN(arg_node, arg_value);
         args[i] = arg_value;
       });
@@ -254,7 +251,25 @@ void generate_node(State *state, Node *node) {
     });
     // Functions are generated through decl so that they can be declared with a
     // name in LLVM.
-    CASE(function, { panicf("function should not be generated directly"); });
+    CASE(func_decl, {
+      auto fn = declare_function(state, node);
+      node->llvm_value = fn;
+      state->fn = fn;
+      auto entry_block = LLVMAppendBasicBlockInContext(ctx, fn, "entry");
+      LLVMPositionBuilderAtEnd(builder, entry_block);
+
+      ITER_ARRAY(func_decl->params, param_node, {
+        // TODO: only place parameter on stack when it needs an address
+        param_node->llvm_value =
+            LLVMBuildAlloca(builder, TO_LLVM_TYPE(param_node->type), "");
+        LLVMBuildStore(builder, LLVMGetParam(fn, i), param_node->llvm_value);
+      });
+      ITER_ARRAY(func_decl->stmts, stmt_node, { GEN(stmt_node, stmt_value); });
+      if (func_decl->return_type == NULL) {
+        LLVMBuildRetVoid(builder);
+      }
+      state->fn = NULL;
+    });
     // Generate does not need to be called in parameters as they are declared by
     // the function.
     CASE(param, { panicf("params should not be generated directly"); });
@@ -331,7 +346,14 @@ void generate_node(State *state, Node *node) {
       LLVMBuildRet(builder, expr_value);
     });
     CASE(field, { panicf("unreachable"); });
-    CASE(_struct, { panicf("unreachable"); });
+    CASE(struct_decl, {
+      auto struct_type = declare_struct(state->ctx, node);
+      LLVMTypeRef element_types[MAX(struct_decl->fields.length, 1)];
+      ITER_ARRAY(struct_decl->fields, field_node,
+                 { element_types[i] = TO_LLVM_TYPE(field_node->type); });
+      LLVMStructSetBody(struct_type, element_types, struct_decl->fields.length,
+                        false);
+    });
     CASE(field_inst, { panicf("field_inst should not be analyzed directly"); });
     CASE(struct_inst, {
       // type expressions can currently only be names
@@ -357,68 +379,30 @@ void generate_node(State *state, Node *node) {
           builder, expr_value, member->field_index, name_string);
       free(name_string);
     });
-    CASE(decl, {
-      if (decl->expr->kind == aSTRUCT) {
-        auto _struct = &decl->expr->_struct;
-        auto struct_type = declare_struct(state->ctx, node);
-        LLVMTypeRef element_types[MAX(_struct->fields.length, 1)];
-        ITER_ARRAY(_struct->fields, field_node,
-                   { element_types[i] = TO_LLVM_TYPE(field_node->type); });
-        LLVMStructSetBody(struct_type, element_types, _struct->fields.length,
-                          false);
-        break;
-      }
-      char *name =
-          strndup(decl->name->name.name.text, decl->name->name.name.length);
-      auto type = TO_LLVM_TYPE(decl->expr->type);
+    CASE(var_decl, {
+      char *name = strndup(var_decl->name->name.name.text,
+                           var_decl->name->name.name.length);
+      auto type = TO_LLVM_TYPE(var_decl->expr->type);
       char *type_string = LLVMPrintTypeToString(type);
-      eprintf("Generating decl `%s`: %s\n", name, type_string);
+      eprintf("Generating var_decl `%s`: %s\n", name, type_string);
       LLVMDisposeMessage(type_string);
 
-      if (decl->is_global) {
-        if (decl->expr->kind == aFUNCTION) {
-          auto function = &decl->expr->function;
-          auto fn = declare_function(state, node);
-          decl->expr->llvm_value = fn;
-          node->llvm_value = fn;
-          state->fn = fn;
-          auto entry_block = LLVMAppendBasicBlockInContext(ctx, fn, "entry");
-          LLVMPositionBuilderAtEnd(builder, entry_block);
-
-          ITER_ARRAY(function->params, param_node, {
-            // TODO: only place parameter on stack when it needs an address
-            param_node->llvm_value =
-                LLVMBuildAlloca(builder, TO_LLVM_TYPE(param_node->type), "");
-            LLVMBuildStore(builder, LLVMGetParam(fn, i),
-                           param_node->llvm_value);
-          });
-          ITER_ARRAY(function->stmts, stmt_node,
-                     { GEN(stmt_node, stmt_value); });
-          if (function->return_type == NULL) {
-            LLVMBuildRetVoid(builder);
-          }
-          state->fn = NULL;
-        } else {
-          node->llvm_value = LLVMAddGlobal(mod, type, name);
-          if (!IS_ONE_OF(node->type.kind, tyINT, tyBOOL, tySTRING)) {
-            // NOTE: probably will never implement initializers that call
-            // functions, but structs should be able to be used as global
-            // variables
-            panicf("unimplemented: complex global variable initializers");
-          }
-          GEN(decl->expr, expr_value);
-          LLVMSetInitializer(node->llvm_value, expr_value);
+      if (var_decl->is_global) {
+        node->llvm_value = LLVMAddGlobal(mod, type, name);
+        if (!IS_ONE_OF(node->type.kind, tyINT, tyBOOL, tySTRING)) {
+          // NOTE: probably will never implement initializers that call
+          // functions, but structs should be able to be used as global
+          // variables
+          panicf("unimplemented: complex global variable initializers");
         }
+        GEN(var_decl->expr, expr_value);
+        LLVMSetInitializer(node->llvm_value, expr_value);
       } else { // local
-        if (decl->expr->kind == aFUNCTION) {
-          panicf("unimplemented: local functions");
-        } else {
-          // TODO: handle local constants differently
-          // TODO: only place decl on stack when it needs an address
-          node->llvm_value = LLVMBuildAlloca(builder, type, name);
-          GEN(decl->expr, expr_value);
-          LLVMBuildStore(builder, expr_value, node->llvm_value);
-        }
+        // TODO: handle local constants differently
+        // TODO: only place decl on stack when it needs an address
+        node->llvm_value = LLVMBuildAlloca(builder, type, name);
+        GEN(var_decl->expr, expr_value);
+        LLVMBuildStore(builder, expr_value, node->llvm_value);
       }
       free(name);
     });

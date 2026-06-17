@@ -1,7 +1,7 @@
 
 GLOBAL := "This is a global!\n";
 
-main :: () {
+func main() {
     local := "This is a local!\n";
     print_string(GLOBAL);
     print_string(local);

@@ -104,14 +104,15 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
       VISIT(binary->left);
       VISIT(binary->right);
     });
-    PCASE(function_call, {
-      VISIT(function_call->function);
-      VISIT_ARRAY(function_call->args);
+    PCASE(func_call, {
+      VISIT(func_call->function);
+      VISIT_ARRAY(func_call->args);
     });
-    PCASE(function, {
-      VISIT_ARRAY(function->params);
-      VISIT(function->return_type);
-      VISIT_ARRAY(function->stmts);
+    PCASE(func_decl, {
+      VISIT(func_decl->name);
+      VISIT_ARRAY(func_decl->params);
+      VISIT(func_decl->return_type);
+      VISIT_ARRAY(func_decl->stmts);
     });
     PCASE(param, {
       VISIT(param->name);
@@ -141,7 +142,10 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
       VISIT(field->name);
       VISIT(field->type);
     });
-    PCASE(_struct, { VISIT_ARRAY(_struct->fields); });
+    PCASE(struct_decl, {
+      VISIT(struct_decl->name);
+      VISIT_ARRAY(struct_decl->fields);
+    });
     PCASE(field_inst, {
       VISIT(field_inst->name);
       VISIT(field_inst->expr);
@@ -154,9 +158,9 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
       VISIT(member->expr);
       VISIT(member->name);
     });
-    PCASE(decl, {
-      VISIT(decl->name);
-      VISIT(decl->expr);
+    PCASE(var_decl, {
+      VISIT(var_decl->name);
+      VISIT(var_decl->expr);
     })
     PCASE(module, { VISIT_ARRAY(module->decls); });
   });
@@ -178,8 +182,8 @@ static void print_node(ASTNode *node, size_t depth, void *data) {
           eprintf("string: \"%.*s\"\n", (int)string->length, string->text));
     PCASE(unary, eprintf("unary: `%s`\n", token_name(unary->op)));
     PCASE(binary, eprintf("binary: `%s`\n", token_name(binary->op)));
-    PCASE(function_call, eprintf("function_call:\n"));
-    PCASE(function, eprintf("function:\n"));
+    PCASE(func_call, eprintf("func_call:\n"));
+    PCASE(func_decl, eprintf("func_decl:\n"));
     PCASE(param, eprintf("param:\n"));
     PCASE(if_stmt, eprintf("if_stmt:\n"));
     PCASE(while_loop, eprintf("while_loop:\n"));
@@ -187,11 +191,11 @@ static void print_node(ASTNode *node, size_t depth, void *data) {
     PCASE(assign, eprintf("assign: `%s`\n", token_name(assign->op)));
     PCASE(return_stmt, eprintf("return_stmt:\n"));
     PCASE(field, eprintf("field:\n"));
-    PCASE(_struct, eprintf("struct:\n"));
+    PCASE(struct_decl, eprintf("struct_decl:\n"));
     PCASE(field_inst, eprintf("field_inst:\n"));
     PCASE(struct_inst, eprintf("struct_inst:\n"));
     PCASE(member, eprintf("member:\n"));
-    PCASE(decl, eprintf("decl:\n"));
+    PCASE(var_decl, eprintf("var_decl:\n"));
     PCASE(module, eprintf("module:\n"));
   });
   panicf("print not implemented for node: %s", ast_node_name(node->kind));
@@ -212,8 +216,8 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(STRING);
     N(UNARY);
     N(BINARY);
-    N(FUNCTION_CALL);
-    N(FUNCTION);
+    N(FUNC_CALL);
+    N(FUNC_DECL);
     N(PARAM);
     N(IF_STMT);
     N(WHILE_LOOP);
@@ -221,11 +225,11 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(ASSIGN);
     N(RETURN_STMT);
     N(FIELD);
-    N(STRUCT);
+    N(STRUCT_DECL);
     N(FIELD_INST);
     N(STRUCT_INST);
     N(MEMBER);
-    N(DECL);
+    N(VAR_DECL);
     N(MODULE);
   }
   panicf("Unknown node kind: %d", kind)
