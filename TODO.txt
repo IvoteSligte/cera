@@ -1,8 +1,6 @@
 
 codebase:
-    move expected output of tests to comments at start of file
     remove VLAs
-    statically link LLVM
     make cross-platform (see "TODO: cross-platform" in code)
     unicode input
     modules
@@ -12,3 +10,4 @@ codebase:
     no naming conflicts between variables, types, and modules
     pointer-sized integer type
     deduplicate string literals
+    statically link LLVM

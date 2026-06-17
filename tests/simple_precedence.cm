@@ -1,9 +1,5 @@
+// OUTPUT: "true"
+
 func main() {
-    if 10 * 2 == 20; {
-        print_string("correct\n");
-    } else {
-        print_string("incorrect\n");
-    }
+    print_bool(10 * 2 == 20);
 }
-===
-correct

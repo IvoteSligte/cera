@@ -1,3 +1,4 @@
+// OUTPUT: "This is a global!\nThis is a local!\n"
 
 GLOBAL := "This is a global!\n";
 
@@ -6,6 +7,3 @@ func main() {
     print_string(GLOBAL);
     print_string(local);
 }
-===
-This is a global!
-This is a local!

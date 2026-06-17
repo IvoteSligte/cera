@@ -1,3 +1,4 @@
+// OUTPUT: "8"
 
 func fibonacci(i: int) -> int {
     if i <= 0; { return 0; }
@@ -6,11 +7,5 @@ func fibonacci(i: int) -> int {
 }
 
 func main() {
-    if fibonacci(6) == 8; {
-        print_string("correct answer\n");
-    } else {
-        print_string("incorrect answer\n");
-    }
+    print_int(fibonacci(6));
 }
-===
-correct answer

@@ -1,3 +1,4 @@
+// OUTPUT: "true\n10\nthree\n"
 
 struct Config {
     one: bool;
@@ -14,7 +15,3 @@ func main() {
     print_int(config.two); print_string("\n");
     print_string(config.three); print_string("\n");
 }
-===
-true
-10
-three

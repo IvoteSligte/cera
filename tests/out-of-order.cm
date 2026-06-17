@@ -1,6 +1,7 @@
+// OUTPUT: "100"
 
 func main() {
-    square(10);
+    print_int(square(10));
 }
 
 func square(x: int) -> int {

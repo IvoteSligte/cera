@@ -5,8 +5,12 @@
 #include "lib/parser.h"
 #include <llvm-c/Core.h>
 
-int main() {
-  char *source = read_file("test.cm");
+int main(int argc, char *argv[]) {
+  const char *path = "test.cm";
+  if (argc > 1) {
+    path = argv[1];
+  }
+  char *source = read_file(path);
   if (source == NULL) {
     return 1;
   }
