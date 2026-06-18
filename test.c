@@ -278,7 +278,7 @@ int main(int argc, const char *argv[]) {
       char *stdout_string = read_stream(stdout);
       int status = WEXITSTATUS(pclose(stdout));
       if (status != test_file.expected_status) {
-        printf("- test %-20s " RED("failed") " [%3d] (%s) \n", name, status,
+        printf("- test %-21s " RED("failed") " [%3d] (%s) \n", name, status,
                status_message(status));
         goto cont;
       }
@@ -286,7 +286,7 @@ int main(int argc, const char *argv[]) {
       const char *expected_output = test_file.expected_output;
       size_t stdout_size = strlen(stdout_string);
       if (!str_eq(stdout_string, expected_output)) {
-        eprintf("- test %-20s " RED("failed") " [%3d] (output mismatch) \n",
+        eprintf("- test %-21s " RED("failed") " [%3d] (output mismatch) \n",
                 name, status);
         eprintf("Expected output does not match actual output.\n");
         eprintf("Expected (%zu bytes): `%s`\n", strlen(expected_output),
@@ -296,7 +296,7 @@ int main(int argc, const char *argv[]) {
         goto cont;
       }
       num_succeeded++;
-      printf("- test %-20s " GREEN("succeeded") "\n", name);
+      printf("- test %-21s " GREEN("succeeded") "\n", name);
     cont:
       free_test_file(&test_file);
       free(stdout_string);

@@ -2,7 +2,7 @@
 #include "ast.h"
 #include "ast_macro.h"
 
-#define DEF_PRIM_TYPE($NAME) static Type $NAME##_TYPE = PRIM_TYPE(ty##$NAME)
+#define DEF_PRIM_TYPE($NAME) static Type $NAME##_TYPE = PRIM_TYPE($NAME)
 
 DEF_PRIM_TYPE(TYPE);
 DEF_PRIM_TYPE(VOID);
@@ -20,6 +20,10 @@ DEF_FUNCTION_TYPE(PRINT_INT_TYPE, {.params = {.data = &INT_TYPE, .length = 1},
 DEF_FUNCTION_TYPE(PRINT_STRING_TYPE,
                   {.params = {.data = &STRING_TYPE, .length = 1},
                    ._return = &VOID_TYPE});
+static Type TWO_STRINGS[2] = {PRIM_TYPE(STRING), PRIM_TYPE(STRING)};
+DEF_FUNCTION_TYPE(STRING_EQ_TYPE,
+                  {.params = {.data = TWO_STRINGS, .length = 2},
+                   ._return = &BOOL_TYPE});
 
 // not using #$name because it maps bool -> "_Bool" instead of "bool" as
 // bool is a macro

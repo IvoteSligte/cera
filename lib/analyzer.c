@@ -18,7 +18,7 @@ typedef struct {
   bool error_on_block;
 } State;
 
-static Type VOID_TYPE = PRIM_TYPE(tyVOID);
+static Type VOID_TYPE = PRIM_TYPE(VOID);
 static Type MAIN_FUNCTION_TYPE = {.kind = tyFUNCTION,
                                   .is_constant = true,
                                   .function = {._return = &VOID_TYPE}};
@@ -145,7 +145,7 @@ ANALYZER(name, {
 ANALYZER(integer, {
   EXPECT((sscanf(integer->text, "%zd", &integer->value) == 1), node,
          strdup("integer is too large"));
-  node->type = PRIM_TYPE(tyINT);
+  node->type = PRIM_TYPE(INT);
   OK;
 });
 
@@ -154,7 +154,7 @@ ANALYZER(boolean, {
     boolean->value = true;
   else
     boolean->value = false;
-  node->type = PRIM_TYPE(tyBOOL);
+  node->type = PRIM_TYPE(BOOL);
   OK;
 });
 
@@ -184,7 +184,7 @@ ANALYZER(string, {
     value.length++;
   }
   string->value = value;
-  node->type = PRIM_TYPE(tySTRING);
+  node->type = PRIM_TYPE(STRING);
   OK;
 });
 
@@ -194,7 +194,7 @@ ANALYZER(unary, {
     EXPECT((expr_type.kind == tyBOOL), unary->expr,
            ssprintf("cannot apply unary operator `-` to non-boolean type %s",
                     type_name(expr_type.kind)));
-    node->type = PRIM_TYPE(tyBOOL);
+    node->type = PRIM_TYPE(BOOL);
     OK;
   }
   if (unary->op == tMINUS) {
@@ -207,10 +207,13 @@ ANALYZER(unary, {
   panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
 });
 
-#define ANALYZE_BINARY($expected_type, $type_error, $equal_error, $out_type)   \
-  EXPECT((left_type.kind == $expected_type), binary->left, $type_error);       \
-  EXPECT((right_type.kind == $expected_type), binary->right, $type_error);     \
-  EXPECT((left_type.kind == right_type.kind), node, $equal_error);             \
+#define ANALYZE_BINARY($type_error, $equal_error, $out_type,                   \
+                       $expected_types...)                                     \
+  EXPECT(IS_ONE_OF(left_type.kind, $expected_types), binary->left,             \
+         $type_error);                                                         \
+  EXPECT(IS_ONE_OF(right_type.kind, $expected_types), binary->right,           \
+         $type_error);                                                         \
+  EXPECT(IS_ONE_OF(left_type.kind, $expected_types), node, $equal_error);      \
   node->type = $out_type;                                                      \
   OK;
 
@@ -219,36 +222,31 @@ ANALYZER(binary, {
   ANALYZE(binary->right, right);
   if (IS_ONE_OF(binary->op, tPLUS, tMINUS, tSTAR, tSLASH)) {
     ANALYZE_BINARY(
-        tyINT, strdup("cannot apply arithmetic operator to non-numeric type"),
+        strdup("cannot apply arithmetic operator to non-numeric type"),
         strdup(
             "types on both sides of an arithmetic operator must be the same"),
-        left_type);
+        left_type, tyINT);
   }
   if (IS_ONE_OF(binary->op, tLT, tGT, tLT_EQ, tGT_EQ)) {
     ANALYZE_BINARY(
-        tyINT,
         ssprintf("cannot apply operator %s to non-numeric type",
                  token_name(binary->op)),
         strdup("types on both sides of a comparison operator must be the same"),
-        PRIM_TYPE(tyBOOL));
+        PRIM_TYPE(BOOL), tyINT);
   }
   if (IS_ONE_OF(binary->op, tEQ_EQ, tBANG_EQ)) {
     ANALYZE_BINARY(
-        tyINT,
-        ssprintf(
-            "cannot apply equality operator to non-numeric type (currently)"),
+        ssprintf("cannot apply equality operator to non-primitive type"),
         strdup("types on both sides of an equality operator must be the same"),
-        PRIM_TYPE(tyBOOL));
+        PRIM_TYPE(BOOL), tyINT, tyBOOL, tySTRING);
   }
   if (binary->op == tAMP_AMP) {
-    ANALYZE_BINARY(tyBOOL,
-                   strdup("cannot apply operator && to non-boolean type"), "",
-                   PRIM_TYPE(tyBOOL));
+    ANALYZE_BINARY(strdup("cannot apply operator && to non-boolean type"), "",
+                   PRIM_TYPE(BOOL), tyBOOL);
   }
   if (binary->op == tBAR_BAR) {
-    ANALYZE_BINARY(tyBOOL,
-                   strdup("cannot apply operator || to non-boolean type"), "",
-                   PRIM_TYPE(tyBOOL));
+    ANALYZE_BINARY(strdup("cannot apply operator || to non-boolean type"), "",
+                   PRIM_TYPE(BOOL), tyBOOL);
   }
   panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
 });
@@ -304,7 +302,7 @@ ANALYZER(ptr_deref, {
 ANALYZER(ptr_type, {
   ANALYZE(ptr_type->expr, expr);
   UNUSED(expr_type);
-  node->type = PRIM_TYPE(tyTYPE);
+  node->type = PRIM_TYPE(TYPE);
   OK;
 });
 
@@ -439,7 +437,7 @@ ANALYZER(func_decl, {
       ANALYZE_TYPE(func_decl->return_type, return);
       *type->function._return = return_type;
     } else {
-      *type->function._return = PRIM_TYPE(tyVOID);
+      *type->function._return = PRIM_TYPE(VOID);
     }
     // Set the type to tyFUNCTION from tyUNKNOWN,
     // indicating that the type has been determined.
@@ -553,7 +551,7 @@ ANALYZER(struct_decl, {
   EXPECT(is_static, node, strdup("structs can only be defined as constants"));
 
   DECLARE(struct_decl);
-  node->type = PRIM_TYPE(tyTYPE);
+  node->type = PRIM_TYPE(TYPE);
   ITER_ARRAY(struct_decl->fields, field_node, ANALYZE(field_node, field));
   OK;
 });

@@ -9,6 +9,7 @@
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/Types.h>
 
+#include "ast.h"
 #include "ast_macro.h"
 #include "generator.h"
 
@@ -36,6 +37,7 @@ typedef struct State {
     LLVMValueRef print_bool;
     LLVMValueRef print_int;
     LLVMValueRef print_string;
+    LLVMValueRef string_eq;
   } builtin;
   Primitives prim;
 } State;
@@ -99,16 +101,17 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, Primitives prim, Type type) {
   LLVMValueRef $name = $node->llvm_value;                                      \
   UNUSED($name)
 
+#define BUILD($instr, ...) LLVMBuild##$instr(builder __VA_OPT__(, ) __VA_ARGS__)
+
 #define BIN($op, $instr)                                                       \
   case t##$op:                                                                 \
-    node->llvm_value =                                                         \
-        LLVMBuild##$instr(builder, left_value, right_value, "");               \
+    node->llvm_value = BUILD($instr, left_value, right_value, "");             \
     break;
 
 #define CMP($op, $pred)                                                        \
   case t##$op:                                                                 \
     node->llvm_value =                                                         \
-        LLVMBuildICmp(builder, LLVMInt##$pred, left_value, right_value, "");   \
+        BUILD(ICmp, LLVMInt##$pred, left_value, right_value, "");              \
     break;
 
 #define TO_LLVM_TYPE($type) to_llvm_type(state->ctx, state->prim, $type)
@@ -149,14 +152,14 @@ void append_block_stmts(State *state, LLVMBasicBlockRef block,
     }
   });
   if (!terminated) {
-    LLVMBuildBr(builder, next_block);
+    BUILD(Br, next_block);
   }
 }
 
 #define ASS($op, $instr)                                                       \
   case t##$op: {                                                               \
-    auto new_value = LLVMBuild##$instr(builder, target_value, expr_value, ""); \
-    LLVMBuildStore(builder, new_value, target_ptr);                            \
+    auto new_value = BUILD($instr, target_value, expr_value, "");              \
+    BUILD(Store, new_value, target_ptr);                                       \
     break;                                                                     \
   }
 
@@ -173,8 +176,8 @@ void generate_node(State *state, Node *node) {
         panicf("unimplemented: forward declarations");
       }
       char *label = strndup(name->name.text, name->name.length);
-      node->llvm_value = LLVMBuildLoad2(builder, TO_LLVM_TYPE(node->type),
-                                        name->decl->llvm_value, label);
+      node->llvm_value =
+          BUILD(Load2, TO_LLVM_TYPE(node->type), name->decl->llvm_value, label);
       free(label);
     });
     CASE(integer, node->llvm_value =
@@ -202,10 +205,10 @@ void generate_node(State *state, Node *node) {
       GEN(unary->expr, expr_value);
       switch (unary->op) {
       case tBANG:
-        node->llvm_value = LLVMBuildNot(builder, expr_value, "");
+        node->llvm_value = BUILD(Not, expr_value, "");
         break;
       case tMINUS:
-        node->llvm_value = LLVMBuildNeg(builder, expr_value, "");
+        node->llvm_value = BUILD(Neg, expr_value, "");
         break;
       default:
         panicf("unknown unary operator: %s", token_name(unary->op));
@@ -223,13 +226,23 @@ void generate_node(State *state, Node *node) {
         CMP(GT, SGT);
         CMP(LT_EQ, SLE);
         CMP(GT_EQ, SGE);
-        CMP(EQ_EQ, EQ);
+      case tEQ_EQ:
+        if (IS_ONE_OF(binary->left->type.kind, tyINT, tyBOOL)) {
+          node->llvm_value =
+              BUILD(ICmp, LLVMIntEQ, left_value, right_value, "");
+        } else {
+          assert(binary->left->type.kind == tySTRING);
+          LLVMValueRef args[2] = {left_value, right_value};
+          node->llvm_value = BUILD(Call2, TO_LLVM_TYPE(STRING_EQ_TYPE),
+                                   state->builtin.string_eq, args, 2, "");
+        }
+        break;
       case tBANG_EQ: {
-        auto eq_value =
-            LLVMBuildICmp(builder, LLVMIntEQ, left_value, right_value, "");
-        node->llvm_value = LLVMBuildNot(builder, eq_value, "");
+        auto eq_value = BUILD(ICmp, LLVMIntEQ, left_value, right_value, "");
+        node->llvm_value = BUILD(Not, eq_value, "");
         break;
       }
+        // TODO: short-circuiting AND/OR
         BIN(AMP_AMP, And);
         BIN(BAR_BAR, Or);
       default:
@@ -263,8 +276,8 @@ void generate_node(State *state, Node *node) {
         GEN(arg_node, arg_value);
         args[i] = arg_value;
       });
-      node->llvm_value = LLVMBuildCall2(builder, TO_LLVM_TYPE(function->type),
-                                        fn, args, num_args, "");
+      node->llvm_value =
+          BUILD(Call2, TO_LLVM_TYPE(function->type), fn, args, num_args, "");
     });
     CASE(ptr_create, {
       // only named values can have addresses right now
@@ -276,8 +289,7 @@ void generate_node(State *state, Node *node) {
     });
     CASE(ptr_deref, {
       GEN(ptr_deref->expr, ptr_value);
-      node->llvm_value =
-          LLVMBuildLoad2(builder, TO_LLVM_TYPE(node->type), ptr_value, "");
+      node->llvm_value = BUILD(Load2, TO_LLVM_TYPE(node->type), ptr_value, "");
     });
     CASE(ptr_type, { panicf("unreachable"); });
     // Functions are generated through decl so that they can be declared with a
@@ -292,12 +304,12 @@ void generate_node(State *state, Node *node) {
       ITER_ARRAY(func_decl->params, param_node, {
         // TODO: only place parameter on stack when it needs an address
         param_node->llvm_value =
-            LLVMBuildAlloca(builder, TO_LLVM_TYPE(param_node->type), "");
-        LLVMBuildStore(builder, LLVMGetParam(fn, i), param_node->llvm_value);
+            BUILD(Alloca, TO_LLVM_TYPE(param_node->type), "");
+        BUILD(Store, LLVMGetParam(fn, i), param_node->llvm_value);
       });
       ITER_ARRAY(func_decl->stmts, stmt_node, { GEN(stmt_node, stmt_value); });
       if (func_decl->return_type == NULL) {
-        LLVMBuildRetVoid(builder);
+        BUILD(RetVoid);
       }
       state->fn = NULL;
     });
@@ -311,7 +323,7 @@ void generate_node(State *state, Node *node) {
                        ? LLVMAppendBasicBlockInContext(ctx, state->fn, "else")
                        : NULL;
       auto end = LLVMAppendBasicBlockInContext(ctx, state->fn, "end");
-      LLVMBuildCondBr(builder, cond_value, then, _else == NULL ? end : _else);
+      BUILD(CondBr, cond_value, then, _else == NULL ? end : _else);
       append_block_stmts(state, then, if_stmt->then_stmts, end);
       if (_else != NULL) {
         append_block_stmts(state, _else, if_stmt->else_stmts, end);
@@ -324,11 +336,11 @@ void generate_node(State *state, Node *node) {
       auto end = LLVMAppendBasicBlockInContext(ctx, state->fn, "end");
       state->loop = (LoopBlocks){.break_to = end, .continue_to = cond};
       // cond
-      LLVMBuildBr(builder, cond);
+      BUILD(Br, cond);
       LLVMPositionBuilderAtEnd(builder, cond);
       GEN(while_loop->cond, cond_value);
       // body
-      LLVMBuildCondBr(builder, cond_value, body, end);
+      BUILD(CondBr, cond_value, body, end);
       append_block_stmts(state, body, while_loop->stmts, cond);
       // end
       LLVMPositionBuilderAtEnd(builder, end);
@@ -343,16 +355,16 @@ void generate_node(State *state, Node *node) {
       // init
       GEN(for_loop->init, init_value);
       // cond
-      LLVMBuildBr(builder, cond);
+      BUILD(Br, cond);
       LLVMPositionBuilderAtEnd(builder, cond);
       GEN(for_loop->cond, cond_value);
-      LLVMBuildCondBr(builder, cond_value, body, end);
+      BUILD(CondBr, cond_value, body, end);
       // body
       append_block_stmts(state, body, for_loop->stmts, step);
       // step
       LLVMPositionBuilderAtEnd(builder, step);
       GEN(for_loop->step, step_value);
-      LLVMBuildBr(builder, cond);
+      BUILD(Br, cond);
       // end
       LLVMPositionBuilderAtEnd(builder, end);
       state->loop = (LoopBlocks){0};
@@ -375,7 +387,7 @@ void generate_node(State *state, Node *node) {
       }
       GEN(assign->expr, expr_value);
       if (assign->op == tEQ) {
-        LLVMBuildStore(builder, expr_value, target_ptr);
+        BUILD(Store, expr_value, target_ptr);
         break;
       }
       GEN(assign->target, target_value);
@@ -390,15 +402,15 @@ void generate_node(State *state, Node *node) {
     });
     CASE(return_stmt, {
       GEN(return_stmt->expr, expr_value);
-      LLVMBuildRet(builder, expr_value);
+      BUILD(Ret, expr_value);
     });
     CASE(break_stmt, {
       assert(state->loop.continue_to != NULL);
-      LLVMBuildBr(builder, state->loop.break_to);
+      BUILD(Br, state->loop.break_to);
     });
     CASE(continue_stmt, {
       assert(state->loop.break_to != NULL);
-      LLVMBuildBr(builder, state->loop.continue_to);
+      BUILD(Br, state->loop.continue_to);
     });
     CASE(field, { panicf("field should not be analyzed directly"); });
     CASE(struct_decl, {
@@ -412,21 +424,21 @@ void generate_node(State *state, Node *node) {
     CASE(field_inst, { panicf("field_inst should not be analyzed directly"); });
     CASE(struct_inst, {
       auto type = TO_LLVM_TYPE(node->type);
-      auto value_ptr = LLVMBuildAlloca(builder, type, "");
+      auto value_ptr = BUILD(Alloca, type, "");
 
       ITER_ARRAY(struct_inst->fields, field_node, {
-        auto field_ptr = LLVMBuildStructGEP2(builder, type, value_ptr, i, "");
+        auto field_ptr = BUILD(StructGEP2, type, value_ptr, i, "");
         GEN(field_node->field_inst.expr, field_value);
-        LLVMBuildStore(builder, field_value, field_ptr);
+        BUILD(Store, field_value, field_ptr);
       });
-      node->llvm_value = LLVMBuildLoad2(builder, type, value_ptr, "");
+      node->llvm_value = BUILD(Load2, type, value_ptr, "");
     });
     CASE(member, {
       GEN(member->expr, expr_value);
       auto name = member->name->name.name;
       auto name_string = strndup(name.text, name.length);
-      node->llvm_value = LLVMBuildExtractValue(
-          builder, expr_value, member->field_index, name_string);
+      node->llvm_value =
+          BUILD(ExtractValue, expr_value, member->field_index, name_string);
       free(name_string);
     });
     CASE(var_decl, {
@@ -445,9 +457,9 @@ void generate_node(State *state, Node *node) {
       } else { // local
         // TODO: handle local constants differently
         // TODO: only place decl on stack when it needs an address
-        node->llvm_value = LLVMBuildAlloca(builder, type, name);
+        node->llvm_value = BUILD(Alloca, type, name);
         GEN(var_decl->expr, expr_value);
-        LLVMBuildStore(builder, expr_value, node->llvm_value);
+        BUILD(Store, expr_value, node->llvm_value);
       }
       free(name);
     });
@@ -507,6 +519,7 @@ void generate_and_evaluate(Node *node) {
               .print_int = ADD_BUILTIN_FUNCTION("print_int", PRINT_INT_TYPE),
               .print_string =
                   ADD_BUILTIN_FUNCTION("print_string", PRINT_STRING_TYPE),
+              .string_eq = ADD_BUILTIN_FUNCTION("__string_eq", STRING_EQ_TYPE),
           },
       .prim = prim};
 

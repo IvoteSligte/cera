@@ -1,0 +1,8 @@
+// OUTPUT: "falsetruefalsetrue"
+
+func main() {
+    print_bool(10 == -10);
+    print_bool(true != false);
+    print_bool("left" == "right");
+    print_bool("string" == "string");    
+}

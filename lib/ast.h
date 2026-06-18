@@ -295,3 +295,5 @@ bool get_symbol(SymbolTable *table, Name name, Type *out_type,
 extern Type PRINT_BOOL_TYPE;
 extern Type PRINT_INT_TYPE;
 extern Type PRINT_STRING_TYPE;
+// intrinsic
+extern Type STRING_EQ_TYPE;

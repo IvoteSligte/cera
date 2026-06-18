@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 typedef struct {
   char *text;
@@ -15,4 +16,9 @@ void print_int(int64_t n) { printf("%ld", n); }
 
 void print_string(CeamString string) {
   printf("%.*s", (int)string.length, string.text);
+}
+
+bool __string_eq(CeamString left, CeamString right) {
+  return left.length == right.length &&
+         (memcmp(left.text, right.text, left.length) == 0);
 }
