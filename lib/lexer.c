@@ -136,6 +136,8 @@ const Matcher MATCHERS[] = {
     M(IF, "if"),
     M(ELSE, "else"),
     M(WHILE, "while"),
+    M(BREAK, "break"),
+    M(CONTINUE, "continue"),
     M(TRUE, "true"),
     M(FALSE, "false"),
 };

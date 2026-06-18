@@ -21,11 +21,17 @@ typedef struct {
   LLVMTypeRef string;
 } Primitives;
 
+typedef struct {
+  LLVMBasicBlockRef break_to;
+  LLVMBasicBlockRef continue_to;
+} LoopBlocks;
+
 typedef struct State {
   LLVMContextRef ctx;
   LLVMModuleRef mod;
   LLVMBuilderRef builder;
   LLVMValueRef fn;
+  LoopBlocks loop;
   struct {
     LLVMValueRef print_bool;
     LLVMValueRef print_int;
@@ -134,15 +140,15 @@ void append_block_stmts(State *state, LLVMBasicBlockRef block,
                         ASTNodeArray stmts, LLVMBasicBlockRef next_block) {
   auto builder = state->builder;
   LLVMPositionBuilderAtEnd(builder, block);
-  bool block_terminated = false;
+  bool terminated = false;
   ITER_ARRAY(stmts, stmt_node, {
     GEN(stmt_node, stmt_value);
-    if (stmt_node->kind == aRETURN_STMT) {
-      block_terminated = true;
+    if (LLVMGetBasicBlockTerminator(block) != NULL) {
+      terminated = true;
       break; // skip statements after terminator in this block
     }
   });
-  if (!block_terminated) {
+  if (!terminated) {
     LLVMBuildBr(builder, next_block);
   }
 }
@@ -316,31 +322,40 @@ void generate_node(State *state, Node *node) {
       auto cond = LLVMAppendBasicBlockInContext(ctx, state->fn, "cond");
       auto body = LLVMAppendBasicBlockInContext(ctx, state->fn, "body");
       auto end = LLVMAppendBasicBlockInContext(ctx, state->fn, "end");
+      state->loop = (LoopBlocks){.break_to = end, .continue_to = cond};
+      // cond
       LLVMBuildBr(builder, cond);
       LLVMPositionBuilderAtEnd(builder, cond);
       GEN(while_loop->cond, cond_value);
+      // body
       LLVMBuildCondBr(builder, cond_value, body, end);
       append_block_stmts(state, body, while_loop->stmts, cond);
+      // end
       LLVMPositionBuilderAtEnd(builder, end);
+      state->loop = (LoopBlocks){0};
     });
     CASE(for_loop, {
-      GEN(for_loop->init, init_value);
       auto cond = LLVMAppendBasicBlockInContext(ctx, state->fn, "cond");
       auto body = LLVMAppendBasicBlockInContext(ctx, state->fn, "body");
+      auto step = LLVMAppendBasicBlockInContext(ctx, state->fn, "step");
       auto end = LLVMAppendBasicBlockInContext(ctx, state->fn, "end");
+      state->loop = (LoopBlocks){.break_to = end, .continue_to = step};
+      // init
+      GEN(for_loop->init, init_value);
+      // cond
       LLVMBuildBr(builder, cond);
       LLVMPositionBuilderAtEnd(builder, cond);
       GEN(for_loop->cond, cond_value);
       LLVMBuildCondBr(builder, cond_value, body, end);
-
-      LLVMPositionBuilderAtEnd(builder, body);
-      ITER_ARRAY(for_loop->stmts, stmt_node, GEN(stmt_node, stmt_value));
+      // body
+      append_block_stmts(state, body, for_loop->stmts, step);
+      // step
+      LLVMPositionBuilderAtEnd(builder, step);
       GEN(for_loop->step, step_value);
-      LLVMBuildBr(
-          builder,
-          cond); // TODO: skip branch if unconditional return stmt in body
-
+      LLVMBuildBr(builder, cond);
+      // end
       LLVMPositionBuilderAtEnd(builder, end);
+      state->loop = (LoopBlocks){0};
     });
     CASE(assign, {
       LLVMValueRef target_ptr = NULL;
@@ -377,7 +392,15 @@ void generate_node(State *state, Node *node) {
       GEN(return_stmt->expr, expr_value);
       LLVMBuildRet(builder, expr_value);
     });
-    CASE(field, { panicf("unreachable"); });
+    CASE(break_stmt, {
+      assert(state->loop.continue_to != NULL);
+      LLVMBuildBr(builder, state->loop.break_to);
+    });
+    CASE(continue_stmt, {
+      assert(state->loop.break_to != NULL);
+      LLVMBuildBr(builder, state->loop.continue_to);
+    });
+    CASE(field, { panicf("field should not be analyzed directly"); });
     CASE(struct_decl, {
       auto struct_type = declare_struct(state->ctx, node);
       LLVMTypeRef element_types[MAX(struct_decl->fields.length, 1)];

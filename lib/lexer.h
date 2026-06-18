@@ -29,7 +29,7 @@ typedef enum {
   tLT_EQ,
   tGT_EQ,
   tEQ_EQ,
-  tBANG_EQ,  
+  tBANG_EQ,
   tAMP_AMP,
   tBAR_BAR,
   tPLUS_EQ,
@@ -56,6 +56,8 @@ typedef enum {
   tIF,
   tELSE,
   tWHILE,
+  tBREAK,
+  tCONTINUE,
   tTRUE,
   tFALSE,
   // metasymbol for the number of token kinds
@@ -88,7 +90,8 @@ LexResult lex(const char *source, size_t *offset, Token *out,
               LexError *error_data);
 
 void print_lex_error(LexError error);
-void get_lex_error_info(LexError error, char** out_message, size_t* out_line, size_t* out_column);
+void get_lex_error_info(LexError error, char **out_message, size_t *out_line,
+                        size_t *out_column);
 
 typedef struct {
   const char *source;

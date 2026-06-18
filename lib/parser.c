@@ -483,6 +483,18 @@ PARSER(return_stmt, {
   RETURN(return_stmt, {.expr = expr});
 });
 
+PARSER(break_stmt, {
+  EXPECT(tBREAK);
+  EXPECT(tSEMI);
+  RETURN(break_stmt, {});
+});
+
+PARSER(continue_stmt, {
+  EXPECT(tCONTINUE);
+  EXPECT(tSEMI);
+  RETURN(continue_stmt, {});
+});
+
 PARSER(if_stmt, {
   EXPECT(tIF);
   MUST_PARSE(expr_stmt, cond);
@@ -548,6 +560,8 @@ PARSER(stmt, {
   TRY_PARSE(for_loop);
   TRY_PARSE(assign);
   TRY_PARSE(return_stmt);
+  TRY_PARSE(break_stmt);
+  TRY_PARSE(continue_stmt);
   TRY_PARSE(var_decl);
   FAIL;
 });

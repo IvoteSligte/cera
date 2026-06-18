@@ -142,6 +142,8 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
       VISIT(assign->expr);
     });
     PCASE(return_stmt, { VISIT(return_stmt->expr); });
+    PCASE(break_stmt, {});
+    PCASE(continue_stmt, {});
     PCASE(field, {
       VISIT(field->name);
       VISIT(field->type);
@@ -197,6 +199,8 @@ static void print_node(ASTNode *node, size_t depth, void *data) {
     PCASE(for_loop, eprintf("for_loop:\n"));
     PCASE(assign, eprintf("assign: `%s`\n", token_name(assign->op)));
     PCASE(return_stmt, eprintf("return_stmt:\n"));
+    PCASE(break_stmt, eprintf("break_stmt\n"));
+    PCASE(continue_stmt, eprintf("continue_stmt\n"));
     PCASE(field, eprintf("field:\n"));
     PCASE(struct_decl, eprintf("struct_decl:\n"));
     PCASE(field_inst, eprintf("field_inst:\n"));
@@ -234,6 +238,8 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(FOR_LOOP);
     N(ASSIGN);
     N(RETURN_STMT);
+    N(BREAK_STMT);
+    N(CONTINUE_STMT);
     N(FIELD);
     N(STRUCT_DECL);
     N(FIELD_INST);

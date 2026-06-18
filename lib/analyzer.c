@@ -27,13 +27,15 @@ static Type MAIN_FUNCTION_TYPE = {.kind = tyFUNCTION,
 
 #define ACASE($name)                                                           \
   CASE($name, {                                                                \
-    return analyze_##$name(state, node, table, return_type, is_static);        \
+    return analyze_##$name(state, node, table, return_type, is_static,         \
+                           in_loop);                                           \
   })
 
 // Analyze a node, only returning on error.
 #define TRY_ANALYZE($node, $name)                                              \
   {                                                                            \
-    Result result = analyze_node(state, $node, table, return_type, is_static); \
+    Result result =                                                            \
+        analyze_node(state, $node, table, return_type, is_static, in_loop);    \
     if (result == rERROR)                                                      \
       FAIL;                                                                    \
     blocked |= result == rBLOCKED;                                             \
@@ -106,7 +108,7 @@ typedef enum {
 
 #define ANALYZER_SIGNATURE($name)                                              \
   Result analyze_##$name(State *state, Node *node, Table *table,               \
-                         Type return_type, bool is_static)
+                         Type return_type, bool is_static, bool in_loop)
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
@@ -118,6 +120,7 @@ typedef enum {
     UNUSED(return_type);                                                       \
     UNUSED(is_static);                                                         \
     UNUSED(blocked);                                                           \
+    UNUSED(in_loop);                                                           \
   }
 
 ANALYZER_SIGNATURE(node);
@@ -472,6 +475,7 @@ ANALYZER(while_loop, {
 
   while_loop->table.parent = table;
   Table *table = &while_loop->table;
+  bool in_loop = true;
   ANALYZE_ARRAY(while_loop->stmts);
   OK;
 });
@@ -485,6 +489,8 @@ ANALYZER(for_loop, {
   TRY_ANALYZE(for_loop->step, step);
   EXPECT((cond_type.kind == tyBOOL), node,
          strdup("expected boolean type as for-loop condition"));
+
+  bool in_loop = true;
   ANALYZE_ARRAY(for_loop->stmts);
   OK;
 });
@@ -520,6 +526,18 @@ ANALYZER(return_stmt, {
   EXPECT(type_eq(expr_type, return_type), return_stmt->expr,
          ssprintf("return type mismatch: expected %s, but found %s",
                   type_name(return_type.kind), type_name(expr_type.kind)));
+  OK;
+});
+
+ANALYZER(break_stmt, {
+  UNUSED(break_stmt);
+  EXPECT(in_loop, node, strdup("cannot break outside of loop"));
+  OK;
+});
+
+ANALYZER(continue_stmt, {
+  UNUSED(continue_stmt);
+  EXPECT(in_loop, node, strdup("cannot continue outside of loop"));
   OK;
 });
 
@@ -581,6 +599,8 @@ ANALYZER_SIGNATURE(node) {
     ACASE(for_loop);
     ACASE(assign);
     ACASE(return_stmt);
+    ACASE(break_stmt);
+    ACASE(continue_stmt);
     ACASE(field);
     ACASE(struct_decl);
     ACASE(field_inst);
@@ -634,7 +654,7 @@ bool analyze(AST *ast, AnalyzeErrorArray *error_data) {
     eprintf("INFO: analysis iteration: %zu\n", i);
     // TODO: make sure the symbol tables (also allocated using random_allocator)
     // are freed, but the static values are not
-    result = analyze_node(&state, ast->head, &table, (Type){0}, true);
+    result = analyze_node(&state, ast->head, &table, (Type){0}, true, false);
     if (result != rBLOCKED)
       break;
 

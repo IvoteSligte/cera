@@ -26,6 +26,8 @@ typedef enum {
   aFOR_LOOP,
   aASSIGN,
   aRETURN_STMT,
+  aBREAK_STMT,
+  aCONTINUE_STMT,
   aFIELD,
   aSTRUCT_DECL,
   aFIELD_INST,  // field instantiation
@@ -218,6 +220,10 @@ typedef struct ASTNode {
     struct {
       ASTNode *expr;
     } return_stmt;
+    struct {
+    } break_stmt;
+    struct {
+    } continue_stmt;
     struct {
       ASTNode *name;
       ASTNode *expr;

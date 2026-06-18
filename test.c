@@ -1,4 +1,5 @@
 
+#include <ctype.h>
 #include <dirent.h> // TODO: cross-platform
 #include <stdbool.h>
 #include <stdio.h>
@@ -34,6 +35,7 @@
 typedef struct {
   char *source;
   char *expected_output;
+  int expected_status;
 } TestFile;
 
 bool evaluate(const char *source) {
@@ -86,32 +88,36 @@ char *map_escape_chars(const char *src, size_t length) {
   return dst;
 }
 
+// Test hints:
+//  OUTPUT: "output text"
+//  STATUS: <integer>
 TestFile read_test_file(const char *path) {
   TestFile file = {0};
   file.source = read_file(path);
   if (file.source == NULL) {
     return file;
   }
-  char *output_prefix = strstr(file.source, "// OUTPUT: ");
+  char *output_prefix = strstr(file.source, "OUTPUT");
   if (output_prefix != NULL) {
     char *output_start_quote = strchr(output_prefix, '"');
+    assert(output_start_quote != NULL);
     char *output_start = output_start_quote + 1;
-    // expected format: ``
-    if (output_start - output_prefix > 14) {
-      panicf("Expected OUTPUT format `// OUTPUT: \"output text\"` for test "
-             "file `%s`.",
-             path);
-    }
     char *output_end = strchr(output_start, '"');
-    if (output_end == NULL) {
-      panicf("Expected OUTPUT format `// OUTPUT: \"output text\"` for test "
-             "file `%s`. Missing closing quote.",
-             path);
-    }
+    assert(output_end != NULL);
     size_t length = output_end - output_start;
     file.expected_output = map_escape_chars(output_start, length);
   } else {
     file.expected_output = strdup("");
+  }
+  file.expected_status = 0;
+  char *status_str = strstr(file.source, "STATUS");
+  if (status_str != NULL) {
+    for (; !isdigit(*status_str); status_str++)
+      ;
+    for (; isdigit(*status_str); status_str++) {
+      file.expected_status *= 10;
+      file.expected_status += *status_str - '0';
+    }
   }
   return file;
 }
@@ -271,7 +277,7 @@ int main(int argc, const char *argv[]) {
       free(cmd);
       char *stdout_string = read_stream(stdout);
       int status = WEXITSTATUS(pclose(stdout));
-      if (status != 0) {
+      if (status != test_file.expected_status) {
         printf("- test %-20s " RED("failed") " [%3d] (%s) \n", name, status,
                status_message(status));
         goto cont;
@@ -280,8 +286,8 @@ int main(int argc, const char *argv[]) {
       const char *expected_output = test_file.expected_output;
       size_t stdout_size = strlen(stdout_string);
       if (!str_eq(stdout_string, expected_output)) {
-        eprintf("- test %-20s " RED("failed") " [0  ] (output mismatch) \n",
-                name);
+        eprintf("- test %-20s " RED("failed") " [%3d] (output mismatch) \n",
+                name, status);
         eprintf("Expected output does not match actual output.\n");
         eprintf("Expected (%zu bytes): `%s`\n", strlen(expected_output),
                 expected_output);

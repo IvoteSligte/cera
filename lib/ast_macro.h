@@ -20,6 +20,8 @@
 #define NODE_for_loop aFOR_LOOP
 #define NODE_assign aASSIGN
 #define NODE_return_stmt aRETURN_STMT
+#define NODE_break_stmt aBREAK_STMT
+#define NODE_continue_stmt aCONTINUE_STMT
 #define NODE_field aFIELD
 #define NODE_struct_decl aSTRUCT_DECL
 #define NODE_field_inst aFIELD_INST
