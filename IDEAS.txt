@@ -1,0 +1,69 @@
+
+modules:
+    either files or directories as modules (following Rust or Go respectively)
+
+    `.std.mem.transmute` or `std::mem::transmute` or `std'mem'transmute` access syntax
+
+implicit function parameters:
+    ```ceam
+    use (n: int) {
+        func square(): int {
+             // uses the `n` from the outer scope
+             return n * n;
+        }
+
+        func cube(): int {
+             // implicitly forwards `n` to `square`
+             return square() * n;
+        }
+
+        func plus_one_square(): int {
+             // overrides the value of `n` passed to `square`
+             return square(n=n+1);
+        }
+    }
+
+    // functions outside of the `use` block must pass `n` explicitly
+    square(100);
+    ```
+
+    This feature would practically replace objects as in OOP.
+    A parser in C++:
+    ```cpp
+    class Parser {
+    public:
+        Parser(Stream stream) : stream(stream) {}
+
+        void skip() {
+            stream.skip();
+        }
+
+        ParseTree parse() {
+            skip();
+            // other logic
+        }
+    private:
+        Stream stream;
+    };
+
+    Stream stream("file.txt");
+    Parser parser(stream);
+    auto output = parser.parse();
+    ```
+
+    A parser in Ceam:
+    ```ceam
+    use (stream: Stream) {
+        func parse() {
+            skip();
+            // other logic
+        }
+
+        func skip() {
+            stream.skip();
+        }
+    }
+
+    stream := file_stream("file.txt");
+    auto output = parse(stream);
+    ```

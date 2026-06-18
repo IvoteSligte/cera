@@ -13,9 +13,7 @@ codebase:
     foreach element in custom type    
     tagged unions / enums with payloads
     generics
-    `extern "C"` declarations
-    dynamically linking C code
-    statically linking C code
+    C interoperation
     remove VLAs
     uint type
     make cross-platform (see "TODO: cross-platform" in code)
@@ -25,3 +23,9 @@ codebase:
     deduplicate string literals
     public/private globals
     statically link LLVM
+    RAII?
+
+tooling:
+    LSP
+    standard library
+    formatter
