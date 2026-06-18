@@ -1,6 +1,6 @@
 
 codebase:
-    pointers + null
+    null (pointer)
     equality operator for all primitive types (int, bool, string)
     enums (without payloads)
     arrays

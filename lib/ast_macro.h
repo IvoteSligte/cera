@@ -10,6 +10,9 @@
 #define NODE_unary aUNARY
 #define NODE_binary aBINARY
 #define NODE_func_call aFUNC_CALL
+#define NODE_ptr_create aPTR_CREATE
+#define NODE_ptr_deref aPTR_DEREF
+#define NODE_ptr_type aPTR_TYPE
 #define NODE_func_decl aFUNC_DECL
 #define NODE_param aPARAM
 #define NODE_if_stmt aIF_STMT

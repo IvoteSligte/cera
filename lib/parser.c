@@ -222,6 +222,7 @@ int log_indent = 0;
       EXTEND_SPAN($nodes.data[$nodes.length - 1]->span);                       \
   }
 
+// allows trailing comma
 #define ZERO_OR_MORE_SEPARATED($element, $nodes, $separators...)               \
   NodeArray $nodes = {0};                                                      \
   {                                                                            \
@@ -278,6 +279,18 @@ PARSER(string, {
   RETURN(string, {.text = token.text + 1, .length = token.length - 2});
 });
 
+PARSER(type, {
+  MUST_PARSE(name, expr);
+  *out = expr;
+  // while there are stars following the type name,
+  // yield pointer types
+  while (true) {
+    TRY_TOKEN(OK, tSTAR);
+    YIELD(ptr_type, {.expr = *out});
+  }
+  OK;
+});
+
 PARSER(func_call, {
   MUST_PARSE(name, function);
   EXPECT(tLPAREN);
@@ -294,7 +307,7 @@ PARSER(field_inst, {
 });
 
 PARSER(struct_inst, {
-  MUST_PARSE(name, type);
+  MUST_PARSE(type, type);
   EXPECT(tDOT);
   EXPECT(tLBRACE);
   ZERO_OR_MORE_SEPARATED(field_inst, fields, tCOMMA);
@@ -331,7 +344,7 @@ PARSER(primary, {
 PARSER(member, {
   MAY_PARSE(primary, expr);
 
-  // TODO: nested member access 'a.b.c' -> '(a.b).c'
+  // TODO: nested member access `a.b.c` interpreted as `(a.b).c`
   TRY_TOKEN(
       {
         if (expr == NULL) {
@@ -342,7 +355,12 @@ PARSER(member, {
         }
       },
       tDOT);
-  MUST_PARSE(name, name);
+  MAY_PARSE(name, name);
+
+  // ptr_deref syntax is `ptr.`
+  if (name == NULL) {
+    RETURN(ptr_deref, {.expr = expr});
+  }
   RETURN(member, {.expr = expr, .name = name});
 });
 
@@ -399,8 +417,13 @@ PARSER(binary, {
       },
       tPLUS, tMINUS, tSTAR, tSLASH, tLT, tGT, tLT_EQ, tGT_EQ, tEQ_EQ, tBANG_EQ,
       tAMP_AMP, tBAR_BAR);
-  MUST_PARSE(expr, right);
-
+  MAY_PARSE(expr, right);
+  if (right == NULL) {
+    if (op == tSTAR) {
+      RETURN(ptr_create, {.expr = left});
+    }
+    FAIL;
+  }
   YIELD(binary, {.op = op, .has_parens = false, .left = left, .right = right});
   fix_precedence(*out);
   OK;
@@ -409,7 +432,7 @@ PARSER(binary, {
 PARSER(param, {
   MUST_PARSE(name, name);
   EXPECT(tCOL);
-  MUST_PARSE(name, type);
+  MUST_PARSE(type, type);
   RETURN(param, {.name = name, .type = type});
 });
 
@@ -448,10 +471,10 @@ PARSER(expr_stmt, {
 PARSER_SIGNATURE(var_decl);
 
 PARSER(assign, {
-  MUST_PARSE(name, name);
+  MUST_PARSE(expr, target);
   EXPECT_OP(tEQ, tPLUS_EQ, tMINUS_EQ, tSTAR_EQ, tSLASH_EQ);
   MUST_PARSE(expr_stmt, expr);
-  RETURN(assign, {.op = op, .target = name, .expr = expr});
+  RETURN(assign, {.op = op, .target = target, .expr = expr});
 });
 
 PARSER(return_stmt, {
@@ -493,7 +516,7 @@ PARSER(for_loop, {
 PARSER(field, {
   MUST_PARSE(name, name);
   EXPECT(tCOL);
-  MUST_PARSE(name, type);
+  MUST_PARSE(type, type);
   EXPECT(tSEMI);
   RETURN(field, {.name = name, .type = type});
 });
@@ -513,8 +536,7 @@ PARSER(var_decl, {
   EXPECT(tCOL_COL, tCOL_EQ);
   bool is_constant = token.kind == tCOL_COL;
 
-  MUST_PARSE(expr, expr);
-  EXPECT(tSEMI);
+  MUST_PARSE(expr_stmt, expr);
 
   RETURN(var_decl, {.is_constant = is_constant, .name = name, .expr = expr});
 });

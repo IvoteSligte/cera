@@ -53,7 +53,7 @@ static Type MAIN_FUNCTION_TYPE = {.kind = tyFUNCTION,
     ANALYZE($node, $name##_type);                                              \
     EXPECT(($name##_type_type.kind == tyTYPE), $node,                          \
            ssprintf("not a type: %s", type_name($name##_type_type.kind)));     \
-    $name##_type = get_type_value($node);                                      \
+    $name##_type = GET_TYPE_VALUE($node);                                      \
     assert($name##_type.kind != tyUNKNOWN);                                    \
   }
 
@@ -136,7 +136,6 @@ ANALYZER(name, {
     BLOCK;
   /* TODO (only for variables): EXPECT(node->type.kind != tyFUNC_DECL, node,
    * strdup("cannot get address of func_decl")); */
-  node->type.is_bound = true;
   OK;
 });
 
@@ -279,19 +278,48 @@ ANALYZER(func_call, {
   OK;
 });
 
-ANALYZER(field_inst, {
-  ANALYZE(field_inst->expr, expr);
-  node->type = expr_type;
+ANALYZER(ptr_create, {
+  ANALYZE(ptr_create->expr, expr);
+  EXPECT(expr_type.kind != tyTYPE, node,
+         strdup("cannot create pointer to type"));
+  EXPECT(ptr_create->expr->kind == aNAME, node,
+         strdup("cannot create pointer to temporary value "));
+  node->type = (Type){.kind = tyPTR, .pointee_type = ALLOC(sizeof(Type))};
+  *node->type.pointee_type = expr_type;
   OK;
 });
 
+ANALYZER(ptr_deref, {
+  ANALYZE(ptr_deref->expr, expr);
+  EXPECT(
+      expr_type.kind == tyPTR, node,
+      ssprintf("cannot dereference non-pointer type %s", FMT_TYPE(expr_type)))
+  node->type = *expr_type.pointee_type;
+  OK;
+});
+
+ANALYZER(ptr_type, {
+  ANALYZE(ptr_type->expr, expr);
+  UNUSED(expr_type);
+  node->type = PRIM_TYPE(tyTYPE);
+  OK;
+});
+
+#define GET_TYPE_VALUE($node) get_type_value(state, $node)
+
 // Returns the value of a type expression.
-Type get_type_value(ASTNode *node) {
+Type get_type_value(State *state, ASTNode *node) {
   if (node->type.kind != tyTYPE) {
     panicf("get_type_value called with non-type %s (expected tyTYPE)\n",
            type_name(node->type.kind));
   }
-  assert(node->kind == aNAME); // Type expressions can currently only be names.
+  // Type expressions can currently only be names and pointers.
+  if (node->kind == aPTR_TYPE) {
+    Type *expr_type = ALLOC(sizeof(Type));
+    *expr_type = GET_TYPE_VALUE(node->ptr_type.expr);
+    return (Type){.kind = tyPTR, .pointee_type = expr_type};
+  }
+  assert(node->kind == aNAME);
   auto name = node->name;
 
   // builtin type
@@ -308,6 +336,12 @@ Type get_type_value(ASTNode *node) {
     panicf("not a type (get_type_value): %s", ast_node_name(name.decl->kind));
   });
 }
+
+ANALYZER(field_inst, {
+  ANALYZE(field_inst->expr, expr);
+  node->type = expr_type;
+  OK;
+});
 
 ANALYZER(struct_inst, {
   ANALYZE_TYPE(struct_inst->type, struct);
@@ -329,7 +363,7 @@ ANALYZER(struct_inst, {
       if (name_eq(field->name->name.name, field_inst->name->name.name)) {
         EXPECT(!used[i], field_inst_node, strdup("duplicate field"));
         used[i] = true;
-        expected_type = get_type_value(field->type);
+        expected_type = GET_TYPE_VALUE(field->type);
         break;
       }
     });
@@ -354,7 +388,7 @@ ANALYZER(member, {
   ITER_ARRAY(struct_decl_node->struct_decl.fields, field_node, {
     auto field = &field_node->field;
     if (name_eq(field->name->name.name, member->name->name.name)) {
-      node->type = get_type_value(field->type);
+      node->type = GET_TYPE_VALUE(field->type);
       assert(node->type.kind != tyUNKNOWN);
       member->field_index = i;
       OK;
@@ -459,6 +493,9 @@ ANALYZER(assign, {
   ANALYZE(assign->target, target);
   ANALYZE(assign->expr, expr);
 
+  EXPECT(IS_ONE_OF(assign->target->kind, aNAME, aPTR_DEREF), assign->target,
+         strdup("cannot assign to temporary value"));
+
   if (assign->op == tEQ) {
   } else if (IS_ONE_OF(assign->op, tPLUS_EQ, tMINUS_EQ, tSTAR_EQ, tSLASH_EQ)) {
     EXPECT(
@@ -474,8 +511,6 @@ ANALYZER(assign, {
   }
   EXPECT(type_eq(target_type, expr_type), node,
          strdup("assigment type mismatch"));
-  EXPECT(target_type.is_bound, node,
-         strdup("cannot assign to temporary value"));
   EXPECT(target_type.is_constant, node, strdup("cannot assign to constant"));
   OK;
 });
@@ -536,6 +571,9 @@ ANALYZER_SIGNATURE(node) {
     ACASE(unary);
     ACASE(binary);
     ACASE(func_call);
+    ACASE(ptr_create);
+    ACASE(ptr_deref);
+    ACASE(ptr_type);
     ACASE(func_decl);
     ACASE(param);
     ACASE(if_stmt);

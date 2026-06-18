@@ -60,6 +60,8 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, Primitives prim, Type type) {
     return prim._bool;
   case tySTRING:
     return prim.string;
+  case tyPTR:
+    return LLVMPointerType(to_llvm_type(ctx, prim, *type.pointee_type), 0);
   case tyFUNCTION: {
     auto function = type.function;
     size_t num_params = function.params.length;
@@ -148,7 +150,7 @@ void append_block_stmts(State *state, LLVMBasicBlockRef block,
 #define ASS($op, $instr)                                                       \
   case t##$op: {                                                               \
     auto new_value = LLVMBuild##$instr(builder, target_value, expr_value, ""); \
-    LLVMBuildStore(builder, new_value, target_name->decl->llvm_value);         \
+    LLVMBuildStore(builder, new_value, target_ptr);                            \
     break;                                                                     \
   }
 
@@ -258,6 +260,20 @@ void generate_node(State *state, Node *node) {
       node->llvm_value = LLVMBuildCall2(builder, TO_LLVM_TYPE(function->type),
                                         fn, args, num_args, "");
     });
+    CASE(ptr_create, {
+      // only named values can have addresses right now
+      assert(ptr_create->expr->kind == aNAME);
+      auto var_name = &ptr_create->expr->name;
+      assert(var_name->decl != NULL);
+      assert(var_name->decl->llvm_value != NULL);
+      node->llvm_value = var_name->decl->llvm_value;
+    });
+    CASE(ptr_deref, {
+      GEN(ptr_deref->expr, ptr_value);
+      node->llvm_value =
+          LLVMBuildLoad2(builder, TO_LLVM_TYPE(node->type), ptr_value, "");
+    });
+    CASE(ptr_type, { panicf("unreachable"); });
     // Functions are generated through decl so that they can be declared with a
     // name in LLVM.
     CASE(func_decl, {
@@ -327,17 +343,24 @@ void generate_node(State *state, Node *node) {
       LLVMPositionBuilderAtEnd(builder, end);
     });
     CASE(assign, {
-      assert(assign->target->kind == aNAME);
-      auto target_name = &assign->target->name;
-      // either name->decl != NULL or the variable refers to a builtin,
-      // which is not assignable
-      assert(target_name->decl != NULL);
-      if (target_name->decl->llvm_value == NULL) {
-        panicf("unimplemented: forward declarations");
+      LLVMValueRef target_ptr = NULL;
+      if (assign->target->kind == aPTR_DEREF) {
+        GEN(assign->target->ptr_deref.expr, _target_ptr);
+        target_ptr = _target_ptr;
+      } else {
+        assert(assign->target->kind == aNAME);
+        auto target_name = &assign->target->name;
+        // either name->decl != NULL or the variable refers to a builtin,
+        // which is not assignable
+        assert(target_name->decl != NULL);
+        if (target_name->decl->llvm_value == NULL) {
+          panicf("unimplemented: forward declaration of assignment target");
+        }
+        target_ptr = target_name->decl->llvm_value;
       }
       GEN(assign->expr, expr_value);
-      if (assign->op == tEQ_EQ) {
-        LLVMBuildStore(builder, expr_value, target_name->decl->llvm_value);
+      if (assign->op == tEQ) {
+        LLVMBuildStore(builder, expr_value, target_ptr);
         break;
       }
       GEN(assign->target, target_value);
@@ -365,20 +388,15 @@ void generate_node(State *state, Node *node) {
     });
     CASE(field_inst, { panicf("field_inst should not be analyzed directly"); });
     CASE(struct_inst, {
-      // type expressions can currently only be names
-      assert(struct_inst->type->kind == aNAME);
       auto type = TO_LLVM_TYPE(node->type);
+      auto value_ptr = LLVMBuildAlloca(builder, type, "");
 
-      char *type_name = strndup(struct_inst->type->name.name.text,
-                                struct_inst->type->name.name.length);
-      auto value_ptr = LLVMBuildAlloca(builder, type, type_name);
       ITER_ARRAY(struct_inst->fields, field_node, {
         auto field_ptr = LLVMBuildStructGEP2(builder, type, value_ptr, i, "");
         GEN(field_node->field_inst.expr, field_value);
         LLVMBuildStore(builder, field_value, field_ptr);
       });
       node->llvm_value = LLVMBuildLoad2(builder, type, value_ptr, "");
-      free(type_name);
     });
     CASE(member, {
       GEN(member->expr, expr_value);

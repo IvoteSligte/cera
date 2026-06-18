@@ -1,0 +1,17 @@
+// OUTPUT: "182\n200\n999\n70\n"
+
+func set(ptr: int*, value: int) {
+    ptr. = value;
+}
+
+func main() {
+    x := 182;
+    x_ptr := x*;
+    print_int(x); print_string("\n");
+    x = 200;
+    print_int(x_ptr.); print_string("\n");
+    x_ptr. = 999;
+    print_int(x); print_string("\n");
+    set(x_ptr, 70);
+    print_int(x); print_string("\n");
+}

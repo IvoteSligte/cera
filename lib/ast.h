@@ -16,6 +16,9 @@ typedef enum {
   aUNARY,
   aBINARY,
   aFUNC_CALL,
+  aPTR_CREATE,
+  aPTR_DEREF,
+  aPTR_TYPE,
   aFUNC_DECL,
   aPARAM,
   aIF_STMT,
@@ -56,6 +59,7 @@ typedef enum {
   tyINT,
   tyBOOL,
   tySTRING,
+  tyPTR,
   tyFUNCTION,
   tySTRUCT,
   tyUNION,
@@ -83,9 +87,8 @@ typedef struct {
 typedef struct Type {
   TypeKind kind;
   bool is_constant;
-  // true if bound to a fixed location in memory
-  bool is_bound;
   union {
+    Type *pointee_type;
     struct {
       TypeArray params;
       Type *_return;
@@ -163,6 +166,15 @@ typedef struct ASTNode {
       ASTNode *function;
       ASTNodeArray args;
     } func_call;
+    struct {
+      ASTNode *expr;
+    } ptr_create;
+    struct {
+      ASTNode *expr;
+    } ptr_deref;
+    struct {
+      ASTNode *expr;
+    } ptr_type;
     struct {
       ASTNode *name;
       ASTNode *type;
