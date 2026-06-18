@@ -439,12 +439,7 @@ void generate_node(State *state, Node *node) {
 
       if (var_decl->is_global) {
         node->llvm_value = LLVMAddGlobal(mod, type, name);
-        if (!IS_ONE_OF(node->type.kind, tyINT, tyBOOL, tySTRING)) {
-          // NOTE: probably will never implement initializers that call
-          // functions, but structs should be able to be used as global
-          // variables
-          panicf("unimplemented: complex global variable initializers");
-        }
+        assert(IS_ONE_OF(node->type.kind, tyINT, tyBOOL, tySTRING));
         GEN(var_decl->expr, expr_value);
         LLVMSetInitializer(node->llvm_value, expr_value);
       } else { // local

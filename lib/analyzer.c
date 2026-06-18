@@ -559,8 +559,13 @@ ANALYZER(struct_decl, {
 });
 
 ANALYZER(var_decl, {
-  bool is_static = IS_GLOBAL || var_decl->is_constant;
-  var_decl->is_global = IS_GLOBAL;
+  bool is_global = IS_GLOBAL;
+  bool is_static = is_global || var_decl->is_constant;
+  var_decl->is_global = is_global;
+  // TODO: structs as global initializers
+  EXPECT(!is_global ||
+             IS_ONE_OF(var_decl->expr->kind, aINTEGER, aBOOLEAN, aSTRING),
+         node, strdup("global initializer must be a literal"));
 
   DECLARE(var_decl);
   TRY_ANALYZE(var_decl->expr, expr);
