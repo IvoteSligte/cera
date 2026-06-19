@@ -67,3 +67,16 @@ implicit function parameters:
     stream := file_stream("file.txt");
     auto output = parse(stream);
     ```
+
+import LLVM IR:
+    allows interoperating with languages that compile to LLVM IR
+
+    // preparation
+    1. compile other language's code to fully linked LLVM IR .ll (textual) or .bc (bitcode) file
+    2. load module using the LLVM C API
+    // conversion to Ceam
+    3. scan for and demangle function signatures and types
+    4. load function signatures and types as external declarations in Ceam
+    // composition
+    5. mangle function calls and types when using them through Ceam
+    6. link LLVM modules to produce a composite module
