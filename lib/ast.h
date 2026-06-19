@@ -2,6 +2,10 @@
 
 #include "lexer.h"
 
+// These prevent having this header depend on LLVM.
+typedef struct LLVMOpaqueValue *LLVMValueRef;
+typedef struct LLVMOpaqueType *LLVMTypeRef;
+
 typedef struct {
   size_t offset;
   size_t length;
@@ -34,6 +38,7 @@ typedef enum {
   aSTRUCT_INST, // struct instantiation
   aMEMBER,      // struct member access
   aVAR_DECL,    // variable declaration
+  aIMPORT,
   aMODULE,
 } ASTNodeKind;
 
@@ -43,12 +48,6 @@ typedef struct {
 } Name;
 
 typedef struct ASTNode ASTNode;
-
-typedef struct {
-  ListAllocator list_allocator;
-  RandomAllocator random_allocator;
-  ASTNode *head;
-} AST;
 
 typedef struct {
   ASTNode **data;
@@ -62,6 +61,7 @@ typedef enum {
   tyBOOL,
   tySTRING,
   tyPTR,
+  tyOPAQUE_PTR, // for compatibility with LLVM
   tyFUNCTION,
   tySTRUCT,
   tyUNION,
@@ -90,6 +90,7 @@ typedef struct Type {
   TypeKind kind;
   bool is_constant;
   union {
+    // TODO: .int_width?
     Type *pointee_type;
     struct {
       TypeArray params;
@@ -108,6 +109,14 @@ typedef struct {
 
 typedef union Value Value;
 
+#define SYMBOL_DATA                                                            \
+  struct {                                                                     \
+    Type type;                                                                 \
+    LLVMValueRef llvm_value;                                                   \
+  }
+
+typedef SYMBOL_DATA SymbolData;
+
 typedef struct {
   Name name;
   ASTNode *node;
@@ -120,23 +129,33 @@ typedef struct SymbolTable {
   size_t length;
 } SymbolTable;
 
-// These prevent having this header depend on LLVM.
-typedef struct LLVMOpaqueValue *LLVMValueRef;
-typedef struct LLVMOpaqueType *LLVMTypeRef;
+typedef struct {
+  Name name;
+  Type type;
+  LLVMValueRef llvm_value;
+} ExternDecl;
+
+typedef struct {
+  struct {
+    ExternDecl *data;
+    size_t length;
+  } decls;
+} ExternMod;
 
 typedef struct ASTNode {
   Span span;
   bool is_analyzed;
   Type type;
   // LLVM representation of the value this node represents.
-  // For decl/param this is a *pointer* to the value.
+  // For declarations this is a *pointer* to the value.
   LLVMValueRef llvm_value;
   ASTNodeKind kind;
   union {
     struct {
       Name name;
-      // Either decl != NULL or builtin != 0.
+      // Exactly one of these must be non-zero after analysis.
       ASTNode *decl;
+      ExternDecl *extern_decl;
       BuiltinID builtin;
     } name;
     struct {
@@ -259,11 +278,24 @@ typedef struct ASTNode {
       bool symbol_added;
     } var_decl;
     struct {
+      TokenKind kind;
+      ASTNode *path; // string literal
+    } import;
+    struct {
       ASTNodeArray decls;
       SymbolTable table;
     } module;
   };
 } ASTNode;
+
+typedef struct {
+  // Used to allocate nodes during parsing.
+  ListAllocator list_allocator;
+  // Used to allocate types and arrays during analysis.
+  RandomAllocator random_allocator;
+  ExternMod extern_mod;
+  ASTNode *head;
+} AST;
 
 Span token_span(Token token);
 Span join_spans(Span left, Span right);
@@ -289,8 +321,9 @@ bool get_builtin_type(Name name, Type *out_builtin_type);
 // Returns true if the symbol with the given name exists.
 // Fills out_type and either out_node or out_builtin depending on whether the
 // symbol is user-defined or builtin.
-bool get_symbol(SymbolTable *table, Name name, Type *out_type,
-                ASTNode **out_node, BuiltinID *out_builtin);
+bool get_symbol(ExternMod *extern_mod, SymbolTable *table, Name name,
+                Type *out_type, ASTNode **out_node, ExternDecl **out_extern,
+                BuiltinID *out_builtin);
 
 extern Type PRINT_BOOL_TYPE;
 extern Type PRINT_INT_TYPE;

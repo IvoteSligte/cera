@@ -12,15 +12,9 @@
 #include "ast.h"
 #include "ast_macro.h"
 #include "generator.h"
+#include "llvm.h"
 
 typedef ASTNode Node;
-typedef struct {
-  LLVMTypeRef _void;
-  LLVMTypeRef _int;
-  LLVMTypeRef _bool;
-  LLVMTypeRef ptr;
-  LLVMTypeRef string;
-} Primitives;
 
 typedef struct {
   LLVMBasicBlockRef break_to;
@@ -39,62 +33,9 @@ typedef struct State {
     LLVMValueRef print_string;
     LLVMValueRef string_eq;
   } builtin;
-  Primitives prim;
+  LLVMPrimitives prim;
+  LLVMState *llvm;
 } State;
-
-LLVMTypeRef declare_struct(LLVMContextRef ctx, Node *decl_node) {
-  assert(decl_node->kind == aSTRUCT_DECL);
-  auto decl = &decl_node->struct_decl;
-  if (decl->llvm_type != NULL) {
-    return decl->llvm_type;
-  }
-  char *name =
-      strndup(decl->name->name.name.text, decl->name->name.name.length);
-  decl->llvm_type = LLVMStructCreateNamed(ctx, name);
-
-  free(name);
-  return decl->llvm_type;
-}
-
-LLVMTypeRef to_llvm_type(LLVMContextRef ctx, Primitives prim, Type type) {
-  switch (type.kind) {
-  case tyUNKNOWN:
-    panicf("unreachable");
-  case tyVOID:
-    return prim._void;
-  case tyINT:
-    return prim._int;
-  case tyBOOL:
-    return prim._bool;
-  case tySTRING:
-    return prim.string;
-  case tyPTR:
-    return LLVMPointerType(to_llvm_type(ctx, prim, *type.pointee_type), 0);
-  case tyFUNCTION: {
-    auto function = type.function;
-    size_t num_params = function.params.length;
-    LLVMTypeRef params[MAX(num_params, 1)];
-    ITER_ARRAY(function.params, param,
-               { params[i] = to_llvm_type(ctx, prim, param); });
-    return LLVMFunctionType(to_llvm_type(ctx, prim, *function._return), params,
-                            num_params, false);
-  }
-  case tySTRUCT: {
-    assert(type._struct->kind == aSTRUCT_DECL);
-    auto decl = &type._struct->struct_decl;
-    if (decl->llvm_type != NULL) {
-      return decl->llvm_type;
-    }
-    declare_struct(ctx, type._struct);
-    break;
-  }
-  case tyUNION:
-    panicf("unimplemented");
-  case tyTYPE:
-    panicf("unreachable");
-  }
-  panicf("not a type. kind int: %d", type.kind);
-}
 
 #define GEN($node, $name)                                                      \
   generate_node(state, $node);                                                 \
@@ -114,9 +55,9 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, Primitives prim, Type type) {
         BUILD(ICmp, LLVMInt##$pred, left_value, right_value, "");              \
     break;
 
-#define TO_LLVM_TYPE($type) to_llvm_type(state->ctx, state->prim, $type)
+#define TO_LLVM_TYPE($type) to_llvm_type(state->llvm, state->prim, $type)
 
-LLVMValueRef declare_function(State *state, Node *decl_node) {
+LLVMValueRef declare_function(State *state, ASTNode *decl_node) {
   assert(decl_node->kind == aFUNC_DECL);
   if (decl_node->llvm_value != NULL) {
     return decl_node->llvm_value;
@@ -170,7 +111,8 @@ void generate_node(State *state, Node *node) {
   SWITCH(node, {
     CASE(name, {
       if (name->decl == NULL) {
-        panicf("unimplemented: builtins as variables");
+        panicf(
+            "unimplemented: builtins and external declarations as variables");
       }
       if (name->decl->llvm_value == NULL) {
         panicf("unimplemented: forward declarations");
@@ -255,7 +197,7 @@ void generate_node(State *state, Node *node) {
       LLVMValueRef fn = NULL;
       if (function->name.decl != NULL) {
         fn = declare_function(state, function->name.decl);
-      } else {
+      } else if (function->name.builtin != NOT_BUILTIN) {
         switch (function->name.builtin) {
         case bPRINT_BOOL:
           fn = state->builtin.print_bool;
@@ -269,6 +211,10 @@ void generate_node(State *state, Node *node) {
         default:
           panicf("Unknown builtin %d.", function->name.builtin);
         }
+      } else {
+        assert(function->name.extern_decl != NULL);
+        assert(function->name.extern_decl->llvm_value != NULL);
+        fn = function->name.extern_decl->llvm_value;
       }
       size_t num_args = func_call->args.length;
       LLVMValueRef args[MAX(num_args, 1)];
@@ -377,8 +323,7 @@ void generate_node(State *state, Node *node) {
       } else {
         assert(assign->target->kind == aNAME);
         auto target_name = &assign->target->name;
-        // either name->decl != NULL or the variable refers to a builtin,
-        // which is not assignable
+        // assignable targets are always declarations
         assert(target_name->decl != NULL);
         if (target_name->decl->llvm_value == NULL) {
           panicf("unimplemented: forward declaration of assignment target");
@@ -414,7 +359,7 @@ void generate_node(State *state, Node *node) {
     });
     CASE(field, { panicf("field should not be analyzed directly"); });
     CASE(struct_decl, {
-      auto struct_type = declare_struct(state->ctx, node);
+      auto struct_type = llvm_declare_struct(state->llvm, node);
       LLVMTypeRef element_types[MAX(struct_decl->fields.length, 1)];
       ITER_ARRAY(struct_decl->fields, field_node,
                  { element_types[i] = TO_LLVM_TYPE(field_node->type); });
@@ -463,34 +408,43 @@ void generate_node(State *state, Node *node) {
       }
       free(name);
     });
+    CASE(import, {});
     CASE(module, {
       ITER_ARRAY(module->decls, decl_node, { GEN(decl_node, decl_value); });
     });
   });
 }
 
-// TODO: user-exposed init function (or keep track of initialization with
-// boolean)
-void init_llvm(void) {
-  // LLVM uses 0 = success here for some reason
-  if (LLVMInitializeNativeTarget()) {
-    panicf("Failed to initialize LLVM native target.");
-  }
-  if (LLVMInitializeNativeAsmPrinter()) {
-    panicf("Failed to initialize LLVM native ASM printer.");
-  };
-  if (LLVMInitializeNativeAsmParser()) {
-    panicf("Failed to initialize LLVM native ASM parser.");
+#define ADD_BUILTIN_FUNCTION($name, $type)                                     \
+  LLVMAddFunction(main_mod, $name, to_llvm_type(llvm_state, prim, $type))
+
+void add_extern_decls(ExternMod *extern_mod, State *state) {
+  for (size_t i = 0; i < extern_mod->decls.length; i++) {
+    auto decl = &extern_mod->decls.data[i];
+    if (decl->type.kind == tyFUNCTION) {
+      char *name = strndup(decl->name.text, decl->name.length);
+      auto type = to_llvm_type(state->llvm, state->prim, decl->type);
+
+      char *type_string = LLVMPrintTypeToString(type);
+      eprintf("Generating function decl `%s`: %s\n", name, type_string);
+      LLVMDisposeMessage(type_string);
+
+      decl->llvm_value = LLVMAddFunction(state->mod, name, type);
+      free(name);
+    } else {
+      panicf("unimplemented: extern variable declaration\n");
+    }
   }
 }
 
-#define ADD_BUILTIN_FUNCTION($name, $type)                                     \
-  LLVMAddFunction(mod, $name, to_llvm_type(ctx, prim, $type))
-
-void generate_and_evaluate(Node *node) {
+void generate_and_evaluate(LLVMState *llvm_state, AST *ast) {
+  auto node = ast->head;
+  auto extern_mod = &ast->extern_mod;
   assert(node->kind == aMODULE);
-  auto ctx = LLVMContextCreate();
-  auto mod = LLVMModuleCreateWithNameInContext("placeholder_module_name", ctx);
+  auto ctx = llvm_state->ctx;
+  assert(ctx != NULL);
+  auto main_mod =
+      LLVMModuleCreateWithNameInContext("placeholder_module_name", ctx);
   auto builder = LLVMCreateBuilderInContext(ctx);
   // TODO: LLVMIntPtrTypeInContext (also change builtin.h: print_int and
   // CeamString)
@@ -502,7 +456,8 @@ void generate_and_evaluate(Node *node) {
 
   eprintf("Generating module LLVM.\n");
 
-  Primitives prim = {
+  // TODO: move LLVMPrimitives to LLVMState?
+  LLVMPrimitives prim = {
       ._void = LLVMVoidTypeInContext(ctx),
       ._int = _int,
       ._bool = LLVMInt1TypeInContext(ctx),
@@ -511,8 +466,9 @@ void generate_and_evaluate(Node *node) {
   };
   State state = {
       .ctx = ctx,
-      .mod = mod,
+      .mod = main_mod,
       .builder = builder,
+      .llvm = llvm_state,
       .builtin =
           {
               .print_bool = ADD_BUILTIN_FUNCTION("print_bool", PRINT_BOOL_TYPE),
@@ -523,26 +479,29 @@ void generate_and_evaluate(Node *node) {
           },
       .prim = prim};
 
+  add_extern_decls(extern_mod, &state);
   generate_node(&state, node);
 
   eprintf("Verifying module LLVM.\n");
 
-  char *mod_string = LLVMPrintModuleToString(mod);
+  char *mod_string = LLVMPrintModuleToString(main_mod);
   eprintf("Module START\n%s", mod_string);
   LLVMDisposeMessage(mod_string);
   eprintf("Module END\n");
 
-  LLVMVerifyModule(mod, LLVMAbortProcessAction, NULL);
+  LLVMVerifyModule(main_mod, LLVMAbortProcessAction, NULL);
   eprintf("Running module main function.\n");
-  auto main_fn = LLVMGetNamedFunction(mod, "main");
+  auto main_fn = LLVMGetNamedFunction(main_mod, "main");
   if (main_fn == NULL) {
     panicf("unimplemented: libraries without main()");
   }
-  init_llvm();
+  llvm_link_into(state.llvm, main_mod);
+  llvm_init();
+
   LLVMExecutionEngineRef engine = NULL;
   char *error = NULL;
   // Takes ownership of mod.
-  if (LLVMCreateExecutionEngineForModule(&engine, mod, &error)) {
+  if (LLVMCreateExecutionEngineForModule(&engine, main_mod, &error)) {
     panicf("Failed to create LLVM execution engine. Error: %s", error);
   }
   LLVMDisposeMessage(error);
@@ -554,6 +513,5 @@ void generate_and_evaluate(Node *node) {
 
   LLVMDisposeExecutionEngine(engine);
   LLVMDisposeBuilder(builder);
-  LLVMContextDispose(ctx);
   eprintf("Finished generation and execution.\n");
 }

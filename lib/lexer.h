@@ -60,6 +60,7 @@ typedef enum {
   tCONTINUE,
   tTRUE,
   tFALSE,
+  tIMPORT_LLVM,
   // metasymbol for the number of token kinds
   tKIND_COUNT,
 } TokenKind;

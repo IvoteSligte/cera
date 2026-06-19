@@ -44,7 +44,8 @@ bool compile(const char *source, AST *out_ast, CompileErrors *out_errors) {
     free_ast(out_ast);
     return false;
   }
-  if (!analyze(out_ast, &analyze_errors)) {
+  LLVMState llvm_state = llvm_create_state();
+  if (!analyze(&llvm_state, out_ast, &analyze_errors)) {
     for (size_t i = 0; i < analyze_errors.length; i++) {
       AnalyzeError error = analyze_errors.data[i];
       get_analyze_error_info(source, error, &message, &line, &column);
@@ -53,9 +54,11 @@ bool compile(const char *source, AST *out_ast, CompileErrors *out_errors) {
     free_analyze_errors(&analyze_errors);
     free_token_stream(&stream);
     free_ast(out_ast);
+    llvm_destroy_state(&llvm_state);
     return false;
   }
   free_token_stream(&stream);
+  llvm_destroy_state(&llvm_state);
   return true;
 }
 

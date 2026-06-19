@@ -1,6 +1,7 @@
 
 #include <ctype.h>
 #include <dirent.h> // TODO: cross-platform
+#include <llvm-c/Core.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -38,7 +39,7 @@ typedef struct {
   int expected_status;
 } TestFile;
 
-bool evaluate(const char *source) {
+bool test(const char *source) {
   TokenStream stream = {0};
   AST ast = {0};
   LexError lex_error = {0};
@@ -61,14 +62,17 @@ bool evaluate(const char *source) {
     return false;
   }
   ast_print_nodes(ast.head);
-  if (!analyze(&ast, &type_errors)) {
+  LLVMState llvm_state = llvm_create_state();
+  if (!analyze(&llvm_state, &ast, &type_errors)) {
     print_analyze_errors(source, type_errors);
     free_analyze_errors(&type_errors);
     free_token_stream(&stream);
     free_ast(&ast);
+    llvm_destroy_state(&llvm_state);
     return false;
   }
-  generate_and_evaluate(ast.head);
+  generate_and_evaluate(&llvm_state, &ast);
+  llvm_destroy_state(&llvm_state);
 
   free_token_stream(&stream);
   free_ast(&ast);
@@ -237,7 +241,7 @@ int main(int argc, const char *argv[]) {
 
   if (options.file != 0) {
     TestFile test_file = read_test_file(options.file);
-    int status = evaluate(test_file.source) ? 0 : 1;
+    int status = test(test_file.source) ? 0 : 1;
     free_test_file(&test_file);
     return status;
   }

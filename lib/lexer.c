@@ -140,6 +140,7 @@ const Matcher MATCHERS[] = {
     M(CONTINUE, "continue"),
     M(TRUE, "true"),
     M(FALSE, "false"),
+    M(IMPORT_LLVM, "import_llvm"),
 };
 #undef M
 

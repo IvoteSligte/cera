@@ -21,9 +21,8 @@ DEF_FUNCTION_TYPE(PRINT_STRING_TYPE,
                   {.params = {.data = &STRING_TYPE, .length = 1},
                    ._return = &VOID_TYPE});
 static Type TWO_STRINGS[2] = {PRIM_TYPE(STRING), PRIM_TYPE(STRING)};
-DEF_FUNCTION_TYPE(STRING_EQ_TYPE,
-                  {.params = {.data = TWO_STRINGS, .length = 2},
-                   ._return = &BOOL_TYPE});
+DEF_FUNCTION_TYPE(STRING_EQ_TYPE, {.params = {.data = TWO_STRINGS, .length = 2},
+                                   ._return = &BOOL_TYPE});
 
 // not using #$name because it maps bool -> "_Bool" instead of "bool" as
 // bool is a macro
@@ -93,8 +92,9 @@ bool add_symbol(RandomAllocator *allocator, SymbolTable *table, Name name,
   return true;
 }
 
-bool get_symbol(SymbolTable *table, Name name, Type *out_type,
-                ASTNode **out_node, BuiltinID *out_builtin) {
+bool get_symbol(ExternMod *extern_mod, SymbolTable *table, Name name,
+                Type *out_type, ASTNode **out_node, ExternDecl **out_extern,
+                BuiltinID *out_builtin) {
   for (size_t i = 0; i < table->length; i++) {
     if (name_eq(table->data[i].name, name)) {
       *out_type = table->data[i].node->type;
@@ -103,12 +103,21 @@ bool get_symbol(SymbolTable *table, Name name, Type *out_type,
     }
   }
   if (table->parent == NULL) {
+    for (size_t i = 0; i < extern_mod->decls.length; i++) {
+      auto decl = &extern_mod->decls.data[i];
+      if (name_eq(decl->name, name)) {
+        *out_type = decl->type;
+        *out_extern = decl;
+        return true;
+      }
+    }
     if (get_builtin(name, out_type, out_builtin)) {
       return true;
     }
     return false;
   }
-  return get_symbol(table->parent, name, out_type, out_node, out_builtin);
+  return get_symbol(extern_mod, table->parent, name, out_type, out_node,
+                    out_extern, out_builtin);
 }
 
 SymbolTable get_top_table(SymbolTable table) {

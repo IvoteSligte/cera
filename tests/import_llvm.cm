@@ -1,0 +1,8 @@
+// OUTPUT: "main"
+
+import_llvm "test_module.ll";
+
+func main() {
+    test_function();
+    print_string("main");
+}

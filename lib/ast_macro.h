@@ -28,6 +28,7 @@
 #define NODE_struct_inst aSTRUCT_INST
 #define NODE_member aMEMBER
 #define NODE_var_decl aVAR_DECL
+#define NODE_import aIMPORT
 #define NODE_module aMODULE
 
 #define auto __auto_type

@@ -3,7 +3,6 @@
 #include "lib/generator.h"
 #include "lib/lexer.h"
 #include "lib/parser.h"
-#include <llvm-c/Core.h>
 
 int main(int argc, char *argv[]) {
   const char *path = "test.cm";
@@ -44,14 +43,18 @@ int main(int argc, char *argv[]) {
   ast_print_nodes(ast.head);
 
   AnalyzeErrorArray type_errors = {0};
-  if (!analyze(&ast, &type_errors)) {
+  LLVMState llvm_state = llvm_create_state();
+  if (!analyze(&llvm_state, &ast, &type_errors)) {
     print_analyze_errors(source, type_errors);
     free_analyze_errors(&type_errors);
     free_ast(&ast);
     free(source);
+    llvm_destroy_state(&llvm_state);
     return 1;
   }
-  generate_and_evaluate(ast.head);
+  generate_and_evaluate(&llvm_state, &ast);
+  llvm_destroy_state(&llvm_state);
+
   free_ast(&ast);
   free(source);
   return 0;
