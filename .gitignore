@@ -4,4 +4,8 @@ debug.o
 test
 test.o
 main.o
-std.bc
+libceam.a
+
+# LSP build files
+target/
+ceam-lsp

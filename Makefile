@@ -1,4 +1,5 @@
 CC = gcc
+AR = ar
 
 CFLAGS = -std=gnu11 -Wall -Wextra -g -O0 -fsanitize=address,undefined
 LDFLAGS = -rdynamic -fsanitize=address,undefined
@@ -18,14 +19,25 @@ debug: $(OBJ) main.o
 test: $(OBJ) test.o
 	$(CC) $(LDFLAGS) -o $@ $(OBJ) test.o $(LDLIBS)
 
+libceam.a: $(OBJ)
+	$(AR) rcs libceam.a $(OBJ)
+
+lib: libceam.a
+
+ceam-lsp: libceam.a
+	cd lsp && cargo build && cp target/debug/ceam-lsp ..
+
+lsp: ceam-lsp
+
 format:
 	clang-format -i $(SRC) main.c test.c
 
 clean:
 	rm -rf build/
 	rm -f debug test
+	cd lsp && rm -f ceam-lsp && cargo clean
 
-.PHONY: clean
+.PHONY: clean format lib lsp
 
 -include $(DEP)
 

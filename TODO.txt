@@ -21,6 +21,7 @@ codebase:
     pointer-sized integer type
     deduplicate string literals
     public/private globals
+    cmake
     statically link LLVM
     RAII?
 

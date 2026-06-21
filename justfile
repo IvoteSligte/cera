@@ -11,15 +11,6 @@ check:
 format:
     make format
 
-build:
-    make debug
-
-build-test:
-    make test
-
-build-lib:
-    make lib.a
-
 clean:
     make clean
 
