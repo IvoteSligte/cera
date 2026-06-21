@@ -566,19 +566,10 @@ PARSER(stmt, {
   FAIL;
 });
 
-PARSER(import, {
-  EXPECT(tIMPORT_LLVM);
-  auto kind = token.kind;
-  MUST_PARSE(string, path);
-  EXPECT(tSEMI);
-  RETURN(import, {.kind = kind, .path = path});
-});
-
 PARSER(decl, {
   TRY_PARSE(func_decl);
   TRY_PARSE(struct_decl);
   TRY_PARSE(var_decl);
-  TRY_PARSE(import);
   FAIL;
 });
 

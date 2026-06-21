@@ -3,7 +3,6 @@
 #include "analyzer_shared.h"
 #include "ast.h"
 #include "ast_macro.h"
-#include "llvm.h"
 #include "offset.h"
 #include "util.h"
 
@@ -18,7 +17,6 @@ typedef struct {
   AnalyzeErrorArray *error_data;
   bool anything_changed;
   bool error_on_block;
-  LLVMState *llvm;
   // Composite of imported modules.
   ExternMod *extern_mod;
 } State;
@@ -580,30 +578,6 @@ ANALYZER(var_decl, {
   OK;
 });
 
-ANALYZER(import, {
-  assert(import->path->kind == aSTRING);
-  ANALYZE(import->path, path);
-  UNUSED(path_type);
-  // TODO: path relative to file being read instead of to $PWD
-  String path = import->path->string.value;
-  switch (import->kind) {
-  case tIMPORT_LLVM: {
-    char *error = NULL;
-    EXPECT(llvm_load_module(state->allocator, state->llvm, state->extern_mod,
-                            path, &error),
-           import->path, error);
-
-    // LLVM seems to allocate the empty string when there is no error in
-    // LLVMVerifyModule
-    free(error);
-    break;
-  }
-  default:
-    panicf("invalid import kind: %s", token_name(import->kind));
-  }
-  OK;
-});
-
 ANALYZER(module, {
   Table *table = &module->table;
   ANALYZE_ARRAY(module->decls);
@@ -639,7 +613,6 @@ ANALYZER_SIGNATURE(node) {
     ACASE(struct_inst);
     ACASE(member);
     ACASE(var_decl);
-    ACASE(import);
     ACASE(module);
   });
   panicf("analyze not implemented for node: %s", ast_node_name(node->kind));
@@ -679,11 +652,10 @@ void free_analyze_errors(AnalyzeErrorArray *type_errors) {
   type_errors->data = NULL;
 }
 
-bool analyze(LLVMState *llvm_state, AST *ast, AnalyzeErrorArray *error_data) {
+bool analyze(AST *ast, AnalyzeErrorArray *error_data) {
   Table table = {0};
   State state = {.allocator = &ast->random_allocator,
                  .error_data = error_data,
-                 .llvm = llvm_state,
                  .extern_mod = &ast->extern_mod};
   Result result = rBLOCKED;
   for (size_t i = 0;; i++) {

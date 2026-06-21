@@ -11,7 +11,6 @@
 
 #include "ast.h"
 #include "ast_macro.h"
-#include "builtin.h"
 #include "generator.h"
 #include "llvm.h"
 
@@ -37,7 +36,6 @@ typedef struct State {
   LoopBlocks loop;
   LLVMBuiltins builtin;
   LLVMPrimitives prim;
-  LLVMState *llvm;
 } State;
 
 #define GEN($node, $name)                                                      \
@@ -58,7 +56,7 @@ typedef struct State {
         BUILD(ICmp, LLVMInt##$pred, left_value, right_value, "");              \
     break;
 
-#define TO_LLVM_TYPE($type) to_llvm_type(state->llvm, state->prim, $type)
+#define TO_LLVM_TYPE($type) to_llvm_type(state->ctx, state->prim, $type)
 
 LLVMValueRef declare_function(State *state, ASTNode *decl_node) {
   assert(decl_node->kind == aFUNC_DECL);
@@ -362,7 +360,7 @@ void generate_node(State *state, Node *node) {
     });
     CASE(field, { panicf("field should not be analyzed directly"); });
     CASE(struct_decl, {
-      auto struct_type = llvm_declare_struct(state->llvm, node);
+      auto struct_type = llvm_declare_struct(state->ctx, node);
       LLVMTypeRef element_types[MAX(struct_decl->fields.length, 1)];
       ITER_ARRAY(struct_decl->fields, field_node,
                  { element_types[i] = TO_LLVM_TYPE(field_node->type); });
@@ -411,7 +409,6 @@ void generate_node(State *state, Node *node) {
       }
       free(name);
     });
-    CASE(import, {});
     CASE(module, {
       ITER_ARRAY(module->decls, decl_node, { GEN(decl_node, decl_value); });
     });
@@ -419,11 +416,9 @@ void generate_node(State *state, Node *node) {
 }
 
 #define ADD_BUILTIN_FUNCTION($name, $type)                                     \
-  builtin.$name =                                                              \
-      LLVMAddFunction(mod, #$name, to_llvm_type(llvm_state, prim, $type));     \
-  LLVMAddSymbol(#$name, $name)
+  builtin.$name = LLVMAddFunction(mod, #$name, to_llvm_type(ctx, prim, $type));
 
-LLVMBuiltins add_builtins(LLVMState *llvm_state, LLVMModuleRef mod,
+LLVMBuiltins add_builtins(LLVMContextRef ctx, LLVMModuleRef mod,
                           LLVMPrimitives prim) {
   LLVMBuiltins builtin = {0};
   ADD_BUILTIN_FUNCTION(print_bool, PRINT_BOOL_TYPE);
@@ -438,29 +433,26 @@ void add_extern_decls(ExternMod *extern_mod, State *state) {
   for (size_t i = 0; i < extern_mod->decls.length; i++) {
     auto decl = &extern_mod->decls.data[i];
     if (decl->type.kind == tyFUNCTION) {
-      char *mangled_name =
-          strndup(decl->mangled_name.text, decl->mangled_name.length);
-      auto type = to_llvm_type(state->llvm, state->prim, decl->type);
+      char *name = strndup(decl->name.text, decl->name.length);
+      auto type = TO_LLVM_TYPE(decl->type);
 
       char *type_string = LLVMPrintTypeToString(type);
-      eprintf("Generating function decl `%.*s`: %s\n", FMT(decl->name),
-              type_string);
+      eprintf("Generating function decl `%s`: %s\n", name, type_string);
       LLVMDisposeMessage(type_string);
 
-      decl->llvm_value = LLVMAddFunction(state->mod, mangled_name, type);
-      free(mangled_name);
+      decl->llvm_value = LLVMAddFunction(state->mod, name, type);
+      free(name);
     } else {
       panicf("unimplemented: extern variable declaration\n");
     }
   }
 }
 
-void generate_and_evaluate(LLVMState *llvm_state, AST *ast) {
+void generate_and_evaluate(AST *ast) {
+  auto ctx = LLVMContextCreate();
   auto node = ast->head;
   auto extern_mod = &ast->extern_mod;
   assert(node->kind == aMODULE);
-  auto ctx = llvm_state->ctx;
-  assert(ctx != NULL);
   auto main_mod =
       LLVMModuleCreateWithNameInContext("placeholder_module_name", ctx);
   auto builder = LLVMCreateBuilderInContext(ctx);
@@ -485,8 +477,7 @@ void generate_and_evaluate(LLVMState *llvm_state, AST *ast) {
   State state = {.ctx = ctx,
                  .mod = main_mod,
                  .builder = builder,
-                 .llvm = llvm_state,
-                 .builtin = add_builtins(llvm_state, main_mod, prim),
+                 .builtin = add_builtins(ctx, main_mod, prim),
                  .prim = prim};
 
   add_extern_decls(extern_mod, &state);
@@ -504,8 +495,6 @@ void generate_and_evaluate(LLVMState *llvm_state, AST *ast) {
   /* eprintf("LLVM Module DUMP START\n"); */
   /* LLVMDumpModule(main_mod); */
   /* eprintf("LLVM Module DUMP END\n"); */
-
-  llvm_link_into(state.llvm, main_mod);
 
   eprintf("Creating LLVM execution engine for module.\n");
   llvm_init();
@@ -528,5 +517,6 @@ void generate_and_evaluate(LLVMState *llvm_state, AST *ast) {
 
   LLVMDisposeExecutionEngine(engine);
   LLVMDisposeBuilder(builder);
+  LLVMContextDispose(ctx);
   eprintf("Finished generation and execution.\n");
 }

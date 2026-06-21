@@ -62,17 +62,14 @@ bool test(const char *source) {
     return false;
   }
   ast_print_nodes(ast.head);
-  LLVMState llvm_state = llvm_create_state();
-  if (!analyze(&llvm_state, &ast, &type_errors)) {
+  if (!analyze(&ast, &type_errors)) {
     print_analyze_errors(source, type_errors);
     free_analyze_errors(&type_errors);
     free_token_stream(&stream);
     free_ast(&ast);
-    llvm_destroy_state(&llvm_state);
     return false;
   }
-  generate_and_evaluate(&llvm_state, &ast);
-  llvm_destroy_state(&llvm_state);
+  generate_and_evaluate(&ast);
 
   free_token_stream(&stream);
   free_ast(&ast);

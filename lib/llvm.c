@@ -6,7 +6,6 @@
 #include <llvm-c/Target.h>
 
 #include "ast_macro.h"
-#include "demangle.h"
 #include "llvm.h"
 
 #define FAIL($prefix)                                                          \
@@ -30,66 +29,7 @@ void llvm_init(void) {
   }
 }
 
-LLVMState llvm_create_state(void) {
-  return (LLVMState){.ctx = LLVMContextCreate()};
-}
-
-void llvm_destroy_state(LLVMState *state) {
-  LLVMContextDispose(state->ctx);
-  *state = (LLVMState){0};
-}
-
-bool llvm_load_module(RandomAllocator *allocator, LLVMState *state,
-                      ExternMod *extern_mod, String path, char **out_error) {
-  eprintf("Importing LLVM module `%.*s`.\n", FMT(path));
-
-  LLVMModuleRef mod = NULL;
-  char *path_string = strndup(path.text, path.length);
-  char *error = NULL;
-
-  LLVMMemoryBufferRef membuf = NULL;
-  if (LLVMCreateMemoryBufferWithContentsOfFile(path_string, &membuf,
-                                               out_error)) {
-    free(path_string);
-    FAIL("Failed to read LLVM file");
-  }
-  free(path_string);
-
-  if (LLVMParseIRInContext(state->ctx, membuf, &mod, out_error)) {
-    FAIL("Failed to parse LLVM IR");
-  }
-
-  if (LLVMVerifyModule(mod, LLVMReturnStatusAction, out_error)) {
-    FAIL("Failed to verify LLVM module");
-  } else {
-    eprintf("Verified LLVM module.\n");
-  }
-  llvm_fill_extern_mod(allocator, extern_mod, mod);
-
-  if (state->extern_mod == NULL) {
-    state->extern_mod = mod;
-  } else {
-    // false = success
-    assert(!LLVMLinkModules2(state->extern_mod, mod));
-  }
-
-  size_t ident_length = 0;
-  const char *ident_string = LLVMGetModuleIdentifier(mod, &ident_length);
-  eprintf("Successfully imported LLVM module: `%.*s`\n", (int)ident_length,
-          ident_string);
-  return true;
-}
-
-void llvm_link_into(LLVMState *state, LLVMModuleRef dst) {
-  if (state->extern_mod != NULL) {
-    eprintf("Linking LLVM imports.\n");
-    assert(!LLVMLinkModules2(dst, state->extern_mod)); // false = success
-    state->extern_mod = NULL; // module is consumed, clear dangling pointer
-    eprintf("Finished linking LLVM imports.\n");
-  }
-}
-
-LLVMTypeRef llvm_declare_struct(LLVMState *state, ASTNode *decl_node) {
+LLVMTypeRef llvm_declare_struct(LLVMContextRef ctx, ASTNode *decl_node) {
   assert(decl_node->kind == aSTRUCT_DECL);
   auto decl = &decl_node->struct_decl;
   if (decl->llvm_type != NULL) {
@@ -97,13 +37,13 @@ LLVMTypeRef llvm_declare_struct(LLVMState *state, ASTNode *decl_node) {
   }
   char *name =
       strndup(decl->name->name.name.text, decl->name->name.name.length);
-  decl->llvm_type = LLVMStructCreateNamed(state->ctx, name);
+  decl->llvm_type = LLVMStructCreateNamed(ctx, name);
 
   free(name);
   return decl->llvm_type;
 }
 
-LLVMTypeRef to_llvm_type(LLVMState *state, LLVMPrimitives prim, Type type) {
+LLVMTypeRef to_llvm_type(LLVMContextRef ctx, LLVMPrimitives prim, Type type) {
   switch (type.kind) {
   case tyUNKNOWN:
     panicf("called to_llvm_type on UNKNOWN type");
@@ -118,15 +58,15 @@ LLVMTypeRef to_llvm_type(LLVMState *state, LLVMPrimitives prim, Type type) {
   case tyOPAQUE_PTR:
     return prim.ptr;
   case tyPTR:
-    return LLVMPointerType(to_llvm_type(state, prim, *type.pointee_type), 0);
+    return LLVMPointerType(to_llvm_type(ctx, prim, *type.pointee_type), 0);
   case tyFUNCTION: {
     auto function = type.function;
     size_t num_params = function.params.length;
     LLVMTypeRef params[MAX(num_params, 1)];
     ITER_ARRAY(function.params, param,
-               { params[i] = to_llvm_type(state, prim, param); });
-    return LLVMFunctionType(to_llvm_type(state, prim, *function._return),
-                            params, num_params, false);
+               { params[i] = to_llvm_type(ctx, prim, param); });
+    return LLVMFunctionType(to_llvm_type(ctx, prim, *function._return), params,
+                            num_params, false);
   }
   case tySTRUCT: {
     assert(type._struct->kind == aSTRUCT_DECL);
@@ -134,7 +74,7 @@ LLVMTypeRef to_llvm_type(LLVMState *state, LLVMPrimitives prim, Type type) {
     if (decl->llvm_type != NULL) {
       return decl->llvm_type;
     }
-    llvm_declare_struct(state, type._struct);
+    llvm_declare_struct(ctx, type._struct);
     break;
   }
   case tyUNION:
@@ -213,48 +153,4 @@ Type from_llvm_type(RandomAllocator *allocator, LLVMTypeRef llvm_type) {
     eprintf("unsupported LLVM type kind %d found\n", kind);
     return UNKNOWN_TYPE;
   }
-}
-
-typedef RandomAllocator Allocator;
-
-static void add_decl(Allocator *allocator, ExternMod *mod, ExternDecl decl) {
-  auto array = &mod->decls;
-  array->data = ra_recalloc(allocator, array->data,
-                            sizeof(ExternDecl) * (array->length + 1));
-  array->data[array->length] = decl;
-  array->length += 1;
-}
-
-void llvm_fill_extern_mod(Allocator *allocator, ExternMod *extern_mod,
-                          LLVMModuleRef llvm_mod) {
-  for (auto fn = LLVMGetFirstFunction(llvm_mod); fn != NULL;
-       fn = LLVMGetNextFunction(fn)) {
-    Name mangled_name = {0};
-    mangled_name.text = LLVMGetValueName2(fn, &mangled_name.length);
-    Name name = demangle(allocator, mangled_name);
-    auto type = from_llvm_type(allocator, LLVMGlobalGetValueType(fn));
-    if (type.kind == tyUNKNOWN) {
-      eprintf("unknown type in LLVM declaration %.*s. skipping.\n", FMT(name));
-      continue;
-    }
-    add_decl(
-        allocator, extern_mod,
-        (ExternDecl){.name = name, .mangled_name = mangled_name, .type = type});
-  }
-  // TODO:
-  /* for (auto var = LLVMGetFirstGlobal(llvm_mod); var != NULL; */
-  /*      var = LLVMGetNextGlobal(var)) { */
-  /*   Name name = {0}; */
-  /*   name.text = LLVMGetValueName2(var, &name.length); */
-  /*   auto type = from_llvm_type(allocator, LLVMTypeOf(var)); */
-  /*   if (type.kind == tyUNKNOWN) { */
-  /*     eprintf("unknown type in LLVM declaration %.*s. skipping.\n",
-   * FMT(name)); */
-  /*     continue; */
-  /*   } */
-  /*   add_decl(allocator, extern_mod, (ExternDecl){.name = name, .type =
-   * type}); */
-  /* } */
-
-  // TODO: Aliases and IFuncs?
 }

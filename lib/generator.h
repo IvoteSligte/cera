@@ -5,5 +5,5 @@
 #include "ast.h"
 #include "llvm.h"
 
-void generate_and_evaluate(LLVMState *llvm_state, AST *ast)
+void generate_and_evaluate(AST *ast)
     __attribute__((nonnull));

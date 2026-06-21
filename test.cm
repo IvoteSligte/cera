@@ -1,8 +1,0 @@
-
-import_llvm "builtin.ll";
-// import_llvm "rust-interop.ll";
-
-func main() {
-    // _RNvCs8pRPNPuweIu_12rust_interop3add(10, 20);
-    print_int(100);
-}

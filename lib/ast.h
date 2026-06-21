@@ -38,7 +38,6 @@ typedef enum {
   aSTRUCT_INST, // struct instantiation
   aMEMBER,      // struct member access
   aVAR_DECL,    // variable declaration
-  aIMPORT,
   aMODULE,
 } ASTNodeKind;
 
@@ -131,7 +130,6 @@ typedef struct SymbolTable {
 
 typedef struct {
   Name name;
-  Name mangled_name;
   Type type;
   LLVMValueRef llvm_value;
 } ExternDecl;
@@ -278,10 +276,6 @@ typedef struct ASTNode {
       // True if the symbol has been added to the declaration table.
       bool symbol_added;
     } var_decl;
-    struct {
-      TokenKind kind;
-      ASTNode *path; // string literal
-    } import;
     struct {
       ASTNodeArray decls;
       SymbolTable table;

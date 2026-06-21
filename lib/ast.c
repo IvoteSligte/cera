@@ -169,7 +169,6 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
       VISIT(var_decl->name);
       VISIT(var_decl->expr);
     })
-    PCASE(import, { VISIT(import->path); });
     PCASE(module, { VISIT_ARRAY(module->decls); });
   });
   panicf("visit not implemented for node: %s", ast_node_name(node->kind));
@@ -209,7 +208,6 @@ static void print_node(ASTNode *node, size_t depth, void *data) {
     PCASE(struct_inst, eprintf("struct_inst:\n"));
     PCASE(member, eprintf("member:\n"));
     PCASE(var_decl, eprintf("var_decl:\n"));
-    PCASE(import, { eprintf("import:\n"); });
     PCASE(module, eprintf("module:\n"));
   });
   panicf("print not implemented for node: %s", ast_node_name(node->kind));
@@ -249,7 +247,6 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(STRUCT_INST);
     N(MEMBER);
     N(VAR_DECL);
-    N(IMPORT);
     N(MODULE);
   }
   panicf("Unknown node kind: %d", kind)

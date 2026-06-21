@@ -13,7 +13,7 @@ typedef struct {
   size_t length;
 } AnalyzeErrorArray;
 
-bool analyze(LLVMState* llvm_state, AST *ast, AnalyzeErrorArray *error_data);
+bool analyze(AST *ast, AnalyzeErrorArray *error_data);
 
 void print_analyze_errors(const char *source, AnalyzeErrorArray errors);
 void get_analyze_error_info(const char *source, AnalyzeError error,
