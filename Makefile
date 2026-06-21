@@ -1,23 +1,32 @@
 CC = gcc
 AR = ar
 
-CFLAGS = -std=gnu11 -Wall -Wextra -g -O0 -fsanitize=address,undefined
-LDFLAGS = -rdynamic -fsanitize=address,undefined
+CFLAGS = -std=gnu11 -Wall -Wextra -g -O0 -fPIC
+LDFLAGS = -rdynamic
+DEBUG_FLAGS = -fsanitize=address,undefined
 LDLIBS := $(shell llvm-config --ldflags --system-libs --libs core native executionengine)
 
 SRC = $(wildcard lib/*.c)
+
 OBJ = $(SRC:%.c=build/%.o)
+DEBUG_OBJ = $(SRC:%.c=build/debug/%.o)
+
 DEP = $(OBJ:.o=.d) # header dependency files
+DEBUG_DEP = $(DEBUG_OBJ:.o=.d) # header dependency files
 
 build/%.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
-debug: $(OBJ) main.o
-	$(CC) $(LDFLAGS) -o $@ $(OBJ) main.o $(LDLIBS)
+build/debug/%.o: %.c
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(DEBUG_FLAGS) -MMD -MP -c $< -o $@
 
-test: $(OBJ) test.o
-	$(CC) $(LDFLAGS) -o $@ $(OBJ) test.o $(LDLIBS)
+debug: $(DEBUG_OBJ) main.o
+	$(CC) $(LDFLAGS) $(DEBUG_FLAGS) -o $@ $(DEBUG_OBJ) main.o $(LDLIBS)
+
+test: $(DEBUG_OBJ) test.o
+	$(CC) $(LDFLAGS) $(DEBUG_FLAGS) -o $@ $(DEBUG_OBJ) test.o $(LDLIBS)
 
 libceam.a: $(OBJ)
 	$(AR) rcs libceam.a $(OBJ)
@@ -37,7 +46,7 @@ clean:
 	rm -f debug test
 	cd lsp && rm -f ceam-lsp && cargo clean
 
-.PHONY: clean format lib lsp
+.PHONY: clean format lib lsp ceam-lsp
 
 -include $(DEP)
 

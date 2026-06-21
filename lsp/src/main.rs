@@ -1,16 +1,17 @@
 use std::error::Error;
-
-use rustc_hash::FxHashMap; // fast hash map
+use std::ffi::{CStr, CString};
+use std::str::FromStr;
+use std::time::Instant;
 
 use anyhow::Result;
 use lsp_server::{Connection, Message, Request as ServerRequest, RequestId, Response};
-use lsp_types::notification::Notification as _; // for METHOD consts
+use lsp_types::DidSaveTextDocumentParams;
+use lsp_types::notification::{DidSaveTextDocument, Notification as _}; // for METHOD consts
 use lsp_types::request::Request as _;
 use lsp_types::{
     CompletionItem,
     CompletionItemKind,
     // capability helpers
-    CompletionOptions,
     CompletionResponse,
     Diagnostic,
     DiagnosticSeverity,
@@ -21,19 +22,17 @@ use lsp_types::{
     // core
     InitializeParams,
     MarkedString,
-    OneOf,
     Position,
     PublishDiagnosticsParams,
     Range,
-    ServerCapabilities,
-    TextDocumentSyncCapability,
-    TextDocumentSyncKind,
     Uri,
     // notifications
     notification::{DidChangeTextDocument, DidOpenTextDocument, PublishDiagnostics},
     // requests
     request::{Completion, GotoDefinition, HoverRequest},
 }; // for METHOD consts
+
+mod ceam;
 
 // =====================================================================
 // main
@@ -47,17 +46,12 @@ fn main() -> std::result::Result<(), Box<dyn Error + Sync + Send>> {
     let (connection, io_thread) = Connection::stdio();
 
     // advertised capabilities
-    let caps = ServerCapabilities {
-        text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
-        completion_provider: Some(CompletionOptions::default()),
-        definition_provider: Some(OneOf::Left(true)),
-        ..Default::default()
-    };
     let init_value = serde_json::json!({
-        "capabilities": caps,
-        "offsetEncoding": ["utf-8"],
+        "textDocumentSync": {
+            "change": 1,
+            "openClose": true
+        }
     });
-
     let init_params = connection.initialize(init_value)?;
     main_loop(connection, init_params)?;
     io_thread.join()?;
@@ -74,9 +68,9 @@ fn main_loop(
     params: serde_json::Value,
 ) -> std::result::Result<(), Box<dyn Error + Sync + Send>> {
     let _init: InitializeParams = serde_json::from_value(params)?;
-    let mut docs: FxHashMap<Uri, String> = FxHashMap::default();
 
     for msg in &connection.receiver {
+        eprintln!("MSG: {:?}", msg);
         match msg {
             Message::Request(req) => {
                 if connection.handle_shutdown(&req)? {
@@ -87,7 +81,7 @@ fn main_loop(
                 }
             }
             Message::Notification(note) => {
-                if let Err(err) = handle_notification(&connection, &note, &mut docs) {
+                if let Err(err) = handle_notification(&connection, &note) {
                     log::error!("[lsp] notification {} failed: {err}", note.method);
                 }
             }
@@ -101,24 +95,25 @@ fn main_loop(
 // notifications
 // =====================================================================
 
-fn handle_notification(
-    conn: &Connection,
-    note: &lsp_server::Notification,
-    docs: &mut FxHashMap<Uri, String>,
-) -> Result<()> {
+fn handle_notification(conn: &Connection, note: &lsp_server::Notification) -> Result<()> {
     match note.method.as_str() {
         DidOpenTextDocument::METHOD => {
             let p: DidOpenTextDocumentParams = serde_json::from_value(note.params.clone())?;
             let uri = p.text_document.uri;
-            docs.insert(uri.clone(), p.text_document.text);
-            publish_dummy_diag(conn, &uri)?;
+            publish_diagnostics(conn, uri, &p.text_document.text)?;
         }
         DidChangeTextDocument::METHOD => {
             let p: DidChangeTextDocumentParams = serde_json::from_value(note.params.clone())?;
             if let Some(change) = p.content_changes.into_iter().next() {
                 let uri = p.text_document.uri;
-                docs.insert(uri.clone(), change.text);
-                publish_dummy_diag(conn, &uri)?;
+                publish_diagnostics(conn, uri, &change.text)?;
+            }
+        }
+        DidSaveTextDocument::METHOD => {
+            let p: DidSaveTextDocumentParams = serde_json::from_value(note.params.clone())?;
+            if let Some(text) = p.text {
+                let uri = p.text_document.uri;
+                publish_diagnostics(conn, uri, &text)?;
             }
         }
         _ => {}
@@ -170,21 +165,37 @@ fn handle_request(conn: &Connection, req: &ServerRequest) -> Result<()> {
 // =====================================================================
 // diagnostics
 // =====================================================================
-fn publish_dummy_diag(conn: &Connection, uri: &Uri) -> Result<()> {
-    let diag = Diagnostic {
-        range: Range::new(Position::new(0, 0), Position::new(0, 1)),
-        severity: Some(DiagnosticSeverity::INFORMATION),
-        code: None,
-        code_description: None,
-        source: Some("ceam_lsp".into()),
-        message: "dummy diagnostic".into(),
-        related_information: None,
-        tags: None,
-        data: None,
-    };
+fn publish_diagnostics(conn: &Connection, uri: Uri, text: &str) -> Result<()> {
+    let mut diagnostics = Vec::new();
+    unsafe {
+        let start = Instant::now();
+        let raw_errors = ceam::diagnose(CString::from_str(text)?.as_ptr());
+        let end = Instant::now();
+        eprintln!("Time to diagnose: {:?}", end - start);
+
+        if raw_errors.data.is_null() {
+            return Ok(());
+        }
+        for error in std::slice::from_raw_parts(raw_errors.data, raw_errors.length) {
+            let message = CStr::from_ptr(error.message).to_str()?.to_owned();
+            let line = error.line as u32;
+            let column = error.column as u32;
+            diagnostics.push(Diagnostic {
+                range: Range::new(Position::new(line, column), Position::new(line, column + 1)),
+                severity: Some(DiagnosticSeverity::ERROR),
+                code: None,
+                code_description: None,
+                source: Some("ceam_lsp".into()),
+                message: message,
+                related_information: None,
+                tags: None,
+                data: None,
+            });
+        }
+    }
     let params = PublishDiagnosticsParams {
-        uri: uri.clone(),
-        diagnostics: vec![diag],
+        uri,
+        diagnostics,
         version: None,
     };
     conn.sender

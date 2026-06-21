@@ -32,3 +32,6 @@ tooling:
     LSP
     standard library
     formatter
+
+bugs:
+    ceam-lsp: lib/offset.c:7: get_offset_info: Assertion `offset < strlen(source)' failed.

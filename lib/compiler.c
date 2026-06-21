@@ -3,18 +3,20 @@
 #include "lexer.h"
 #include "parser.h"
 
-CompileError new_error(char *message, size_t line, size_t column) {
-  return (CompileError){.message = message, .line = line, .column = column};
+typedef CompileError Error;
+typedef CompileErrors Errors;
+
+Error new_error(char *message, size_t line, size_t column) {
+  return (Error){.message = message, .line = line, .column = column};
 }
 
-void push_error(CompileErrors *errors, CompileError error) {
-  errors->data =
-      realloc(errors->data, sizeof(CompileError) * (errors->length + 1));
+void push_error(Errors *errors, Error error) {
+  errors->data = realloc(errors->data, sizeof(Error) * (errors->length + 1));
   errors->data[errors->length] = error;
   errors->length += 1;
 }
 
-bool compile(const char *source, AST *out_ast, CompileErrors *out_errors) {
+bool compile(const char *source, AST *out_ast, Errors *out_errors) {
   *out_ast = (AST){0};
   TokenStream stream = {0};
   LexError lex_error = {0};
@@ -59,14 +61,22 @@ bool compile(const char *source, AST *out_ast, CompileErrors *out_errors) {
   return true;
 }
 
-void free_compile_error(CompileError *error) {
-  free(error->message);
-  *error = (CompileError){0};
+Errors diagnose(const char *source) {
+  Errors errors = {0};
+  AST ast = {0};
+  compile(source, &ast, &errors);
+  free_ast(&ast);
+  return errors;
 }
 
-void free_compile_errors(CompileErrors *errors) {
+void free_compile_error(Error *error) {
+  free(error->message);
+  *error = (Error){0};
+}
+
+void free_compile_errors(Errors *errors) {
   for (size_t i = 0; i < errors->length; i++)
     free_compile_error(&errors->data[i]);
   free(errors->data);
-  *errors = (CompileErrors){0};
+  *errors = (Errors){0};
 }

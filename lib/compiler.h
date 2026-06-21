@@ -17,5 +17,7 @@ typedef struct {
 
 bool compile(const char *source, AST *out_ast, CompileErrors *out_errors);
 
+CompileErrors diagnose(const char* source);
+
 void free_compile_error(CompileError *error);
 void free_compile_errors(CompileErrors* errors);
