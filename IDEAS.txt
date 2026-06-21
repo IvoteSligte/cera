@@ -80,3 +80,30 @@ import LLVM IR:
     // composition
     5. mangle function calls and types when using them through Ceam
     6. link LLVM modules to produce a composite module
+
+loops as expressions:
+    if-statements as expressions are somewhat common nowadays
+    `result := if condition { "positive" } else { "negative" };`
+
+    but having loops produce output similarly to the functional `map` operator can be useful as well
+    ```
+    elements := .[10, 20, 30];
+    squared := for element in elements {
+        element * element
+    };
+    ```
+    preserving the container type by default, but making it possible to change the type using an explicit annotation
+    maybe using a similar mechanism to Rust's IntoIterator/FromIterator
+    ```
+    pairs = .[.{"key", value}]
+    map: HashMap := for pair in pairs { do_stuff(pair) }
+    ```
+    it is particularly useful to be able to skip elements that are not desired and end the loop at will
+    ```
+    evens := for n in .[0, 1, 2, 3] {
+        if n % 2 != 0 {
+           continue;
+        }
+        n
+    }
+    ```

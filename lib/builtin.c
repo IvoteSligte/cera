@@ -1,14 +1,9 @@
 // file containing functions accessible to a Ceam program
 
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-typedef struct {
-  char *text;
-  int64_t length;
-} CeamString;
+#include "builtin.h"
 
 void print_bool(bool b) { printf("%s", b ? "true" : "false"); }
 

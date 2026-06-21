@@ -6,6 +6,7 @@
 #include <llvm-c/Target.h>
 
 #include "ast_macro.h"
+#include "demangle.h"
 #include "llvm.h"
 
 #define FAIL($prefix)                                                          \
@@ -40,6 +41,8 @@ void llvm_destroy_state(LLVMState *state) {
 
 bool llvm_load_module(RandomAllocator *allocator, LLVMState *state,
                       ExternMod *extern_mod, String path, char **out_error) {
+  eprintf("Importing LLVM module `%.*s`.\n", FMT(path));
+
   LLVMModuleRef mod = NULL;
   char *path_string = strndup(path.text, path.length);
   char *error = NULL;
@@ -79,8 +82,10 @@ bool llvm_load_module(RandomAllocator *allocator, LLVMState *state,
 
 void llvm_link_into(LLVMState *state, LLVMModuleRef dst) {
   if (state->extern_mod != NULL) {
+    eprintf("Linking LLVM imports.\n");
     assert(!LLVMLinkModules2(dst, state->extern_mod)); // false = success
     state->extern_mod = NULL; // module is consumed, clear dangling pointer
+    eprintf("Finished linking LLVM imports.\n");
   }
 }
 
@@ -111,6 +116,7 @@ LLVMTypeRef to_llvm_type(LLVMState *state, LLVMPrimitives prim, Type type) {
   case tySTRING:
     return prim.string;
   case tyOPAQUE_PTR:
+    return prim.ptr;
   case tyPTR:
     return LLVMPointerType(to_llvm_type(state, prim, *type.pointee_type), 0);
   case tyFUNCTION: {
@@ -147,17 +153,18 @@ LLVMTypeRef to_llvm_type(LLVMState *state, LLVMPrimitives prim, Type type) {
 
 #define FROM_LLVM_TYPE($type) from_llvm_type(allocator, $type)
 
+static Type UNKNOWN_TYPE = {.kind = tyUNKNOWN};
+
 Type from_llvm_type(RandomAllocator *allocator, LLVMTypeRef llvm_type) {
   auto kind = LLVMGetTypeKind(llvm_type);
   switch (kind) {
   case LLVMVoidTypeKind:
     return (Type){.kind = tyVOID};
   case LLVMStructTypeKind:
-    panicf("unimplemented: from_llvm_type for struct");
-    /* return (Type){.kind = tySTRUCT, ._struct = }; */
-  case LLVMPointerTypeKind: {
+    eprintf("unimplemented: from_llvm_type for struct\n");
+    return UNKNOWN_TYPE;
+  case LLVMPointerTypeKind:
     return (Type){.kind = tyOPAQUE_PTR};
-  }
   case LLVMIntegerTypeKind: {
     size_t width = LLVMGetIntTypeWidth(llvm_type);
     if (width == 1) {
@@ -169,7 +176,10 @@ Type from_llvm_type(RandomAllocator *allocator, LLVMTypeRef llvm_type) {
     if (width == 64) {
       return (Type){.kind = tyINT};
     }
-    panicf("unimplemented: integer types other than 1 and 64 bits");
+    eprintf("unimplemented: integer types other than 1 and 64 bits. found %zu "
+            "bit integer\n",
+            width);
+    return UNKNOWN_TYPE;
   }
   case LLVMFunctionTypeKind: {
     size_t param_count = LLVMCountParamTypes(llvm_type);
@@ -181,17 +191,27 @@ Type from_llvm_type(RandomAllocator *allocator, LLVMTypeRef llvm_type) {
                            ._return = ALLOC_TYPE,
                        }};
     for (size_t i = 0; i < param_count; i++) {
-      type.function.params.data[i] = FROM_LLVM_TYPE(llvm_param_types[i]);
+      Type param_type = FROM_LLVM_TYPE(llvm_param_types[i]);
+      if (param_type.kind == tyUNKNOWN) {
+        return UNKNOWN_TYPE;
+      }
+      type.function.params.data[i] = param_type;
     }
     *type.function._return = FROM_LLVM_TYPE(LLVMGetReturnType(llvm_type));
+    if (type.function._return->kind == tyUNKNOWN) {
+      return UNKNOWN_TYPE;
+    }
     return type;
   }
   case LLVMArrayTypeKind:
   case LLVMDoubleTypeKind:
   case LLVMFloatTypeKind:
-    panicf("unimplemented: from_llvm_type for array,double,float");
+    eprintf("unsupported LLVM type kind %d found (one of array,double,float)\n",
+            kind);
+    return UNKNOWN_TYPE;
   default:
-    panicf("unsupported LLVM type kind %d", kind);
+    eprintf("unsupported LLVM type kind %d found\n", kind);
+    return UNKNOWN_TYPE;
   }
 }
 
@@ -209,18 +229,32 @@ void llvm_fill_extern_mod(Allocator *allocator, ExternMod *extern_mod,
                           LLVMModuleRef llvm_mod) {
   for (auto fn = LLVMGetFirstFunction(llvm_mod); fn != NULL;
        fn = LLVMGetNextFunction(fn)) {
+    Name mangled_name = {0};
+    mangled_name.text = LLVMGetValueName2(fn, &mangled_name.length);
+    Name name = demangle(allocator, mangled_name);
     auto type = from_llvm_type(allocator, LLVMGlobalGetValueType(fn));
-    Name name = {0};
-    name.text = LLVMGetValueName2(fn, &name.length);
-    add_decl(allocator, extern_mod, (ExternDecl){.name = name, .type = type});
+    if (type.kind == tyUNKNOWN) {
+      eprintf("unknown type in LLVM declaration %.*s. skipping.\n", FMT(name));
+      continue;
+    }
+    add_decl(
+        allocator, extern_mod,
+        (ExternDecl){.name = name, .mangled_name = mangled_name, .type = type});
   }
-  for (auto var = LLVMGetFirstGlobal(llvm_mod); var != NULL;
-       var = LLVMGetNextGlobal(var)) {
-    auto type = from_llvm_type(allocator, LLVMTypeOf(var));
-    Name name = {0};
-    name.text = LLVMGetValueName2(var, &name.length);
-    add_decl(allocator, extern_mod, (ExternDecl){.name = name, .type = type});
-  }
+  // TODO:
+  /* for (auto var = LLVMGetFirstGlobal(llvm_mod); var != NULL; */
+  /*      var = LLVMGetNextGlobal(var)) { */
+  /*   Name name = {0}; */
+  /*   name.text = LLVMGetValueName2(var, &name.length); */
+  /*   auto type = from_llvm_type(allocator, LLVMTypeOf(var)); */
+  /*   if (type.kind == tyUNKNOWN) { */
+  /*     eprintf("unknown type in LLVM declaration %.*s. skipping.\n",
+   * FMT(name)); */
+  /*     continue; */
+  /*   } */
+  /*   add_decl(allocator, extern_mod, (ExternDecl){.name = name, .type =
+   * type}); */
+  /* } */
 
   // TODO: Aliases and IFuncs?
 }

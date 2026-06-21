@@ -131,6 +131,7 @@ typedef struct SymbolTable {
 
 typedef struct {
   Name name;
+  Name mangled_name;
   Type type;
   LLVMValueRef llvm_value;
 } ExternDecl;

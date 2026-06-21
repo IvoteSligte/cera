@@ -1,10 +1,8 @@
 
-// cannot assign to temporary
-f() = 0;
+import_llvm "builtin.ll";
+// import_llvm "rust-interop.ll";
 
-
-// cannot assign to constant
-N :: 10;
-main :: () {
-    N = 0;
+func main() {
+    // _RNvCs8pRPNPuweIu_12rust_interop3add(10, 20);
+    print_int(100);
 }

@@ -11,6 +11,7 @@
 
 #include "ast.h"
 #include "ast_macro.h"
+#include "builtin.h"
 #include "generator.h"
 #include "llvm.h"
 
@@ -21,18 +22,20 @@ typedef struct {
   LLVMBasicBlockRef continue_to;
 } LoopBlocks;
 
+typedef struct {
+  LLVMValueRef print_bool;
+  LLVMValueRef print_int;
+  LLVMValueRef print_string;
+  LLVMValueRef __string_eq;
+} LLVMBuiltins;
+
 typedef struct State {
   LLVMContextRef ctx;
   LLVMModuleRef mod;
   LLVMBuilderRef builder;
   LLVMValueRef fn;
   LoopBlocks loop;
-  struct {
-    LLVMValueRef print_bool;
-    LLVMValueRef print_int;
-    LLVMValueRef print_string;
-    LLVMValueRef string_eq;
-  } builtin;
+  LLVMBuiltins builtin;
   LLVMPrimitives prim;
   LLVMState *llvm;
 } State;
@@ -176,7 +179,7 @@ void generate_node(State *state, Node *node) {
           assert(binary->left->type.kind == tySTRING);
           LLVMValueRef args[2] = {left_value, right_value};
           node->llvm_value = BUILD(Call2, TO_LLVM_TYPE(STRING_EQ_TYPE),
-                                   state->builtin.string_eq, args, 2, "");
+                                   state->builtin.__string_eq, args, 2, "");
         }
         break;
       case tBANG_EQ: {
@@ -416,21 +419,36 @@ void generate_node(State *state, Node *node) {
 }
 
 #define ADD_BUILTIN_FUNCTION($name, $type)                                     \
-  LLVMAddFunction(main_mod, $name, to_llvm_type(llvm_state, prim, $type))
+  builtin.$name =                                                              \
+      LLVMAddFunction(mod, #$name, to_llvm_type(llvm_state, prim, $type));     \
+  LLVMAddSymbol(#$name, $name)
 
+LLVMBuiltins add_builtins(LLVMState *llvm_state, LLVMModuleRef mod,
+                          LLVMPrimitives prim) {
+  LLVMBuiltins builtin = {0};
+  ADD_BUILTIN_FUNCTION(print_bool, PRINT_BOOL_TYPE);
+  ADD_BUILTIN_FUNCTION(print_int, PRINT_INT_TYPE);
+  ADD_BUILTIN_FUNCTION(print_string, PRINT_STRING_TYPE);
+  ADD_BUILTIN_FUNCTION(__string_eq, STRING_EQ_TYPE);
+  return builtin;
+}
+
+// TODO: only declare extern declarations if they are used
 void add_extern_decls(ExternMod *extern_mod, State *state) {
   for (size_t i = 0; i < extern_mod->decls.length; i++) {
     auto decl = &extern_mod->decls.data[i];
     if (decl->type.kind == tyFUNCTION) {
-      char *name = strndup(decl->name.text, decl->name.length);
+      char *mangled_name =
+          strndup(decl->mangled_name.text, decl->mangled_name.length);
       auto type = to_llvm_type(state->llvm, state->prim, decl->type);
 
       char *type_string = LLVMPrintTypeToString(type);
-      eprintf("Generating function decl `%s`: %s\n", name, type_string);
+      eprintf("Generating function decl `%.*s`: %s\n", FMT(decl->name),
+              type_string);
       LLVMDisposeMessage(type_string);
 
-      decl->llvm_value = LLVMAddFunction(state->mod, name, type);
-      free(name);
+      decl->llvm_value = LLVMAddFunction(state->mod, mangled_name, type);
+      free(mangled_name);
     } else {
       panicf("unimplemented: extern variable declaration\n");
     }
@@ -464,40 +482,33 @@ void generate_and_evaluate(LLVMState *llvm_state, AST *ast) {
       .ptr = ptr,
       .string = string,
   };
-  State state = {
-      .ctx = ctx,
-      .mod = main_mod,
-      .builder = builder,
-      .llvm = llvm_state,
-      .builtin =
-          {
-              .print_bool = ADD_BUILTIN_FUNCTION("print_bool", PRINT_BOOL_TYPE),
-              .print_int = ADD_BUILTIN_FUNCTION("print_int", PRINT_INT_TYPE),
-              .print_string =
-                  ADD_BUILTIN_FUNCTION("print_string", PRINT_STRING_TYPE),
-              .string_eq = ADD_BUILTIN_FUNCTION("__string_eq", STRING_EQ_TYPE),
-          },
-      .prim = prim};
+  State state = {.ctx = ctx,
+                 .mod = main_mod,
+                 .builder = builder,
+                 .llvm = llvm_state,
+                 .builtin = add_builtins(llvm_state, main_mod, prim),
+                 .prim = prim};
 
   add_extern_decls(extern_mod, &state);
   generate_node(&state, node);
 
   eprintf("Verifying module LLVM.\n");
-
-  char *mod_string = LLVMPrintModuleToString(main_mod);
-  eprintf("Module START\n%s", mod_string);
-  LLVMDisposeMessage(mod_string);
-  eprintf("Module END\n");
-
   LLVMVerifyModule(main_mod, LLVMAbortProcessAction, NULL);
-  eprintf("Running module main function.\n");
+
+  eprintf("Starting LLVM-to-machine-code compilation.\n");
   auto main_fn = LLVMGetNamedFunction(main_mod, "main");
   if (main_fn == NULL) {
     panicf("unimplemented: libraries without main()");
   }
-  llvm_link_into(state.llvm, main_mod);
-  llvm_init();
 
+  /* eprintf("LLVM Module DUMP START\n"); */
+  /* LLVMDumpModule(main_mod); */
+  /* eprintf("LLVM Module DUMP END\n"); */
+
+  llvm_link_into(state.llvm, main_mod);
+
+  eprintf("Creating LLVM execution engine for module.\n");
+  llvm_init();
   LLVMExecutionEngineRef engine = NULL;
   char *error = NULL;
   // Takes ownership of mod.
@@ -505,10 +516,14 @@ void generate_and_evaluate(LLVMState *llvm_state, AST *ast) {
     panicf("Failed to create LLVM execution engine. Error: %s", error);
   }
   LLVMDisposeMessage(error);
+  eprintf("Finished creating LLVM execution engine.\n");
+
+  eprintf("Trying to get main function pointer.\n");
   void (*main_ptr)(void) = LLVMGetPointerToGlobal(engine, main_fn);
   if (main_ptr == NULL) {
     panicf("Failed to get pointer to main function in module.");
   }
+  eprintf("Got main function pointer. Running.\n");
   main_ptr();
 
   LLVMDisposeExecutionEngine(engine);
