@@ -1,11 +1,10 @@
 
 codebase:
     null (pointer)
-    equality operator for all primitive types (int, bool, string)
     enums (without payloads)
     arrays
     chars
-    if-return shorthand
+    if-return, if-continue, if-break shorthands
     modules
     switch/match
     foreach element in array
@@ -15,6 +14,7 @@ codebase:
     C interoperation
     remove VLAs
     uint type
+    equality operator for structs?
     make cross-platform (see "TODO: cross-platform" in code)
     unicode input
     no naming conflicts between variables, types, and modules
