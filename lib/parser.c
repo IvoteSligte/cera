@@ -537,7 +537,7 @@ PARSER(field, {
   MUST_PARSE(name, name);
   EXPECT(tCOL);
   MUST_PARSE(type, type);
-  EXPECT(tSEMI);
+  SKIP(tSEMI);
   RETURN(field, {.name = name, .type = type});
 });
 
