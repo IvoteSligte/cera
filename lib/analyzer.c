@@ -667,7 +667,7 @@ bool analyze(AST *ast, AnalyzeErrorArray *error_data) {
     if (result != rBLOCKED)
       break;
 
-    state.error_on_block = state.anything_changed;
+    state.error_on_block = !state.anything_changed;
     state.anything_changed = false;
   }
   return result == rOK;
