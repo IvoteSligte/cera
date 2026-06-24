@@ -1,10 +1,13 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::str::FromStr;
 use std::time::Instant;
 
 use anyhow::Result;
-use lsp_server::{Connection, Message, Request as ServerRequest, RequestId, Response};
+use lsp_server::{
+    Connection, Message, Notification, Request as ServerRequest, RequestId, Response,
+};
 use lsp_types::DidSaveTextDocumentParams;
 use lsp_types::notification::{DidSaveTextDocument, Notification as _}; // for METHOD consts
 use lsp_types::request::Request as _;
@@ -48,7 +51,7 @@ fn main() -> std::result::Result<(), Box<dyn Error + Sync + Send>> {
     // advertised capabilities
     let init_value = serde_json::json!({
         "textDocumentSync": {
-            "change": 1,
+            "change": 2, // incremental updates
             "openClose": true
         }
     });
@@ -64,25 +67,29 @@ fn main() -> std::result::Result<(), Box<dyn Error + Sync + Send>> {
 // =====================================================================
 
 fn main_loop(
-    connection: Connection,
+    conn: Connection,
     params: serde_json::Value,
 ) -> std::result::Result<(), Box<dyn Error + Sync + Send>> {
     let _init: InitializeParams = serde_json::from_value(params)?;
+    let mut documents = HashMap::new();
+    let mut prev_diagnostics = Vec::new();
 
-    for msg in &connection.receiver {
-        eprintln!("MSG: {:?}", msg);
+    for msg in &conn.receiver {
+        eprintln!("MSG: {:#?}", msg);
         match msg {
             Message::Request(req) => {
-                if connection.handle_shutdown(&req)? {
+                if conn.handle_shutdown(&req)? {
                     break;
                 }
-                if let Err(err) = handle_request(&connection, &req) {
+                if let Err(err) = handle_request(&conn, &req) {
                     log::error!("[lsp] request {} failed: {err}", &req.method);
                 }
             }
-            Message::Notification(note) => {
-                if let Err(err) = handle_notification(&connection, &note) {
-                    log::error!("[lsp] notification {} failed: {err}", note.method);
+            Message::Notification(notif) => {
+                if let Err(err) =
+                    handle_notification(&conn, &notif, &mut documents, &mut prev_diagnostics)
+                {
+                    log::error!("[lsp] notification {} failed: {err}", notif.method);
                 }
             }
             Message::Response(resp) => log::error!("[lsp] response: {resp:?}"),
@@ -94,26 +101,68 @@ fn main_loop(
 // =====================================================================
 // notifications
 // =====================================================================
+fn position_to_offset(pos: Position, text: &str) -> Option<usize> {
+    let mut offset = 0;
+    for (i, line) in text.lines().enumerate() {
+        if i == pos.line as usize {
+            if pos.character as usize > line.len() {
+                return Some(offset + line.len().saturating_sub(1));
+            }
+            return Some(offset + pos.character as usize);
+        }
+        offset += line.len() + 1;
+    }
+    return None;
+}
 
-fn handle_notification(conn: &Connection, note: &lsp_server::Notification) -> Result<()> {
-    match note.method.as_str() {
+fn to_offset_range(
+    Range { start, end }: lsp_types::Range,
+    text: &str,
+) -> Option<std::ops::Range<usize>> {
+    Some(
+        position_to_offset(start, text).unwrap_or(text.len())
+            ..position_to_offset(end, text).unwrap_or(text.len()),
+    )
+}
+
+fn handle_notification(
+    conn: &Connection,
+    notif: &Notification,
+    documents: &mut HashMap<Uri, String>,
+    prev_diagnostics: &mut Vec<Diagnostic>,
+) -> Result<()> {
+    match notif.method.as_str() {
         DidOpenTextDocument::METHOD => {
-            let p: DidOpenTextDocumentParams = serde_json::from_value(note.params.clone())?;
+            let p: DidOpenTextDocumentParams = serde_json::from_value(notif.params.clone())?;
             let uri = p.text_document.uri;
-            publish_diagnostics(conn, uri, &p.text_document.text)?;
+            let text = documents
+                .entry(uri.clone())
+                .insert_entry(p.text_document.text);
+            publish_diagnostics(conn, uri, text.get(), prev_diagnostics)?;
         }
         DidChangeTextDocument::METHOD => {
-            let p: DidChangeTextDocumentParams = serde_json::from_value(note.params.clone())?;
+            let p: DidChangeTextDocumentParams = serde_json::from_value(notif.params.clone())?;
             if let Some(change) = p.content_changes.into_iter().next() {
                 let uri = p.text_document.uri;
-                publish_diagnostics(conn, uri, &change.text)?;
+                let Some(range) = to_offset_range(change.range.unwrap(), &documents[&uri]) else {
+                    panic!(
+                        "Invalid range: {:?} in text {}",
+                        change.range.unwrap(),
+                        &documents[&uri]
+                    );
+                };
+                eprintln!("range: {}..{}", range.start, range.end);
+                let text = documents.get_mut(&uri).unwrap();
+                text.replace_range(range, &change.text);
+                eprintln!("text: `{}`", text);
+                publish_diagnostics(conn, uri, text, prev_diagnostics)?;
             }
         }
         DidSaveTextDocument::METHOD => {
-            let p: DidSaveTextDocumentParams = serde_json::from_value(note.params.clone())?;
+            let p: DidSaveTextDocumentParams = serde_json::from_value(notif.params.clone())?;
             if let Some(text) = p.text {
                 let uri = p.text_document.uri;
-                publish_diagnostics(conn, uri, &text)?;
+                publish_diagnostics(conn, uri, &text, prev_diagnostics)?;
             }
         }
         _ => {}
@@ -165,34 +214,62 @@ fn handle_request(conn: &Connection, req: &ServerRequest) -> Result<()> {
 // =====================================================================
 // diagnostics
 // =====================================================================
-fn publish_diagnostics(conn: &Connection, uri: Uri, text: &str) -> Result<()> {
-    let mut diagnostics = Vec::new();
-    unsafe {
+macro_rules! time {
+    ($expr: expr) => {{
         let start = Instant::now();
-        let raw_errors = ceam::diagnose(CString::from_str(text)?.as_ptr());
+        let output = $expr;
         let end = Instant::now();
-        eprintln!("Time to diagnose: {:?}", end - start);
+        (output, end - start)
+    }};
+}
+
+fn get_diagnostics(text: &str) -> Result<Vec<Diagnostic>> {
+    unsafe {
+        let (raw_errors, time) = time!(ceam::diagnose(CString::from_str(text)?.as_ptr()));
+        eprintln!("Time to diagnose: {:?}", time);
 
         if raw_errors.data.is_null() {
-            return Ok(());
+            // cannot create slice from null pointer
+            return Ok(Vec::new());
         }
-        for error in std::slice::from_raw_parts(raw_errors.data, raw_errors.length) {
-            let message = CStr::from_ptr(error.message).to_str()?.to_owned();
-            let line = error.line as u32;
-            let column = error.column as u32;
-            diagnostics.push(Diagnostic {
-                range: Range::new(Position::new(line, column), Position::new(line, column + 1)),
-                severity: Some(DiagnosticSeverity::ERROR),
-                code: None,
-                code_description: None,
-                source: Some("ceam_lsp".into()),
-                message: message,
-                related_information: None,
-                tags: None,
-                data: None,
-            });
-        }
+        std::slice::from_raw_parts(raw_errors.data, raw_errors.length)
+            .iter()
+            .map(|error| {
+                let message = CStr::from_ptr(error.message).to_str()?.to_owned();
+                let line = error.line as u32 - 1; // ceam line numbers are one-indexed
+                let column = error.column as u32;
+                let length = error.length as u32;
+                eprintln!("Line: {}, column: {}", line, column);
+                Ok(Diagnostic {
+                    range: Range::new(
+                        Position::new(line, column),
+                        Position::new(line, column + length),
+                    ),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: None,
+                    code_description: None,
+                    source: Some("ceam_lsp".into()),
+                    message: message,
+                    related_information: None,
+                    tags: None,
+                    data: None,
+                })
+            })
+            .collect()
     }
+}
+
+fn publish_diagnostics(
+    conn: &Connection,
+    uri: Uri,
+    text: &str,
+    prev_diagnostics: &mut Vec<Diagnostic>,
+) -> Result<()> {
+    let diagnostics = get_diagnostics(text)?;
+    if diagnostics == *prev_diagnostics {
+        return Ok(());
+    }
+    *prev_diagnostics = diagnostics.clone();
     let params = PublishDiagnosticsParams {
         uri,
         diagnostics,

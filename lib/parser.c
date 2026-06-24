@@ -189,6 +189,14 @@ int log_indent = 0;
   TRY_TOKEN($on_fail, $ops);                                                   \
   TokenKind op = token.kind;
 
+// Like EXPECT, but does not change the span of the symbol being parsed.
+#define SKIP($expected...)                                                     \
+  {                                                                            \
+    Span old_span = span;                                                      \
+    EXPECT($expected);                                                         \
+    span = old_span; /* skip semicolon in span */                              \
+  }
+
 #define PARSE($name, $node_ptr) parse_##$name(state, token_index, $node_ptr)
 
 // Try to parse and return on failure.
@@ -464,7 +472,7 @@ PARSER(expr, {
 PARSER(expr_stmt, {
   MUST_PARSE(expr, expr);
   *out = expr;
-  EXPECT(tSEMI);
+  SKIP(tSEMI);
   OK;
 });
 
@@ -485,13 +493,13 @@ PARSER(return_stmt, {
 
 PARSER(break_stmt, {
   EXPECT(tBREAK);
-  EXPECT(tSEMI);
+  SKIP(tSEMI);
   RETURN(break_stmt, {});
 });
 
 PARSER(continue_stmt, {
   EXPECT(tCONTINUE);
-  EXPECT(tSEMI);
+  SKIP(tSEMI);
   RETURN(continue_stmt, {});
 });
 
@@ -610,14 +618,17 @@ void print_parse_error(const char *source, TokenStream stream,
 
 void get_parse_error_info(const char *source, TokenStream stream,
                           ParseError error_data, char **out_message,
-                          size_t *out_line, size_t *out_column) {
+                          size_t *out_line, size_t *out_column,
+                          size_t *out_length) {
   size_t offset = 0;
   if (error_data.first_unparsed_token == stream.length) {
     *out_message = strdup("unexpected EOF");
     offset = strlen(source);
   } else {
     *out_message = strdup("unexpected token");
-    offset = stream.data[error_data.first_unparsed_token].offset;
+    Token token = stream.data[error_data.first_unparsed_token];
+    offset = token.offset;
+    *out_length = token.length;
   }
   *out_message = strdup("parse error");
   OffsetInfo oi = get_offset_info(source, offset);

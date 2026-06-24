@@ -3,10 +3,12 @@ use core::ffi::c_char;
 #[repr(C)]
 #[derive(Debug)]
 pub struct CompileError {
-    // Zero-based line number.
+    // One-based line number.
     pub line: usize,
     // Zero-based column number.
     pub column: usize,
+    // Length of the symbol this error is about.
+    pub length: usize,
     pub message: *mut c_char,
 }
 

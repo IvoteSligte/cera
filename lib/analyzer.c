@@ -636,11 +636,12 @@ void print_analyze_errors(const char *source, AnalyzeErrorArray type_errors) {
 
 void get_analyze_error_info(const char *source, AnalyzeError error,
                             char **out_message, size_t *out_line,
-                            size_t *out_column) {
+                            size_t *out_column, size_t* out_length) {
   OffsetInfo oi = get_offset_info(source, error.span.offset);
   *out_message = strdup(error.message);
   *out_line = oi.line_number;
   *out_column = oi.column_number;
+  *out_length = error.span.length;  
 }
 
 void free_analyze_errors(AnalyzeErrorArray *type_errors) {

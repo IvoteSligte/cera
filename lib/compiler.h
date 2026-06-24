@@ -3,10 +3,12 @@
 #include "ast.h"
 
 typedef struct {
-  // Zero-based line number.
+  // One-based line number.
   size_t line;
   // Zero-based column number.
   size_t column;
+  // Length of the symbol this error is about..
+  size_t length;  
   char* message;
 } CompileError;
 
