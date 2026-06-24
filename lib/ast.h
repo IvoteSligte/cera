@@ -56,8 +56,20 @@ typedef struct {
 typedef enum {
   tyUNKNOWN = 0,
   tyVOID,
+  // signed integers
+  tyI8,
+  tyI16,
+  tyI32,
+  tyI64,
   tyINT,
+  // unsigned integers
   tyBOOL,
+  tyU8,
+  tyU16,
+  tyU32,
+  tyU64,
+  tyUINT,
+  // other
   tySTRING,
   tyPTR,
   tyOPAQUE_PTR, // for compatibility with LLVM
@@ -67,11 +79,24 @@ typedef enum {
   tyTYPE,
 } TypeKind;
 
+// Builtins that can be referenced by name.
 typedef enum {
   NOT_BUILTIN = 0UL,
   bVOID,
+  // signed integers
+  bI8,
+  bI16,
+  bI32,
+  bI64,
   bINT,
+  // unsigned integers
   bBOOL,
+  bU8,
+  bU16,
+  bU32,
+  bU64,
+  bUINT,
+  // other
   bSTRING,
   bPRINT_BOOL,
   bPRINT_INT,
@@ -325,3 +350,8 @@ extern Type PRINT_INT_TYPE;
 extern Type PRINT_STRING_TYPE;
 // intrinsic
 extern Type STRING_EQ_TYPE;
+
+bool is_numeric(TypeKind type);
+bool is_comparable(TypeKind type);
+bool is_signed(TypeKind type);
+

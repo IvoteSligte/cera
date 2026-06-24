@@ -58,8 +58,20 @@ const char *type_name(TypeKind kind) {
   switch (kind) {
     N(UNKNOWN);
     N(VOID);
+    // signed integers
+    N(I8);
+    N(I16);
+    N(I32);
+    N(I64);
     N(INT);
+    // unsigned integers
     N(BOOL);
+    N(U8);
+    N(U16);
+    N(U32);
+    N(U64);
+    N(UINT);
+    // other
     N(STRING);
     N(OPAQUE_PTR);
     N(PTR);
@@ -252,3 +264,16 @@ const char *ast_node_name(ASTNodeKind kind) {
   panicf("Unknown node kind: %d", kind)
 }
 #undef N
+
+bool is_numeric(TypeKind type) {
+  return IS_ONE_OF(type, tyI8, tyI16, tyI32, tyI64, tyINT, tyU8, tyU16, tyU32,
+                   tyU64, tyUINT);
+}
+
+bool is_comparable(TypeKind type) {
+  return !IS_ONE_OF(type, tySTRUCT, tyFUNCTION, tyUNION, tyTYPE, tyVOID);
+}
+
+bool is_signed(TypeKind type) {
+  return IS_ONE_OF(type, tyINT, tyI8, tyI16, tyI32, tyI64);
+}

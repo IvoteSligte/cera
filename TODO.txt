@@ -1,24 +1,27 @@
 
 codebase:
     null (pointer)
+    explicit variable declaration types
+    string slices
+    integer type inference based on declared type (similar to `untyped integer` in Go)
     enums (without payloads)
     arrays
     chars
+    explicit integer casts
     if-return, if-continue, if-break shorthands
     modules
     switch/match
     foreach element in array
     foreach element in custom type    
     tagged unions / enums with payloads
+    implicit integer conversions (to larger integer types)
     generics
     C interoperation
     remove VLAs
-    uint type
     equality operator for structs?
     make cross-platform (see "TODO: cross-platform" in code)
     unicode input
     no naming conflicts between variables, types, and modules
-    pointer-sized integer type
     deduplicate string literals
     public/private globals
     cmake

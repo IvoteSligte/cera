@@ -40,8 +40,20 @@ bool get_builtin(Name name, Type *out_type, BuiltinID *out_builtin) {
   MATCH("print_int", PRINT_INT, PRINT_INT_TYPE);
   MATCH("print_string", PRINT_STRING, PRINT_STRING_TYPE);
   MATCH_TYPE("void", VOID);
+  // signed integers
+  MATCH_TYPE("i8", I8);
+  MATCH_TYPE("i16", I16);
+  MATCH_TYPE("i32", I32);
+  MATCH_TYPE("i64", I64);
   MATCH_TYPE("int", INT);
+  // unsigned integers
   MATCH_TYPE("bool", BOOL);
+  MATCH_TYPE("u8", U8);
+  MATCH_TYPE("u16", U16);
+  MATCH_TYPE("u32", U32);
+  MATCH_TYPE("u64", U64);
+  MATCH_TYPE("uint", UINT);
+  // other
   MATCH_TYPE("string", STRING);
   return false;
 }

@@ -8,6 +8,11 @@
 
 typedef struct {
   LLVMTypeRef _void;
+  // Note that signedness does not matter for the LLVM type.
+  LLVMTypeRef i8;
+  LLVMTypeRef i16;
+  LLVMTypeRef i32;
+  LLVMTypeRef i64;
   LLVMTypeRef _int;
   LLVMTypeRef _bool;
   LLVMTypeRef ptr;

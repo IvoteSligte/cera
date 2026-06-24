@@ -52,8 +52,9 @@ typedef struct State {
 
 #define CMP($op, $pred)                                                        \
   case t##$op:                                                                 \
-    node->llvm_value =                                                         \
-        BUILD(ICmp, LLVMInt##$pred, left_value, right_value, "");              \
+    node->llvm_value = BUILD(                                                  \
+        ICmp, is_signed(node->type.kind) ? LLVMIntS##$pred : LLVMIntU##$pred,  \
+        left_value, right_value, "");                                          \
     break;
 
 #define TO_LLVM_TYPE($type) to_llvm_type(state->ctx, state->prim, $type)
@@ -165,10 +166,10 @@ void generate_node(State *state, Node *node) {
         BIN(MINUS, Sub);
         BIN(STAR, Mul);
         BIN(SLASH, SDiv);
-        CMP(LT, SLT);
-        CMP(GT, SGT);
-        CMP(LT_EQ, SLE);
-        CMP(GT_EQ, SGE);
+        CMP(LT, LT);
+        CMP(GT, GT);
+        CMP(LT_EQ, LE);
+        CMP(GT_EQ, GE);
       case tEQ_EQ:
         if (IS_ONE_OF(binary->left->type.kind, tyINT, tyBOOL)) {
           node->llvm_value =
@@ -397,7 +398,6 @@ void generate_node(State *state, Node *node) {
 
       if (var_decl->is_global) {
         node->llvm_value = LLVMAddGlobal(mod, type, name);
-        assert(IS_ONE_OF(node->type.kind, tyINT, tyBOOL, tySTRING));
         GEN(var_decl->expr, expr_value);
         LLVMSetInitializer(node->llvm_value, expr_value);
       } else { // local
@@ -469,8 +469,12 @@ void generate_and_evaluate(AST *ast) {
   // TODO: move LLVMPrimitives to LLVMState?
   LLVMPrimitives prim = {
       ._void = LLVMVoidTypeInContext(ctx),
-      ._int = _int,
       ._bool = LLVMInt1TypeInContext(ctx),
+      .i8 = LLVMInt8TypeInContext(ctx),
+      .i16 = LLVMInt16TypeInContext(ctx),
+      .i32 = LLVMInt32TypeInContext(ctx),
+      .i64 = LLVMInt64TypeInContext(ctx),
+      ._int = _int,
       .ptr = ptr,
       .string = string,
   };

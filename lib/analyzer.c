@@ -146,6 +146,8 @@ ANALYZER(name, {
 });
 
 ANALYZER(integer, {
+  // TODO: integer type inference (not always tyINT)
+  // and max value dependent on exact integer type
   EXPECT((sscanf(integer->text, "%zd", &integer->value) == 1), node,
          strdup("integer is too large"));
   node->type = PRIM_TYPE(INT);
@@ -195,14 +197,14 @@ ANALYZER(unary, {
   ANALYZE(unary->expr, expr);
   if (unary->op == tBANG) {
     EXPECT((expr_type.kind == tyBOOL), unary->expr,
-           ssprintf("cannot apply unary operator `-` to non-boolean type %s",
+           ssprintf("cannot invert non-boolean type %s",
                     type_name(expr_type.kind)));
     node->type = PRIM_TYPE(BOOL);
     OK;
   }
   if (unary->op == tMINUS) {
-    EXPECT((expr_type.kind == tyINT), unary->expr,
-           ssprintf("cannot apply unary operator `-` to non-numeric type %s",
+    EXPECT(is_signed(expr_type.kind), unary->expr,
+           ssprintf("cannot negate unsigned or non-numeric type %s",
                     type_name(expr_type.kind)));
     node->type = expr_type;
     OK;
@@ -210,13 +212,10 @@ ANALYZER(unary, {
   panicf("Unknown unary operator: `%s`", token_display_name(unary->op));
 });
 
-#define ANALYZE_BINARY($type_error, $equal_error, $out_type,                   \
-                       $expected_types...)                                     \
-  EXPECT(IS_ONE_OF(left_type.kind, $expected_types), binary->left,             \
-         $type_error);                                                         \
-  EXPECT(IS_ONE_OF(right_type.kind, $expected_types), binary->right,           \
-         $type_error);                                                         \
-  EXPECT(IS_ONE_OF(left_type.kind, $expected_types), node, $equal_error);      \
+#define ANALYZE_BINARY($validator, $type_error, $equal_error, $out_type)       \
+  EXPECT(($validator(left_type.kind)), binary->left, $type_error);             \
+  EXPECT(($validator(right_type.kind)), binary->right, $type_error);           \
+  EXPECT(($validator(left_type.kind)), node, $equal_error);                    \
   node->type = $out_type;                                                      \
   OK;
 
@@ -225,31 +224,36 @@ ANALYZER(binary, {
   ANALYZE(binary->right, right);
   if (IS_ONE_OF(binary->op, tPLUS, tMINUS, tSTAR, tSLASH)) {
     ANALYZE_BINARY(
+        is_numeric,
         strdup("cannot apply arithmetic operator to non-numeric type"),
         strdup(
             "types on both sides of an arithmetic operator must be the same"),
-        left_type, tyINT);
+        left_type);
   }
   if (IS_ONE_OF(binary->op, tLT, tGT, tLT_EQ, tGT_EQ)) {
     ANALYZE_BINARY(
+        is_numeric,
         ssprintf("cannot apply operator %s to non-numeric type",
                  token_name(binary->op)),
         strdup("types on both sides of a comparison operator must be the same"),
-        PRIM_TYPE(BOOL), tyINT);
+        PRIM_TYPE(BOOL));
   }
   if (IS_ONE_OF(binary->op, tEQ_EQ, tBANG_EQ)) {
     ANALYZE_BINARY(
+        is_comparable,
         ssprintf("cannot apply equality operator to non-primitive type"),
         strdup("types on both sides of an equality operator must be the same"),
-        PRIM_TYPE(BOOL), tyINT, tyBOOL, tySTRING);
+        PRIM_TYPE(BOOL));
   }
   if (binary->op == tAMP_AMP) {
-    ANALYZE_BINARY(strdup("cannot apply operator && to non-boolean type"), "",
-                   PRIM_TYPE(BOOL), tyBOOL);
+    ANALYZE_BINARY(tyBOOL ==,
+                   strdup("cannot apply operator && to non-boolean type"), "",
+                   PRIM_TYPE(BOOL));
   }
   if (binary->op == tBAR_BAR) {
-    ANALYZE_BINARY(strdup("cannot apply operator || to non-boolean type"), "",
-                   PRIM_TYPE(BOOL), tyBOOL);
+    ANALYZE_BINARY(tyBOOL ==,
+                   strdup("cannot apply operator || to non-boolean type"), "",
+                   PRIM_TYPE(BOOL));
   }
   panicf("Unknown binary operator: `%s`", token_display_name(binary->op));
 });
@@ -506,11 +510,11 @@ ANALYZER(assign, {
   if (assign->op == tEQ) {
   } else if (IS_ONE_OF(assign->op, tPLUS_EQ, tMINUS_EQ, tSTAR_EQ, tSLASH_EQ)) {
     EXPECT(
-        (target_type.kind == tyINT), assign->target,
+        is_numeric(target_type.kind), assign->target,
         strdup(
             "cannot apply arithmetic assignment operator to non-numeric type"));
     EXPECT(
-        (expr_type.kind == tyINT), assign->expr,
+        is_numeric(expr_type.kind), assign->expr,
         strdup(
             "cannot apply arithmetic assignment operator to non-numeric type"));
   } else {
@@ -636,12 +640,12 @@ void print_analyze_errors(const char *source, AnalyzeErrorArray type_errors) {
 
 void get_analyze_error_info(const char *source, AnalyzeError error,
                             char **out_message, size_t *out_line,
-                            size_t *out_column, size_t* out_length) {
+                            size_t *out_column, size_t *out_length) {
   OffsetInfo oi = get_offset_info(source, error.span.offset);
   *out_message = strdup(error.message);
   *out_line = oi.line_number;
   *out_column = oi.column_number;
-  *out_length = error.span.length;  
+  *out_length = error.span.length;
 }
 
 void free_analyze_errors(AnalyzeErrorArray *type_errors) {
