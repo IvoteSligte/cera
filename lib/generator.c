@@ -128,8 +128,8 @@ void generate_node(State *state, Node *node) {
                       LLVMConstInt(state->prim._int, integer->value, true));
     CASE(boolean, node->llvm_value =
                       LLVMConstInt(state->prim._bool, boolean->value, false));
+    // creates an immutable string slice
     CASE(string, {
-      // FIXME: use LLVMBuildInsertValue for non-constant strings
       char *text = strndup(string->value.text, string->value.length);
       LLVMValueRef zero = LLVMConstInt(LLVMInt32TypeInContext(ctx), 0, 0);
       LLVMValueRef indices[2] = {zero, zero}; // element 0, offset 0
