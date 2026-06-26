@@ -28,15 +28,15 @@ debug: $(DEBUG_OBJ) main.o
 test: $(DEBUG_OBJ) test.o
 	$(CC) $(LDFLAGS) $(DEBUG_FLAGS) -o $@ $(DEBUG_OBJ) test.o $(LDLIBS)
 
-libceam.a: $(OBJ)
-	$(AR) rcs libceam.a $(OBJ)
+libcera.a: $(OBJ)
+	$(AR) rcs libcera.a $(OBJ)
 
-lib: libceam.a
+lib: libcera.a
 
-ceam-lsp: libceam.a
-	cd lsp && cargo build && cp target/debug/ceam-lsp ..
+cera-ls: libcera.a
+	cd lsp && cargo build && cp target/debug/cera-ls ..
 
-lsp: ceam-lsp
+lsp: cera-ls
 
 format:
 	clang-format -i $(SRC) main.c test.c
@@ -44,9 +44,9 @@ format:
 clean:
 	rm -rf build/
 	rm -f debug test
-	cd lsp && rm -f ceam-lsp && cargo clean
+	cd lsp && rm -f cera-lsp && cargo clean
 
-.PHONY: clean format lib lsp ceam-lsp
+.PHONY: clean format lib lsp cera-ls
 
 -include $(DEP)
 

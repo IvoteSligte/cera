@@ -5,10 +5,11 @@
 #include "lib/parser.h"
 
 int main(int argc, char *argv[]) {
-  const char *path = "test.cm";
-  if (argc > 1) {
-    path = argv[1];
+  if (argc < 2) {
+    eprintf("Usage: %s <file>\n", argv[0]);
+    return 1;
   }
+  const char *path = argv[1];
   char *source = read_file(path);
   if (source == NULL) {
     return 1;

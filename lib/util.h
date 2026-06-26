@@ -81,4 +81,4 @@ bool str_eq(const char *left, const char *right);
 
 #define FMT($string) (int)($string).length, ($string).text
 
-#define FILE_EXTENSION ".cm"
+#define FILE_EXTENSION ".ce"

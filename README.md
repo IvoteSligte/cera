@@ -1,4 +1,6 @@
-# Exel
+# Cera
+
+Cera is a general purpose programming language. This repository holds its compiler.
 
 ## Dependencies
 
@@ -15,3 +17,4 @@ Sanitizers: `libasan`, `libubsan`
 
 `int` and `uint` are pointer-sized.
 
+`.ce` is the file extension for Cera files.

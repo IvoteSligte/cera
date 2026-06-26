@@ -5,7 +5,7 @@ modules:
     `.std.mem.transmute` or `std::mem::transmute` or `std'mem'transmute` access syntax
 
 implicit function parameters:
-    ```ceam
+    ```
     use (n: int) {
         func square(): int {
              // uses the `n` from the outer scope
@@ -51,8 +51,8 @@ implicit function parameters:
     auto output = parser.parse();
     ```
 
-    A parser in Ceam:
-    ```ceam
+    A parser in Cera:
+    ```
     use (stream: Stream) {
         func parse() {
             skip();

@@ -4,8 +4,8 @@ debug.o
 test
 test.o
 main.o
-libceam.a
+libcera.a
 
 # LSP build files
 target/
-ceam-lsp
+cera-ls

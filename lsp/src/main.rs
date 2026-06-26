@@ -35,7 +35,7 @@ use lsp_types::{
     request::{Completion, GotoDefinition, HoverRequest},
 }; // for METHOD consts
 
-mod ceam;
+mod ffi;
 
 // =====================================================================
 // main
@@ -195,7 +195,7 @@ fn handle_request(conn: &Connection, req: &ServerRequest) -> Result<()> {
         HoverRequest::METHOD => {
             let hover = Hover {
                 contents: HoverContents::Scalar(MarkedString::String(
-                    "Hello from *Ceam LSP*".into(),
+                    "Hello from *Cera LSP*".into(),
                 )),
                 range: None,
             };
@@ -225,7 +225,7 @@ macro_rules! time {
 
 fn get_diagnostics(text: &str) -> Result<Vec<Diagnostic>> {
     unsafe {
-        let (raw_errors, time) = time!(ceam::diagnose(CString::from_str(text)?.as_ptr()));
+        let (raw_errors, time) = time!(ffi::diagnose(CString::from_str(text)?.as_ptr()));
         eprintln!("Time to diagnose: {:?}", time);
 
         if raw_errors.data.is_null() {
@@ -236,7 +236,7 @@ fn get_diagnostics(text: &str) -> Result<Vec<Diagnostic>> {
             .iter()
             .map(|error| {
                 let message = CStr::from_ptr(error.message).to_str()?.to_owned();
-                let line = error.line as u32 - 1; // ceam line numbers are one-indexed
+                let line = error.line as u32 - 1; // line numbers are one-indexed
                 let column = error.column as u32;
                 let length = error.length as u32;
                 eprintln!("Line: {}, column: {}", line, column);
@@ -248,7 +248,7 @@ fn get_diagnostics(text: &str) -> Result<Vec<Diagnostic>> {
                     severity: Some(DiagnosticSeverity::ERROR),
                     code: None,
                     code_description: None,
-                    source: Some("ceam_lsp".into()),
+                    source: Some("cera-ls".into()),
                     message: message,
                     related_information: None,
                     tags: None,
