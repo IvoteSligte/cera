@@ -1,6 +1,8 @@
 #include "api.h"
 #include "analyzer.h"
+#include "generator.h"
 #include "lexer.h"
+#include "llvm.h"
 #include "parser.h"
 
 typedef CompileError Error;
@@ -17,7 +19,7 @@ void push_error(Errors *errors, Error error) {
   errors->length += 1;
 }
 
-bool compile(const char *source, AST *out_ast, Errors *out_errors) {
+bool parse_and_analyze(const char *source, AST *out_ast, Errors *out_errors) {
   *out_ast = (AST){0};
   TokenStream stream = {0};
   LexError lex_error = {0};
@@ -30,9 +32,6 @@ bool compile(const char *source, AST *out_ast, Errors *out_errors) {
   size_t column = 0;
   size_t length = 0;
 
-#ifdef DEBUG_EVALUATOR
-  evaluator_source = source;
-#endif
   if (!(fill_token_stream(source, &stream, &lex_error))) {
     get_lex_error_info(lex_error, &message, &line, &column);
     push_error(out_errors, new_error(message, line, column, 1));
@@ -64,10 +63,23 @@ bool compile(const char *source, AST *out_ast, Errors *out_errors) {
   return true;
 }
 
+Errors compile_and_run(const char *source) {
+  Errors errors = {0};
+  AST ast = {0};
+  if (parse_and_analyze(source, &ast, &errors)) {
+    LLVMContextRef ctx = LLVMContextCreate();
+    LLVMModuleRef mod = generate_llvm(ctx, &ast);
+    llvm_run(mod); // takes ownership of the module
+    LLVMContextDispose(ctx);
+  }
+  free_ast(&ast);
+  return errors;
+}
+
 Errors diagnose(const char *source) {
   Errors errors = {0};
   AST ast = {0};
-  compile(source, &ast, &errors);
+  parse_and_analyze(source, &ast, &errors);
   free_ast(&ast);
   return errors;
 }

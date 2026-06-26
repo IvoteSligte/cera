@@ -6,10 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "lib/analyzer.h"
-#include "lib/ast.h"
-#include "lib/generator.h"
-#include "lib/parser.h"
+#include "lib/api.h"
 #include "lib/util.h"
 
 // TODO: no colors on terminals that do not support it?
@@ -40,38 +37,14 @@ typedef struct {
 } TestFile;
 
 bool test(const char *source) {
-  TokenStream stream = {0};
   AST ast = {0};
-  LexError lex_error = {0};
-  ParseError parse_error = {0};
-  AnalyzeErrorArray type_errors = {0};
 
-#ifdef DEBUG_EVALUATOR
-  evaluator_source = source;
-#endif
-
-  if (!(fill_token_stream(source, &stream, &lex_error))) {
-    print_lex_error(lex_error);
-    free_token_stream(&stream);
-    return false;
-  }
-  if (!parse_token_stream(stream, &ast, &parse_error)) {
-    print_parse_error(source, stream, parse_error);
-    free_token_stream(&stream);
+  CompileErrors errors = compile_and_run(source);
+  if (errors.length > 0) {
     free_ast(&ast);
+    free_compile_errors(&errors);
     return false;
   }
-  ast_print_nodes(ast.head);
-  if (!analyze(&ast, &type_errors)) {
-    print_analyze_errors(source, type_errors);
-    free_analyze_errors(&type_errors);
-    free_token_stream(&stream);
-    free_ast(&ast);
-    return false;
-  }
-  generate_and_evaluate(&ast);
-
-  free_token_stream(&stream);
   free_ast(&ast);
   return true;
 }

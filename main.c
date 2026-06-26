@@ -1,8 +1,6 @@
 
 #include "lib/analyzer.h"
-#include "lib/generator.h"
-#include "lib/lexer.h"
-#include "lib/parser.h"
+#include "lib/api.h"
 
 int main(int argc, char *argv[]) {
   if (argc < 2) {
@@ -15,45 +13,11 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-#ifdef DEBUG_EVALUATOR
-  program_source = source;
-#endif
-
-  LexError lex_error = {0};
-  TokenStream stream = {0};
-  if (!fill_token_stream(source, &stream, &lex_error)) {
-    print_lex_error(lex_error);
-    free_token_stream(&stream);
-    free(source);
-    return 1;
+  CompileErrors errors = compile_and_run(source);
+  if (errors.length > 0) {
+    free_compile_errors(&errors);
+    return false;
   }
-  print_token_stream(stream);
-
-  AST ast = {0};
-  ParseError parse_error = {0};
-  if (!parse_token_stream(stream, &ast, &parse_error)) {
-    print_parse_error(source, stream, parse_error);
-    free_token_stream(&stream);
-    free_ast(&ast);
-    free(source);
-    return 1;
-  }
-  free_token_stream(&stream);
-
-  eprintf("Parse success.\n");
-  ast_print_nodes(ast.head);
-
-  AnalyzeErrorArray type_errors = {0};
-  if (!analyze(&ast, &type_errors)) {
-    print_analyze_errors(source, type_errors);
-    free_analyze_errors(&type_errors);
-    free_ast(&ast);
-    free(source);
-    return 1;
-  }
-  generate_and_evaluate(&ast);
-
-  free_ast(&ast);
   free(source);
   return 0;
 }

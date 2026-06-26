@@ -17,7 +17,9 @@ typedef struct {
   size_t length;
 } CompileErrors;
 
-bool compile(const char *source, AST *out_ast, CompileErrors *out_errors);
+bool parse_and_analyze(const char *source, AST *out_ast,
+                       CompileErrors *out_errors);
+CompileErrors compile_and_run(const char *source);
 
 CompileErrors diagnose(const char* source);
 

@@ -448,13 +448,11 @@ void add_extern_decls(ExternMod *extern_mod, State *state) {
   }
 }
 
-void generate_and_evaluate(AST *ast) {
-  auto ctx = LLVMContextCreate();
+LLVMModuleRef generate_llvm(LLVMContextRef ctx, AST *ast) {
   auto node = ast->head;
   auto extern_mod = &ast->extern_mod;
   assert(node->kind == aMODULE);
-  auto main_mod =
-      LLVMModuleCreateWithNameInContext("placeholder_module_name", ctx);
+  auto mod = LLVMModuleCreateWithNameInContext("placeholder_module_name", ctx);
   auto builder = LLVMCreateBuilderInContext(ctx);
   // TODO: LLVMIntPtrTypeInContext (also change builtin.h: print_int and
   // CeamString)
@@ -464,7 +462,7 @@ void generate_and_evaluate(AST *ast) {
   LLVMTypeRef elementTypes[2] = {ptr, _int};
   LLVMStructSetBody(string, elementTypes, 2, false);
 
-  eprintf("Generating module LLVM.\n");
+  eprintf("Generating LLVM module.\n");
 
   // TODO: move LLVMPrimitives to LLVMState?
   LLVMPrimitives prim = {
@@ -479,48 +477,19 @@ void generate_and_evaluate(AST *ast) {
       .string = string,
   };
   State state = {.ctx = ctx,
-                 .mod = main_mod,
+                 .mod = mod,
                  .builder = builder,
-                 .builtin = add_builtins(ctx, main_mod, prim),
+                 .builtin = add_builtins(ctx, mod, prim),
                  .prim = prim};
 
   add_extern_decls(extern_mod, &state);
   generate_node(&state, node);
 
-  eprintf("Verifying module LLVM.\n");
-  LLVMVerifyModule(main_mod, LLVMAbortProcessAction, NULL);
+  eprintf("Verifying LLVM module.\n");
+  LLVMVerifyModule(mod, LLVMAbortProcessAction, NULL);
 
-  eprintf("Starting LLVM-to-machine-code compilation.\n");
-  auto main_fn = LLVMGetNamedFunction(main_mod, "main");
-  if (main_fn == NULL) {
-    panicf("unimplemented: libraries without main()");
-  }
-
-  /* eprintf("LLVM Module DUMP START\n"); */
-  /* LLVMDumpModule(main_mod); */
-  /* eprintf("LLVM Module DUMP END\n"); */
-
-  eprintf("Creating LLVM execution engine for module.\n");
-  llvm_init();
-  LLVMExecutionEngineRef engine = NULL;
-  char *error = NULL;
-  // Takes ownership of mod.
-  if (LLVMCreateExecutionEngineForModule(&engine, main_mod, &error)) {
-    panicf("Failed to create LLVM execution engine. Error: %s", error);
-  }
-  LLVMDisposeMessage(error);
-  eprintf("Finished creating LLVM execution engine.\n");
-
-  eprintf("Trying to get main function pointer.\n");
-  void (*main_ptr)(void) = LLVMGetPointerToGlobal(engine, main_fn);
-  if (main_ptr == NULL) {
-    panicf("Failed to get pointer to main function in module.");
-  }
-  eprintf("Got main function pointer. Running.\n");
-  main_ptr();
-
-  LLVMDisposeExecutionEngine(engine);
   LLVMDisposeBuilder(builder);
-  LLVMContextDispose(ctx);
-  eprintf("Finished generation and execution.\n");
+  eprintf("Finished LLVM module generation.\n");
+
+  return mod;
 }
