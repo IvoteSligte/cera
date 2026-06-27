@@ -22,11 +22,11 @@ build/debug/%.o: %.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(DEBUG_FLAGS) -MMD -MP -c $< -o $@
 
-debug: $(DEBUG_OBJ) main.o
-	$(CC) $(LDFLAGS) $(DEBUG_FLAGS) -o $@ $(DEBUG_OBJ) main.o $(LDLIBS)
+debug: $(DEBUG_OBJ) build/debug/main.o build/debug/dep/argparse.o
+	$(CC) $(LDFLAGS) $(DEBUG_FLAGS) $^ -o $@ $(LDLIBS)	
 
-test: $(DEBUG_OBJ) test.o
-	$(CC) $(LDFLAGS) $(DEBUG_FLAGS) -o $@ $(DEBUG_OBJ) test.o $(LDLIBS)
+test: $(DEBUG_OBJ) build/debug/test.o
+	$(CC) $(LDFLAGS) $(DEBUG_FLAGS) $^ -o $@ $(LDLIBS)	
 
 libcera.a: $(OBJ)
 	$(AR) rcs libcera.a $(OBJ)
