@@ -232,6 +232,11 @@ typedef struct ASTNode {
       ASTNode *name;
       ASTNodeArray params;
       ASTNode *return_type; // nullable
+
+      // Forward declarations do not have bodies.
+      // They are expected to be resolved at link time.
+      bool is_forward_decl;
+
       ASTNodeArray stmts;
       SymbolTable table;
 
@@ -355,4 +360,3 @@ extern Type STRING_EQ_TYPE;
 bool is_numeric(TypeKind type);
 bool is_comparable(TypeKind type);
 bool is_signed(TypeKind type);
-

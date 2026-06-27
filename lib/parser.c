@@ -457,11 +457,20 @@ PARSER(func_decl, {
   ZERO_OR_MORE_SEPARATED(param, params, tCOMMA);
   EXPECT(tRPAREN);
   MAY_PARSE(return_type, return_type);
-  MUST_PARSE_BLOCK(body);
+
+  TRY_TOKEN(
+      { // if next token is not a semicolon
+        MUST_PARSE_BLOCK(body);
+        RETURN(func_decl, {.name = name,
+                           .params = params,
+                           .return_type = return_type,
+                           .stmts = body_stmts});
+      },
+      tSEMI);
   RETURN(func_decl, {.name = name,
                      .params = params,
                      .return_type = return_type,
-                     .stmts = body_stmts});
+                     .is_forward_decl = true});
 });
 
 PARSER(expr, {

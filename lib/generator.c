@@ -66,7 +66,8 @@ LLVMValueRef declare_function(State *state, ASTNode *decl_node) {
   }
   auto decl = &decl_node->func_decl;
   auto decl_name = decl->name->name.name;
-  // map main -> _main because a wrapper main function is automatically generated
+  // map main -> _main because a wrapper main function is automatically
+  // generated
   char *name = name_eq_string(decl_name, "main")
                    ? strdup("_main")
                    : strndup(decl_name.text, decl_name.length);
@@ -248,21 +249,24 @@ void generate_node(State *state, Node *node) {
     CASE(func_decl, {
       auto fn = declare_function(state, node);
       node->llvm_value = fn;
-      state->fn = fn;
-      auto entry_block = LLVMAppendBasicBlockInContext(ctx, fn, "entry");
-      LLVMPositionBuilderAtEnd(builder, entry_block);
+      if (!func_decl->is_forward_decl) {
+        state->fn = fn;
+        auto entry_block = LLVMAppendBasicBlockInContext(ctx, fn, "entry");
+        LLVMPositionBuilderAtEnd(builder, entry_block);
 
-      ITER_ARRAY(func_decl->params, param_node, {
-        // TODO: only place parameter on stack when it needs an address
-        param_node->llvm_value =
-            BUILD(Alloca, TO_LLVM_TYPE(param_node->type), "");
-        BUILD(Store, LLVMGetParam(fn, i), param_node->llvm_value);
-      });
-      ITER_ARRAY(func_decl->stmts, stmt_node, { GEN(stmt_node, stmt_value); });
-      if (func_decl->return_type == NULL) {
-        BUILD(RetVoid);
+        ITER_ARRAY(func_decl->params, param_node, {
+          // TODO: only place parameter on stack when it needs an address
+          param_node->llvm_value =
+              BUILD(Alloca, TO_LLVM_TYPE(param_node->type), "");
+          BUILD(Store, LLVMGetParam(fn, i), param_node->llvm_value);
+        });
+        ITER_ARRAY(func_decl->stmts, stmt_node,
+                   { GEN(stmt_node, stmt_value); });
+        if (func_decl->return_type == NULL) {
+          BUILD(RetVoid);
+        }
+        state->fn = NULL;
       }
-      state->fn = NULL;
     });
     // Generate does not need to be called in parameters as they are declared by
     // the function.

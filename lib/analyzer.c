@@ -453,10 +453,12 @@ ANALYZER(func_decl, {
     // indicating that the type has been determined.
     type->kind = tyFUNCTION;
   }
-  bool is_static = false;
-  Type return_type = *type->function._return;
-  ANALYZE_ARRAY(func_decl->stmts);
-
+  if (!func_decl->is_forward_decl) {
+    // forward declarations have no bodies
+    bool is_static = false;
+    Type return_type = *type->function._return;
+    ANALYZE_ARRAY(func_decl->stmts);
+  }
   if (name_eq_string(func_decl->name->name.name, "main")) {
     EXPECT(type_eq(node->type, MAIN_FUNCTION_TYPE), func_decl->name,
            ssprintf("invalid `main` function type, expected `() -> void`"));
