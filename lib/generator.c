@@ -65,8 +65,11 @@ LLVMValueRef declare_function(State *state, ASTNode *decl_node) {
     return decl_node->llvm_value;
   }
   auto decl = &decl_node->func_decl;
-  char *name =
-      strndup(decl->name->name.name.text, decl->name->name.name.length);
+  auto decl_name = decl->name->name.name;
+  // map main -> _main because a wrapper main function is automatically generated
+  char *name = name_eq_string(decl_name, "main")
+                   ? strdup("_main")
+                   : strndup(decl_name.text, decl_name.length);
   auto type = TO_LLVM_TYPE(decl_node->type);
 
   char *type_string = LLVMPrintTypeToString(type);

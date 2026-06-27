@@ -1,10 +1,10 @@
 #include <llvm-c/Analysis.h>
-#include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/IRReader.h>
 #include <llvm-c/Linker.h>
 #include <llvm-c/Support.h>
 #include <llvm-c/Target.h>
+#include <llvm-c/TargetMachine.h>
 
 #include "ast_macro.h"
 #include "llvm.h"
@@ -35,6 +35,13 @@ void llvm_init(void) {
   if (LLVMInitializeNativeAsmParser()) {
     panicf("Failed to initialize LLVM native ASM parser.");
   }
+  // NOTE: target-related calls are only needed for Object file compilation
+  LLVMInitializeAllTargetInfos(); // no Native equivalent for this
+  if (LLVMInitializeNativeTarget()) {
+    panicf("Failed to initialize LLVM native target.");
+  }
+  LLVMInitializeAllTargetMCs(); // no Native equivalent for this
+  eprintf("Initialized LLVM.\n");
 }
 
 LLVMTypeRef llvm_declare_struct(LLVMContextRef ctx, ASTNode *decl_node) {
@@ -110,7 +117,7 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, LLVMPrimitives prim, Type type) {
 // Takes ownership of the passed module.
 void llvm_run(LLVMModuleRef mod) {
   eprintf("Starting LLVM-to-machine-code compilation.\n");
-  auto main_fn = LLVMGetNamedFunction(mod, "main");
+  auto main_fn = LLVMGetNamedFunction(mod, "_main");
   if (main_fn == NULL) {
     panicf("Tried to evaluate module without main function.");
   }
@@ -142,20 +149,31 @@ void llvm_run(LLVMModuleRef mod) {
 #define RELOC_MODE LLVMRelocDefault
 #define CODE_MODEL LLVMCodeModelDefault
 
-LLVMTargetMachineRef llvm_create_target_machine(void) {
+// Creates a target machine and sets the given module's data layout and target
+// accordingly.
+LLVMTargetMachineRef llvm_create_target_machine(LLVMModuleRef mod) {
+  llvm_init();
   char *target_triple = LLVMGetDefaultTargetTriple();
+  eprintf("LLVM detected native target triple: %s\n", target_triple);
   LLVMTargetRef target = NULL;
   char *error = NULL;
   if (LLVMGetTargetFromTriple(target_triple, &target, &error)) {
     LLVMDisposeMessage(target_triple);
-    panicf("Failed to create LLVM compilation target. Error: %s", error);
+    panicf("Failed to create LLVM compilation target. Error: %s",
+           error == NULL ? "<unknown>" : error);
   }
   char *cpu_name = LLVMGetHostCPUName();
+  eprintf("LLVM detected CPU: %s\n", cpu_name);
   char *cpu_features = LLVMGetHostCPUFeatures();
   LLVMDisposeMessage(error);
   auto target_machine =
       LLVMCreateTargetMachine(target, target_triple, cpu_name, cpu_features,
                               OPT_LEVEL, RELOC_MODE, CODE_MODEL);
+  auto data_layout = LLVMCreateTargetDataLayout(target_machine);
+  LLVMSetModuleDataLayout(mod, data_layout);
+  LLVMSetTarget(mod, target_triple);
+  LLVMDisposeTargetData(data_layout);
+
   LLVMDisposeMessage(target_triple);
   LLVMDisposeMessage(cpu_name);
   LLVMDisposeMessage(cpu_features);
@@ -163,25 +181,27 @@ LLVMTargetMachineRef llvm_create_target_machine(void) {
 }
 
 void llvm_compile_to_buffer(LLVMModuleRef mod, LLVMMemoryBufferRef *buffer) {
-  auto target_machine = llvm_create_target_machine();
+  auto target_machine = llvm_create_target_machine(mod);
   char *error = NULL;
   if (LLVMTargetMachineEmitToMemoryBuffer(target_machine, mod, LLVMObjectFile,
                                           &error, buffer)) {
     LLVMDisposeTargetMachine(target_machine);
     panicf("Failed to emit machine code to memory buffer. Error: %s", error);
   }
-  LLVMDisposeMessage(error);
+  if (error != NULL)
+    LLVMDisposeMessage(error);
   LLVMDisposeTargetMachine(target_machine);
 }
 
 void llvm_compile_to_file(LLVMModuleRef mod, const char *filename) {
-  auto target_machine = llvm_create_target_machine();
+  auto target_machine = llvm_create_target_machine(mod);
   char *error = NULL;
   if (LLVMTargetMachineEmitToFile(target_machine, mod, filename, LLVMObjectFile,
                                   &error)) {
     LLVMDisposeTargetMachine(target_machine);
-    panicf("Failed to emit machine code to memory buffer. Error: %s", error);
+    panicf("Failed to emit machine code to object file. Error: %s", error);
   }
-  LLVMDisposeMessage(error);
+  if (error != NULL)
+    LLVMDisposeMessage(error);
   LLVMDisposeTargetMachine(target_machine);
 }

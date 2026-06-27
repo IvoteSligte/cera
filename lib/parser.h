@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "lexer.h"
+#include "error.h"
 
 #define MAX_NUM_EXPECTED 32
 
@@ -20,6 +21,5 @@ void print_parse_error(const char *source, TokenStream stream,
                        ParseError error_data);
 
 void get_parse_error_info(const char *source, TokenStream stream,
-                          ParseError error_data, char **out_message,
-                          size_t *out_line, size_t *out_column,
-                          size_t *out_length);
+                          ParseError error_data, CompileError *out);
+

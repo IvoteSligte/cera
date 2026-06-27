@@ -1,27 +1,16 @@
 #pragma once
 
 #include "ast.h"
-
-typedef struct {
-  // One-based line number.
-  size_t line;
-  // Zero-based column number.
-  size_t column;
-  // Length of the symbol this error is about..
-  size_t length;  
-  char* message;
-} CompileError;
-
-typedef struct {
-  CompileError *data;
-  size_t length;
-} CompileErrors;
+#include "error.h"
 
 bool parse_and_analyze(const char *source, AST *out_ast,
                        CompileErrors *out_errors);
 CompileErrors compile_and_run(const char *source);
+CompileErrors compile_to_object_file(const char *source,
+                                     const char *output_file);
 
-CompileErrors diagnose(const char* source);
+// Parse and analyze the given code, but do not return the AST.
+CompileErrors diagnose(const char *source);
 
-void free_compile_error(CompileError *error);
-void free_compile_errors(CompileErrors* errors);
+// Links an object file with the standard library and libc, producing a binary.
+bool link_to_binary(const char *object_file, const char *output_file);

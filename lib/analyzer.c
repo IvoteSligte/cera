@@ -421,6 +421,9 @@ ANALYZER(func_decl, {
   EXPECT(IS_GLOBAL, node,
          strdup("functions can only be defined in the global scope"));
   EXPECT(is_static, node, strdup("functions can only be defined as constants"));
+  assert(func_decl->name->kind == aNAME);
+  EXPECT(!name_eq_string(func_decl->name->name.name, "_main"), func_decl->name,
+         strdup("_main is a reserved function name"));
 
   DECLARE(func_decl);
 
@@ -639,13 +642,12 @@ void print_analyze_errors(const char *source, AnalyzeErrorArray type_errors) {
 }
 
 void get_analyze_error_info(const char *source, AnalyzeError error,
-                            char **out_message, size_t *out_line,
-                            size_t *out_column, size_t *out_length) {
+                            CompileError *out) {
   OffsetInfo oi = get_offset_info(source, error.span.offset);
-  *out_message = strdup(error.message);
-  *out_line = oi.line_number;
-  *out_column = oi.column_number;
-  *out_length = error.span.length;
+  out->message = strdup(error.message);
+  out->line = oi.line_number;
+  out->column = oi.column_number;
+  out->length = error.span.length;
 }
 
 void free_analyze_errors(AnalyzeErrorArray *type_errors) {

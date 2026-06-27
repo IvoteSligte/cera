@@ -1,5 +1,6 @@
 
 codebase:
+    C interoperation (forward declarations)
     null (pointer)
     explicit variable declaration types
     string slices
@@ -16,15 +17,15 @@ codebase:
     tagged unions / enums with payloads
     implicit integer conversions (to larger integer types)
     generics
-    C interoperation
     remove VLAs
     equality operator for structs?
-    make cross-platform (see "TODO: cross-platform" in code)
+    make cross-platform (for starters, see "TODO: cross-platform" in code)
     unicode input
     no naming conflicts between variables, types, and modules
     deduplicate string literals
     public/private globals
     cmake
+    user installation directory (maybe ~/.local/share/cera or ~/.cera)
     statically link LLVM
     RAII?
 
@@ -33,4 +34,5 @@ warnings:
 
 tooling:
     standard library
+    build system / package manager
     formatter

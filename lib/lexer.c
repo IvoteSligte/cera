@@ -224,12 +224,12 @@ void print_lex_error(LexError error) {
       oi.line_number, oi.column_number, length, &error.source[error.offset]);
 }
 
-void get_lex_error_info(LexError error, char **out_message, size_t *out_line,
-                        size_t *out_column) {
+void get_lex_error_info(LexError error, CompileError *out) {
   OffsetInfo oi = get_offset_info(error.source, error.offset);
-  *out_line = oi.line_number;
-  *out_column = oi.column_number;
-  *out_message = strdup("failed to match token");
+  out->length = 1;
+  out->line = oi.line_number;
+  out->column = oi.column_number;
+  out->message = strdup("failed to match token");
 }
 
 bool fill_token_stream(const char *source, TokenStream *out,

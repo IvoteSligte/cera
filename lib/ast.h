@@ -1,5 +1,6 @@
 #pragma once
 
+#include "alloc.h"
 #include "lexer.h"
 
 // These prevent having this header depend on LLVM.
