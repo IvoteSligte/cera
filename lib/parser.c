@@ -483,7 +483,7 @@ PARSER(param, {
 
 PARSER(return_type, {
   EXPECT(tRARROW);
-  TRY_PARSE(name);
+  TRY_PARSE(type);
   FAIL;
 });
 
