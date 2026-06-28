@@ -11,6 +11,7 @@ typedef enum {
   tIDENT,
   tNUMBER,
   tSTRING,
+  tCHAR,  
   // delimiters
   tLPAREN,
   tRPAREN,
@@ -60,8 +61,6 @@ typedef enum {
   tCONTINUE,
   tTRUE,
   tFALSE,
-  // metasymbol for the number of token kinds
-  tKIND_COUNT,
 } TokenKind;
 
 typedef struct {

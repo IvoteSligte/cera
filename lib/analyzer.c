@@ -163,33 +163,93 @@ ANALYZER(boolean, {
   OK;
 });
 
+#define ESC($input, $escaped)                                                  \
+  case $input:                                                                 \
+    *escaped = $escaped;                                                       \
+    return 1;
+
+// Returns the length of the string that was escaped, or zero on failure.
+static size_t escape_unicode_char(const char *after_slash, size_t length,
+                                  uint32_t *escaped) {
+  const char *s = after_slash;
+  switch (s[0]) {
+    ESC('n', '\n');
+    ESC('r', '\r');
+    ESC('t', '\t');
+    ESC('f', '\f');
+    ESC('\\', '\\');
+    ESC('"', '"');
+    ESC('\'', '\'');
+    ESC('0', '\0');
+    ESC('1', '\1');
+    ESC('2', '\2');
+    ESC('3', '\3');
+    ESC('4', '\4');
+    ESC('5', '\5');
+    ESC('6', '\6');
+    ESC('7', '\7');
+  case 'u':
+    *escaped = 0;
+    // u{X} where X represents between 1 and 8 hex digits
+    if (length < 4 || length > 11 || after_slash[1] != '{' ||
+        after_slash[length - 1] != '}') {
+      return false;
+    }
+    for (size_t i = 2; i < length - 1; i++) {
+      *escaped *= 16;
+      char c = after_slash[i];
+      if (c == '}')
+        break;
+      if (c >= '0' && c <= '9')
+        *escaped += c - '0';
+      else if (c >= 'a' && c <= 'z')
+        *escaped += 10 + c - 'a';
+      else if (c >= 'A' && c <= 'Z')
+        *escaped += 10 + c - 'A';
+      else
+        return false; // not a hex digit
+    }
+    return true;
+  default:
+    return false;
+  }
+}
+
 ANALYZER(string, {
   String value = {.text = ALLOC(string->length)};
   for (size_t i = 0; i < string->length; i++) {
-    char c = string->text[i];
+    uint32_t c = string->text[i];
     if (c == '\\') {
       i++;
-      c = string->text[i];
-      if (c == 'n')
-        c = '\n';
-      else if (c == 'r')
-        c = '\r';
-      else if (c == 't')
-        c = '\t';
-      else if (c == 'f')
-        c = '\f';
-      else if (c == '\\')
-        c = '\\';
-      else if (c == '"')
-        c = '"';
-      else
-        EXPECT(false, node, ssprintf("invalid escape sequence: `\\%c`", c));
+      size_t escaped_length =
+          escape_unicode_char(&string->text[i], string->length - i, &c);
+      EXPECT(escaped_length != 0, node,
+             ssprintf("invalid escape sequence: `\\%.*s`", (int)escaped_length,
+                      &string->text[i]));
+      if (escaped_length > 1) {
+        panicf("TODO: add unicode support to the String type.");
+      }
     }
     value.text[value.length] = c;
     value.length++;
   }
   string->value = value;
   node->type = PRIM_TYPE(STRING);
+  OK;
+})
+
+ANALYZER(character, {
+  character->value = character->text[0];
+  if (character->text[0] == '\\') {
+    size_t escaped_length = escape_unicode_char(
+        &character->text[1], character->length - 1, &character->value);
+    EXPECT(escaped_length != 0, node,
+           ssprintf("invalid escape sequence: `%.*s`", (int)escaped_length,
+                    character->text));
+  } else if (character->length > 1) {
+    panicf("TODO: unescaped unicode characters");
+  }
+  node->type = PRIM_TYPE(CHAR);
   OK;
 });
 
@@ -601,6 +661,7 @@ ANALYZER_SIGNATURE(node) {
     ACASE(integer);
     ACASE(boolean);
     ACASE(string);
+    ACASE(character);
     ACASE(unary);
     ACASE(binary);
     ACASE(func_call);

@@ -65,6 +65,7 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, LLVMPrimitives prim, Type type) {
     return prim.i16;
   case tyI32:
   case tyU32:
+  case tyCHAR:
     return prim.i32;
   case tyI64:
   case tyU64:

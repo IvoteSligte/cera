@@ -25,6 +25,7 @@ typedef struct {
   LLVMValueRef print_bool;
   LLVMValueRef print_int;
   LLVMValueRef print_string;
+  LLVMValueRef print_char;
   LLVMValueRef __string_eq;
 } LLVMBuiltins;
 
@@ -149,6 +150,9 @@ void generate_node(State *state, Node *node) {
       free(text);
       node->llvm_value = LLVMConstNamedStruct(state->prim.string, value, 2);
     });
+    CASE(character, {
+      node->llvm_value = LLVMConstInt(state->prim.i32, character->value, false);
+    });
     CASE(unary, {
       GEN(unary->expr, expr_value);
       switch (unary->op) {
@@ -213,6 +217,9 @@ void generate_node(State *state, Node *node) {
           break;
         case bPRINT_STRING:
           fn = state->builtin.print_string;
+          break;
+        case bPRINT_CHAR:
+          fn = state->builtin.print_char;
           break;
         default:
           panicf("Unknown builtin %d.", function->name.builtin);
@@ -431,6 +438,7 @@ LLVMBuiltins add_builtins(LLVMContextRef ctx, LLVMModuleRef mod,
   ADD_BUILTIN_FUNCTION(print_bool, PRINT_BOOL_TYPE);
   ADD_BUILTIN_FUNCTION(print_int, PRINT_INT_TYPE);
   ADD_BUILTIN_FUNCTION(print_string, PRINT_STRING_TYPE);
+  ADD_BUILTIN_FUNCTION(print_char, PRINT_CHAR_TYPE);
   ADD_BUILTIN_FUNCTION(__string_eq, STRING_EQ_TYPE);
   return builtin;
 }

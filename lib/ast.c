@@ -73,6 +73,7 @@ const char *type_name(TypeKind kind) {
     N(UINT);
     // other
     N(STRING);
+    N(CHAR);
     N(OPAQUE_PTR);
     N(PTR);
     N(FUNCTION);
@@ -111,6 +112,7 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
     PCASE(integer, {});
     PCASE(boolean, {});
     PCASE(string, {});
+    PCASE(character, {});
     PCASE(unary, { VISIT(unary->expr); });
     PCASE(binary, {
       assert(binary->left != node);
@@ -199,6 +201,8 @@ static void print_node(ASTNode *node, size_t depth, void *data) {
           eprintf("boolean: %.*s\n", (int)boolean->length, boolean->text));
     PCASE(string,
           eprintf("string: \"%.*s\"\n", (int)string->length, string->text));
+    PCASE(character, eprintf("character: '%.*s'\n", (int)character->length,
+                             character->text));
     PCASE(unary, eprintf("unary: `%s`\n", token_name(unary->op)));
     PCASE(binary, eprintf("binary: `%s`\n", token_name(binary->op)));
     PCASE(func_call, eprintf("func_call:\n"));
@@ -238,6 +242,7 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(INTEGER);
     N(BOOLEAN);
     N(STRING);
+    N(CHARACTER);
     N(UNARY);
     N(BINARY);
     N(FUNC_CALL);

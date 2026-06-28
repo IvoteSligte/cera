@@ -65,6 +65,28 @@ static size_t lex_string(const char *text) {
   return length;
 }
 
+static size_t lex_char(const char *text) {
+  if (text[0] != '\'')
+    return 0;
+  size_t length = 1;
+  while (true) {
+    if (text[length] == '\0')
+      return 0; // TODO: error `expected '\'', but found EOF`
+    if (text[length] == '\'') {
+      length++;
+      break;
+    }
+    if (text[length] == '\\' && text[length + 1] != '\0')
+      length += 2;
+    else
+      length++;
+  }
+  if (length == 2) { // '' is not a character
+    return 0;
+  }
+  return length;
+}
+
 static size_t lex_keyword(const char *text, const char *keyword) {
   size_t length = strlen(keyword);
   if (strncmp(text, keyword, length) == 0)
@@ -88,9 +110,10 @@ const Matcher MATCHERS[] = {
     CM(WHITESPACE, "whitespace", lex_whitespace),
     CM(COMMENT, "comment", lex_comment),
     // words
-    CM(IDENT, "identifier", lex_identifier),
+    CM(IDENT, "ident", lex_identifier),
     CM(NUMBER, "number", lex_number),
     CM(STRING, "string", lex_string),
+    CM(CHAR, "char", lex_char),
     // symbols
     M(LPAREN, "("),
     M(RPAREN, ")"),

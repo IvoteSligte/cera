@@ -1,0 +1,7 @@
+// OUTPUT: "a\n "
+
+func main() {
+    print_char('\u{61}'); // 'a'
+    print_char('\n');     // '\n'
+    print_char('\u{20}'); // ' '
+}

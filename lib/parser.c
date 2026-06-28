@@ -287,6 +287,11 @@ PARSER(string, {
   RETURN(string, {.text = token.text + 1, .length = token.length - 2});
 });
 
+PARSER(character, {
+  EXPECT(tCHAR);
+  RETURN(character, {.text = token.text + 1, .length = token.length - 2});
+});
+
 PARSER(type, {
   MUST_PARSE(name, expr);
   *out = expr;
@@ -345,6 +350,7 @@ PARSER(primary, {
   TRY_PARSE(integer);
   TRY_PARSE(boolean);
   TRY_PARSE(string);
+  TRY_PARSE(character);
   TRY_PARSE(paren_expr);
   FAIL;
 });

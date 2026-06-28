@@ -18,6 +18,7 @@ typedef enum {
   aINTEGER,
   aBOOLEAN,
   aSTRING,
+  aCHARACTER,
   aUNARY,
   aBINARY,
   aFUNC_CALL,
@@ -72,6 +73,7 @@ typedef enum {
   tyUINT,
   // other
   tySTRING,
+  tyCHAR, // 32-bit unicode character
   tyPTR,
   tyOPAQUE_PTR, // for compatibility with LLVM
   tyFUNCTION,
@@ -99,9 +101,12 @@ typedef enum {
   bUINT,
   // other
   bSTRING,
+  bCHAR,
+  // functions
   bPRINT_BOOL,
   bPRINT_INT,
   bPRINT_STRING,
+  bPRINT_CHAR,  
 } BuiltinID;
 
 typedef struct Type Type;
@@ -198,6 +203,11 @@ typedef struct ASTNode {
       size_t length;
       String value;
     } string;
+    struct {
+      const char *text;
+      size_t length;
+      uint32_t value;
+    } character;
     struct {
       TokenKind op;
       ASTNode *expr;
@@ -354,6 +364,7 @@ bool get_symbol(ExternMod *extern_mod, SymbolTable *table, Name name,
 extern Type PRINT_BOOL_TYPE;
 extern Type PRINT_INT_TYPE;
 extern Type PRINT_STRING_TYPE;
+extern Type PRINT_CHAR_TYPE;
 // intrinsic
 extern Type STRING_EQ_TYPE;
 

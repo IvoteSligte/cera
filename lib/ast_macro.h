@@ -7,6 +7,7 @@
 #define NODE_integer aINTEGER
 #define NODE_boolean aBOOLEAN
 #define NODE_string aSTRING
+#define NODE_character aCHARACTER
 #define NODE_unary aUNARY
 #define NODE_binary aBINARY
 #define NODE_func_call aFUNC_CALL

@@ -6,7 +6,6 @@ codebase:
     integer type inference based on declared type (similar to `untyped integer` in Go)
     enums (without payloads)
     arrays
-    chars (unicode codepoints)
     type aliases
     explicit integer casts
     if-return, if-continue, if-break shorthands
@@ -20,7 +19,7 @@ codebase:
     remove VLAs
     equality operator for structs?
     make cross-platform (for starters, see "TODO: cross-platform" in code)
-    unicode input
+    unicode in chars/strings
     no naming conflicts between variables, types, and modules
     deduplicate string literals
     public/private globals
