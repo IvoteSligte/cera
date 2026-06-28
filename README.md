@@ -4,8 +4,8 @@ Cera is a general purpose programming language. This repository holds its compil
 
 ## Dependencies
 
-GNU C11
-LLVM
+- GNU C11
+- LLVM
 
 ### Debugging
 
