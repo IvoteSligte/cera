@@ -1,0 +1,29 @@
+func malloc(size: uint);
+func free(size: uint);
+func strlen(str: i8*) -> uint;
+
+// Allocates a C string on the heap with the contents of a Cera string.
+// Must be freed with `free`.
+func to_c_str(str: string) -> i8* {
+    c_str := malloc(str.len + 1);
+    for i, c in str {
+         c_str[i] = c;
+    }
+    c_str[str.len] = '\0'.(i8);
+    return c_s;
+}
+
+// Allocates a Cera string on the heap with the contents of a C string.
+// Must be freed with `free_str`.
+func from_c_str(c_str: i8*) -> string {
+    len := strlen(c_str);
+    data := malloc(len);
+    for i in 0--len {
+         data[i] = c_str[i].(u8);
+    }
+    return string.{data, len};
+}
+
+func free_str(str: string) {
+    free(str.data);
+}

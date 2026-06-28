@@ -1,5 +1,7 @@
 
 codebase:
+    string indexing
+    string pointer and length access
     null (pointer)
     explicit variable declaration types
     string slices
@@ -8,7 +10,7 @@ codebase:
     enums (without payloads)
     arrays
     type aliases
-    explicit integer casts
+    explicit integer (and char) casts
     if-return, if-continue, if-break shorthands
     modules
     switch/match
