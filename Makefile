@@ -33,6 +33,11 @@ libcera.a: $(OBJ)
 
 lib: libcera.a
 
+std.o: debug
+	./debug std.ce -c -o std.o
+
+std: std.o
+
 cera-ls: libcera.a
 	cd lsp && cargo build && cp target/debug/cera-ls ..
 
@@ -46,7 +51,7 @@ clean:
 	rm -f debug test
 	cd lsp && rm -f cera-lsp && cargo clean
 
-.PHONY: clean format lib lsp cera-ls
+.PHONY: clean format lib std lsp cera-ls
 
 -include $(DEP)
 
