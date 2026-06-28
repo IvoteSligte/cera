@@ -6,7 +6,8 @@ codebase:
     integer type inference based on declared type (similar to `untyped integer` in Go)
     enums (without payloads)
     arrays
-    chars
+    chars (unicode codepoints)
+    type aliases
     explicit integer casts
     if-return, if-continue, if-break shorthands
     modules
