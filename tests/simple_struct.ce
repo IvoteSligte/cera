@@ -3,7 +3,7 @@
 struct Config {
     one: bool,
     two: int,
-    three: string,
+    three: str,
 }
 func main() {
     config := Config.{
@@ -11,7 +11,7 @@ func main() {
         two: 10,
         three: "three",
     };
-    print_bool(config.one); print_string("\n");
-    print_int(config.two); print_string("\n");
-    print_string(config.three); print_string("\n");
+    print_bool(config.one); print_str("\n");
+    print_int(config.two); print_str("\n");
+    print_str(config.three); print_str("\n");
 }

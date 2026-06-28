@@ -234,7 +234,7 @@ ANALYZER(string, {
     value.length++;
   }
   string->value = value;
-  node->type = PRIM_TYPE(STRING);
+  node->type = PRIM_TYPE(STR);
   OK;
 })
 
@@ -375,13 +375,13 @@ ANALYZER(ptr_type, {
 
 ANALYZER(index_op, {
   ANALYZE(index_op->expr, expr);
-  EXPECT(IS_ONE_OF(expr_type.kind, tySTRING, tyARRAY), index_op->expr,
+  EXPECT(IS_ONE_OF(expr_type.kind, tySTR, tyARRAY), index_op->expr,
          ssprintf("cannot index type %s", type_name(expr_type.kind)));
   ANALYZE(index_op->index, index);
   EXPECT(is_integer(index_type.kind), index_op->index,
          ssprintf("can only use integer type as index, not %s",
                   type_name(index_type.kind)));
-  if (expr_type.kind == tySTRING) {
+  if (expr_type.kind == tySTR) {
     node->type = PRIM_TYPE(U8);
   } else {
     assert(expr_type.kind == tyARRAY);

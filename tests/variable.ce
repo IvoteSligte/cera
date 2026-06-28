@@ -4,6 +4,6 @@ GLOBAL := "This is a global!\n";
 
 func main() {
     local := "This is a local!\n";
-    print_string(GLOBAL);
-    print_string(local);
+    print_str(GLOBAL);
+    print_str(local);
 }

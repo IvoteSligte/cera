@@ -24,10 +24,10 @@ typedef struct {
 typedef struct {
   LLVMValueRef print_bool;
   LLVMValueRef print_int;
-  LLVMValueRef print_string;
+  LLVMValueRef print_str;
   LLVMValueRef print_char;
   LLVMValueRef print_byte;
-  LLVMValueRef __string_eq;
+  LLVMValueRef __str_eq;
 } LLVMBuiltins;
 
 typedef struct State {
@@ -189,7 +189,7 @@ void generate_node(State *state, Node *node) {
           LLVMConstGEP2(data_type, data_global, indices, 2),
           LLVMConstInt(state->prim._int, string->value.length, false)};
       free(text);
-      node->llvm_value = LLVMConstNamedStruct(state->prim.string, value, 2);
+      node->llvm_value = LLVMConstNamedStruct(state->prim.str, value, 2);
     });
     CASE(character, {
       node->llvm_value = LLVMConstInt(state->prim.i32, character->value, false);
@@ -224,10 +224,10 @@ void generate_node(State *state, Node *node) {
           node->llvm_value =
               BUILD(ICmp, LLVMIntEQ, left_value, right_value, "");
         } else {
-          assert(binary->left->type.kind == tySTRING);
+          assert(binary->left->type.kind == tySTR);
           LLVMValueRef args[2] = {left_value, right_value};
-          node->llvm_value = BUILD(Call2, TO_LLVM_TYPE(STRING_EQ_TYPE),
-                                   state->builtin.__string_eq, args, 2, "");
+          node->llvm_value = BUILD(Call2, TO_LLVM_TYPE(STR_EQ_TYPE),
+                                   state->builtin.__str_eq, args, 2, "");
         }
         break;
       case tBANG_EQ: {
@@ -256,8 +256,8 @@ void generate_node(State *state, Node *node) {
         case bPRINT_INT:
           fn = state->builtin.print_int;
           break;
-        case bPRINT_STRING:
-          fn = state->builtin.print_string;
+        case bPRINT_STR:
+          fn = state->builtin.print_str;
           break;
         case bPRINT_CHAR:
           fn = state->builtin.print_char;
@@ -480,10 +480,10 @@ LLVMBuiltins add_builtins(LLVMContextRef ctx, LLVMModuleRef mod,
   LLVMBuiltins builtin = {0};
   ADD_BUILTIN_FUNCTION(print_bool, PRINT_BOOL_TYPE);
   ADD_BUILTIN_FUNCTION(print_int, PRINT_INT_TYPE);
-  ADD_BUILTIN_FUNCTION(print_string, PRINT_STRING_TYPE);
+  ADD_BUILTIN_FUNCTION(print_str, PRINT_STR_TYPE);
   ADD_BUILTIN_FUNCTION(print_char, PRINT_CHAR_TYPE);
   ADD_BUILTIN_FUNCTION(print_byte, PRINT_BYTE_TYPE);
-  ADD_BUILTIN_FUNCTION(__string_eq, STRING_EQ_TYPE);
+  ADD_BUILTIN_FUNCTION(__str_eq, STR_EQ_TYPE);
   return builtin;
 }
 
@@ -533,7 +533,7 @@ LLVMModuleRef generate_llvm(LLVMContextRef ctx, AST *ast) {
       .i64 = LLVMInt64TypeInContext(ctx),
       ._int = _int,
       .ptr = ptr,
-      .string = string,
+      .str = string,
   };
   State state = {.ctx = ctx,
                  .mod = mod,

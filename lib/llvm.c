@@ -74,8 +74,8 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, LLVMPrimitives prim, Type type) {
     return prim._int;
   case tyBOOL:
     return prim._bool;
-  case tySTRING:
-    return prim.string;
+  case tySTR:
+    return prim.str;
   case tyPTR:
   case tyARRAY:
     return LLVMPointerType(to_llvm_type(ctx, prim, *type.pointee_type), 0);

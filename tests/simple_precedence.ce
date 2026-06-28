@@ -1,6 +1,6 @@
 // OUTPUT: "true\nfalse\n"
 
 func main() {
-    print_bool(10 * 2 == 20); print_string("\n");
-    print_bool(!true && !false); print_string("\n");
+    print_bool(10 * 2 == 20); print_str("\n");
+    print_bool(!true && !false); print_str("\n");
 }
