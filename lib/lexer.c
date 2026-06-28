@@ -226,6 +226,7 @@ void print_lex_error(LexError error) {
 
 void get_lex_error_info(LexError error, CompileError *out) {
   OffsetInfo oi = get_offset_info(error.source, error.offset);
+  out->offset = error.offset;
   out->length = 1;
   out->line = oi.line_number;
   out->column = oi.column_number;

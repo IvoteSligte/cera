@@ -627,18 +627,17 @@ void print_parse_error(const char *source, TokenStream stream,
 
 void get_parse_error_info(const char *source, TokenStream stream,
                           ParseError error_data, CompileError *out) {
-  size_t offset = 0;
   if (error_data.first_unparsed_token == stream.length) {
     out->message = strdup("unexpected EOF");
-    offset = strlen(source);
+    out->offset = strlen(source);
     out->length = 1;
   } else {
     out->message = strdup("unexpected token");
     Token token = stream.data[error_data.first_unparsed_token];
-    offset = token.offset;
+    out->offset = token.offset;
     out->length = token.length;
   }
-  OffsetInfo oi = get_offset_info(source, offset);
+  OffsetInfo oi = get_offset_info(source, out->offset);
   out->line = oi.line_number;
   out->column = oi.column_number;
 }

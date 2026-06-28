@@ -17,11 +17,6 @@
 typedef CompileError Error;
 typedef CompileErrors Errors;
 
-Error new_error(char *message, size_t line, size_t column, size_t length) {
-  return (Error){
-      .message = message, .line = line, .column = column, .length = length};
-}
-
 void push_error(Errors *errors, Error error) {
   errors->data = realloc(errors->data, sizeof(Error) * (errors->length + 1));
   errors->data[errors->length] = error;
@@ -95,7 +90,8 @@ Errors compile_and_run(const char *source) {
     REMOVE_TEMP_FILES;
     return errors;
   }
-  if (!link_to_executable((const char **)&object_file, 1, exec_file)) {
+  const char *object_files[] = {object_file};
+  if (!link_to_executable(object_files, 1, exec_file)) {
     REMOVE_TEMP_FILES;
     return (Errors){0};
   }
@@ -122,7 +118,9 @@ Errors diagnose(const char *source) {
   return errors;
 }
 
-static bool is_empty_string(const char *s) { return s == NULL || s[0] == '\0'; }
+static bool is_empty_string(const char *s) {
+  return (s == NULL) || (s[0] == '\0');
+}
 
 // TODO: make these paths relative to the Cera compiler installation directory
 #define STARTUP_PATH "startup.c"

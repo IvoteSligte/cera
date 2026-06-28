@@ -114,7 +114,7 @@ int main(int argc, const char *argv[]) {
     }
     CompileErrors errors = compile_to_object_file(source, object_file);
     if (errors.length > 0) {
-      print_compile_errors(errors);
+      print_compile_errors(source, errors);
       free_compile_errors(&errors);
       REMOVE_TEMP_FILE;
       free(source);
@@ -126,10 +126,6 @@ int main(int argc, const char *argv[]) {
   // buffer
   args.linker_files[args.num_linker_files] = object_file;
   args.num_linker_files += 1;
-
-  for (size_t i = 0; i < args.num_linker_files; i++) { // TEMP
-    eprintf("linker file[%zu] = %s\n", i, args.linker_files[i]);
-  }
 
   if (!args.compile_only &&
       !link_to_executable(args.linker_files, args.num_linker_files,

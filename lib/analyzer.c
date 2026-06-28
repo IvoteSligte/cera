@@ -650,6 +650,7 @@ void get_analyze_error_info(const char *source, AnalyzeError error,
   out->line = oi.line_number;
   out->column = oi.column_number;
   out->length = error.span.length;
+  out->offset = error.span.offset;
 }
 
 void free_analyze_errors(AnalyzeErrorArray *type_errors) {

@@ -3,6 +3,8 @@
 #include <stddef.h>
 
 typedef struct CompileError {
+  // Offset in characters from the start of the file.
+  size_t offset;
   // One-based line number.
   size_t line;
   // Zero-based column number.
@@ -17,8 +19,8 @@ typedef struct {
   size_t length;
 } CompileErrors;
 
-void print_compile_error(CompileError error);
-void print_compile_errors(CompileErrors errors);
+void print_compile_error(const char* source, CompileError error);
+void print_compile_errors(const char* source, CompileErrors errors);
 
 void free_compile_error(CompileError *error);
 void free_compile_errors(CompileErrors* errors);

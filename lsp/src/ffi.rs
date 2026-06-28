@@ -3,6 +3,8 @@ use core::ffi::c_char;
 #[repr(C)]
 #[derive(Debug)]
 pub struct CompileError {
+    // Offset in characters from the start of the file.
+    pub offset: usize,
     // One-based line number.
     pub line: usize,
     // Zero-based column number.

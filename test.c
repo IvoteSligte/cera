@@ -41,7 +41,7 @@ bool test(const char *source) {
 
   CompileErrors errors = compile_and_run(source);
   if (errors.length > 0) {
-    print_compile_errors(errors);
+    print_compile_errors(source, errors);
     free_ast(&ast);
     free_compile_errors(&errors);
     return false;
