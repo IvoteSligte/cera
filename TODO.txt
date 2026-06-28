@@ -1,6 +1,5 @@
 
 codebase:
-    string indexing
     string pointer and length access
     null (pointer)
     explicit variable declaration types

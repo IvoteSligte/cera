@@ -7,11 +7,11 @@ func set(ptr: int*, value: int) {
 func main() {
     x := 182;
     x_ptr := x*;
-    print_int(x); print_string("\n");
+    print_int(x); print_str("\n");
     x = 200;
-    print_int(x_ptr.); print_string("\n");
+    print_int(x_ptr.); print_str("\n");
     x_ptr. = 999;
-    print_int(x); print_string("\n");
+    print_int(x); print_str("\n");
     set(x_ptr, 70);
-    print_int(x); print_string("\n");
+    print_int(x); print_str("\n");
 }

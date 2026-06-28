@@ -2,8 +2,13 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
 
-#include "builtin.h"
+typedef struct {
+  char *text;
+  int64_t length;
+} str;
 
 // Converts a UTF-32 codepoint (uint32_t) to UTF-8 characters (char).
 static size_t encode_utf8(uint32_t c, char out[4]) {
@@ -36,8 +41,8 @@ void print_bool(bool b) { printf("%s", b ? "true" : "false"); }
 
 void print_int(int64_t n) { printf("%ld", n); }
 
-void print_string(CeamString string) {
-  fwrite(string.text, 1, string.length, stdout);
+void print_str(str string) {
+  printf("%.*s", (int)string.length, string.text);
 }
 
 void print_char(uint32_t c) {
@@ -47,11 +52,10 @@ void print_char(uint32_t c) {
 }
 
 void print_byte(uint8_t b) {
-  fprintf(stderr, "byte: 0x%02x\n", b);
   fputc(b, stdout);
 }
 
-bool __string_eq(CeamString left, CeamString right) {
+bool __str_eq(str left, str right) {
   return left.length == right.length &&
          (memcmp(left.text, right.text, left.length) == 0);
 }

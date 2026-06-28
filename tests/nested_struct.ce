@@ -19,8 +19,8 @@ func main() {
         },
     };
     print_int(vehicle.car.speed);
-    print_string(" ");
+    print_str(" ");
     print_int(vehicle.car.mileage);
-    print_string(" ");
+    print_str(" ");
     print_bool(vehicle.can_fly);
 }

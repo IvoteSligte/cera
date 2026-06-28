@@ -73,7 +73,7 @@ typedef enum {
   tyU64,
   tyUINT,
   // other
-  tySTRING,
+  tySTR,
   tyCHAR, // 32-bit unicode character
   tyPTR,
   tyFUNCTION,
@@ -101,12 +101,12 @@ typedef enum {
   bU64,
   bUINT,
   // other
-  bSTRING,
+  bSTR,
   bCHAR,
   // functions
   bPRINT_BOOL,
   bPRINT_INT,
-  bPRINT_STRING,
+  bPRINT_STR,
   bPRINT_CHAR,
   bPRINT_BYTE,  
 } BuiltinID;
@@ -374,11 +374,11 @@ bool get_symbol(ExternMod *extern_mod, SymbolTable *table, Name name,
 
 extern Type PRINT_BOOL_TYPE;
 extern Type PRINT_INT_TYPE;
-extern Type PRINT_STRING_TYPE;
+extern Type PRINT_STR_TYPE;
 extern Type PRINT_CHAR_TYPE;
 extern Type PRINT_BYTE_TYPE;
 // intrinsic
-extern Type STRING_EQ_TYPE;
+extern Type STR_EQ_TYPE;
 
 bool is_integer(TypeKind type);
 bool is_numeric(TypeKind type);

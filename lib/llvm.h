@@ -16,7 +16,7 @@ typedef struct {
   LLVMTypeRef _int;
   LLVMTypeRef _bool;
   LLVMTypeRef ptr;
-  LLVMTypeRef string;
+  LLVMTypeRef str;
 } LLVMPrimitives;
 
 void llvm_init(void);

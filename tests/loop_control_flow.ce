@@ -3,11 +3,11 @@
 func main() {
     for i := 0; i < 2; i += 1; {
         continue;
-        print_string("after continue\n");
+        print_str("after continue\n");
     }
     while true; {
         break;
-        print_string("after break\n");
+        print_str("after break\n");
     }
-    print_string("finished");
+    print_str("finished");
 }

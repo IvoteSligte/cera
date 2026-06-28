@@ -4,8 +4,8 @@ func strlen(str: i8*) -> uint;
 
 // Allocates a C string on the heap with the contents of a Cera string.
 // Must be freed with `free`.
-func to_c_str(str: string) -> i8* {
-    c_str := malloc(str.len + 1);
+func to_c_str(str: str) -> i8* {
+    c_str: i8* = malloc(str.len + 1);
     for i, c in str {
          c_str[i] = c;
     }
@@ -15,15 +15,15 @@ func to_c_str(str: string) -> i8* {
 
 // Allocates a Cera string on the heap with the contents of a C string.
 // Must be freed with `free_str`.
-func from_c_str(c_str: i8*) -> string {
+func from_c_str(c_str: i8*) -> str {
     len := strlen(c_str);
     data := malloc(len);
     for i in 0--len {
          data[i] = c_str[i].(u8);
     }
-    return string.{data, len};
+    return str.{data, len};
 }
 
-func free_str(str: string) {
+func free_str(str: str) {
     free(str.data);
 }

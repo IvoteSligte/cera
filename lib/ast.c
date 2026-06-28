@@ -74,7 +74,7 @@ const char *type_name(TypeKind kind) {
     N(U64);
     N(UINT);
     // other
-    N(STRING);
+    N(STR);
     N(CHAR);
     N(PTR);
     N(FUNCTION);

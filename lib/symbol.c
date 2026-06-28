@@ -8,7 +8,7 @@ DEF_PRIM_TYPE(TYPE);
 DEF_PRIM_TYPE(VOID);
 DEF_PRIM_TYPE(INT);
 DEF_PRIM_TYPE(BOOL);
-DEF_PRIM_TYPE(STRING);
+DEF_PRIM_TYPE(STR);
 DEF_PRIM_TYPE(CHAR);
 DEF_PRIM_TYPE(U8);
 
@@ -19,15 +19,14 @@ DEF_FUNCTION_TYPE(PRINT_BOOL_TYPE, {.params = {.data = &BOOL_TYPE, .length = 1},
                                     ._return = &VOID_TYPE});
 DEF_FUNCTION_TYPE(PRINT_INT_TYPE, {.params = {.data = &INT_TYPE, .length = 1},
                                    ._return = &VOID_TYPE});
-DEF_FUNCTION_TYPE(PRINT_STRING_TYPE,
-                  {.params = {.data = &STRING_TYPE, .length = 1},
-                   ._return = &VOID_TYPE});
+DEF_FUNCTION_TYPE(PRINT_STR_TYPE, {.params = {.data = &STR_TYPE, .length = 1},
+                                   ._return = &VOID_TYPE});
 DEF_FUNCTION_TYPE(PRINT_CHAR_TYPE, {.params = {.data = &CHAR_TYPE, .length = 1},
                                     ._return = &VOID_TYPE});
 DEF_FUNCTION_TYPE(PRINT_BYTE_TYPE, {.params = {.data = &U8_TYPE, .length = 1},
                                     ._return = &VOID_TYPE});
-static Type TWO_STRINGS[2] = {PRIM_TYPE(STRING), PRIM_TYPE(STRING)};
-DEF_FUNCTION_TYPE(STRING_EQ_TYPE, {.params = {.data = TWO_STRINGS, .length = 2},
+static Type TWO_STRS[2] = {PRIM_TYPE(STR), PRIM_TYPE(STR)};
+DEF_FUNCTION_TYPE(STR_EQ_TYPE, {.params = {.data = TWO_STRS, .length = 2},
                                    ._return = &BOOL_TYPE});
 
 // not using #$name because it maps bool -> "_Bool" instead of "bool" as
@@ -44,7 +43,7 @@ DEF_FUNCTION_TYPE(STRING_EQ_TYPE, {.params = {.data = TWO_STRINGS, .length = 2},
 bool get_builtin(Name name, Type *out_type, BuiltinID *out_builtin) {
   MATCH("print_bool", PRINT_BOOL, PRINT_BOOL_TYPE);
   MATCH("print_int", PRINT_INT, PRINT_INT_TYPE);
-  MATCH("print_string", PRINT_STRING, PRINT_STRING_TYPE);
+  MATCH("print_str", PRINT_STR, PRINT_STR_TYPE);
   MATCH("print_char", PRINT_CHAR, PRINT_CHAR_TYPE);
   MATCH("print_byte", PRINT_BYTE, PRINT_BYTE_TYPE);
   MATCH_TYPE("void", VOID);
@@ -62,7 +61,7 @@ bool get_builtin(Name name, Type *out_type, BuiltinID *out_builtin) {
   MATCH_TYPE("u64", U64);
   MATCH_TYPE("uint", UINT);
   // other
-  MATCH_TYPE("string", STRING);
+  MATCH_TYPE("str", STR);
   MATCH_TYPE("char", CHAR);
   return false;
 }
@@ -77,7 +76,7 @@ bool builtin_to_type(BuiltinID builtin, Type *out_builtin_type) {
     TO_TYPE(VOID);
     TO_TYPE(INT);
     TO_TYPE(BOOL);
-    TO_TYPE(STRING);
+    TO_TYPE(STR);
   default:
     return false;
   }
