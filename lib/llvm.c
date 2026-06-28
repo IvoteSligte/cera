@@ -1,9 +1,3 @@
-#include <llvm-c/Analysis.h>
-#include <llvm-c/ExecutionEngine.h>
-#include <llvm-c/IRReader.h>
-#include <llvm-c/Linker.h>
-#include <llvm-c/Support.h>
-#include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
 
 #include "ast_macro.h"
@@ -35,7 +29,6 @@ void llvm_init(void) {
   if (LLVMInitializeNativeAsmParser()) {
     panicf("Failed to initialize LLVM native ASM parser.");
   }
-  // NOTE: target-related calls are only needed for Object file compilation
   LLVMInitializeAllTargetInfos(); // no Native equivalent for this
   if (LLVMInitializeNativeTarget()) {
     panicf("Failed to initialize LLVM native target.");
@@ -114,36 +107,6 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, LLVMPrimitives prim, Type type) {
   panicf("not a type. kind int: %d", type.kind);
 }
 
-// Takes ownership of the passed module.
-void llvm_run(LLVMModuleRef mod) {
-  eprintf("Starting LLVM-to-machine-code compilation.\n");
-  auto main_fn = LLVMGetNamedFunction(mod, "_main");
-  if (main_fn == NULL) {
-    panicf("Tried to evaluate module without main function.");
-  }
-  llvm_init();
-
-  eprintf("Creating LLVM execution engine for module.\n");
-  LLVMExecutionEngineRef engine = NULL;
-  char *error = NULL;
-  // Takes ownership of mod.
-  if (LLVMCreateExecutionEngineForModule(&engine, mod, &error)) {
-    panicf("Failed to create LLVM execution engine. Error: %s", error);
-  }
-  LLVMDisposeMessage(error);
-  eprintf("Finished creating LLVM execution engine.\n");
-
-  eprintf("Trying to get main function pointer.\n");
-  void (*main_ptr)(void) = LLVMGetPointerToGlobal(engine, main_fn);
-  if (main_ptr == NULL) {
-    panicf("Failed to get pointer to main function in module.");
-  }
-  eprintf("Extracted main function pointer. Running.\n");
-  main_ptr();
-
-  LLVMDisposeExecutionEngine(engine);
-}
-
 // TODO: convert these to compiler arguments
 #define OPT_LEVEL 0
 #define RELOC_MODE LLVMRelocDefault
@@ -178,19 +141,6 @@ LLVMTargetMachineRef llvm_create_target_machine(LLVMModuleRef mod) {
   LLVMDisposeMessage(cpu_name);
   LLVMDisposeMessage(cpu_features);
   return target_machine;
-}
-
-void llvm_compile_to_buffer(LLVMModuleRef mod, LLVMMemoryBufferRef *buffer) {
-  auto target_machine = llvm_create_target_machine(mod);
-  char *error = NULL;
-  if (LLVMTargetMachineEmitToMemoryBuffer(target_machine, mod, LLVMObjectFile,
-                                          &error, buffer)) {
-    LLVMDisposeTargetMachine(target_machine);
-    panicf("Failed to emit machine code to memory buffer. Error: %s", error);
-  }
-  if (error != NULL)
-    LLVMDisposeMessage(error);
-  LLVMDisposeTargetMachine(target_machine);
 }
 
 void llvm_compile_to_file(LLVMModuleRef mod, const char *filename) {

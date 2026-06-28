@@ -246,7 +246,7 @@ int main(int argc, const char *argv[]) {
       // FIXME: when options.show_logs is true the status code is always 0?
       char *cmd = options.show_logs
                       ? ssprintf("timeout 1 %s --file %s", argv[0], path)
-                      : ssprintf("timeout 1 %s --file %s 2>/tmp/cera-test-%s",
+                      : ssprintf("timeout 1 %s --file %s 2>/tmp/cera-test-%s.log",
                                  argv[0], path, name);
       FILE *stdout = popen(cmd, "r"); // TODO: cross-platform
       free(cmd);

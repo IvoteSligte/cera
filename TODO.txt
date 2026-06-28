@@ -1,6 +1,5 @@
 
 codebase:
-    C interoperation (forward declarations)
     null (pointer)
     explicit variable declaration types
     string slices

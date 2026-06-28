@@ -4,10 +4,10 @@
 #include "lexer.h"
 #include "llvm.h"
 #include "parser.h"
+#include "util.h"
 
 #ifdef __linux__
-#include <sys/wait.h>
-#include <unistd.h>
+#include <sys/stat.h>
 /* #elif _WIN32_ */
 /* TODO */
 #else
@@ -65,19 +65,6 @@ bool parse_and_analyze(const char *source, AST *out_ast, Errors *out_errors) {
   return true;
 }
 
-Errors compile_and_run(const char *source) {
-  Errors errors = {0};
-  AST ast = {0};
-  if (parse_and_analyze(source, &ast, &errors)) {
-    LLVMContextRef ctx = LLVMContextCreate();
-    LLVMModuleRef mod = generate_llvm(ctx, &ast);
-    llvm_run(mod); // takes ownership of the module
-    LLVMContextDispose(ctx);
-  }
-  free_ast(&ast);
-  return errors;
-}
-
 Errors compile_to_object_file(const char *source, const char *output_file) {
   Errors errors = {0};
   AST ast = {0};
@@ -90,6 +77,41 @@ Errors compile_to_object_file(const char *source, const char *output_file) {
   }
   free_ast(&ast);
   return errors;
+}
+
+#define REMOVE_TEMP_FILES                                                      \
+  remove(object_file);                                                         \
+  remove(exec_file)
+
+Errors compile_and_run(const char *source) {
+  char object_file[] = "/tmp/cera-XXXXXX.o";
+  char exec_file[] = "/tmp/cera-XXXXXX";
+  if (!create_temp_file(object_file) || !create_temp_file(exec_file)) {
+    REMOVE_TEMP_FILES;
+    panicf("TODO: handle temp file creation failure");
+  }
+  Errors errors = compile_to_object_file(source, object_file);
+  if (errors.length > 0) {
+    REMOVE_TEMP_FILES;
+    return errors;
+  }
+  if (!link_to_executable((const char **)&object_file, 1, exec_file)) {
+    REMOVE_TEMP_FILES;
+    return (Errors){0};
+  }
+  // Give user read|write|execute permissions.
+  if (chmod(exec_file, S_IRUSR | S_IWUSR | S_IXUSR) != 0) {
+    REMOVE_TEMP_FILES;
+    pprintf("Failed to make file executable.");
+    // NOTE: should this just crash because of how unlikely it is?
+    panicf("TODO: handle file chmod failure");
+  }
+  const char *argv[] = {exec_file, NULL};
+  // NOTE: should command status be handled? maybe returned so the running
+  // program can give the same status?
+  run_command(argv);
+  REMOVE_TEMP_FILES;
+  return (Errors){0};
 }
 
 Errors diagnose(const char *source) {
@@ -106,36 +128,36 @@ static bool is_empty_string(const char *s) { return s == NULL || s[0] == '\0'; }
 #define STARTUP_PATH "startup.c"
 #define BUILTIN_PATH "lib/builtin.c"
 
-bool link_to_binary(const char *object_file, const char *output_file) {
+bool link_to_executable(const char **object_files, size_t num_object_files,
+                        const char *output_file) {
   eprintf("Linking to binary.\n");
-  assert(!is_empty_string(object_file));
   assert(!is_empty_string(output_file));
 
-  // TODO: cross-platform way to call system C compiler
-  pid_t pid = fork();
-  if (pid == 0) {
-    char *const argv[] = {
-        "cc", STARTUP_PATH,        BUILTIN_PATH, strdup(object_file),
-        "-o", strdup(output_file), NULL};
-    execvp("cc", argv); // can fail if cc is not in PATH
-    pprintf("Failed to link to binary using system C compiler.");
-    exit(1);
+  size_t argc = 5 + num_object_files;
+  const char **argv = calloc(argc + 1, sizeof(char *)); // +1 for trailing NULL
+  argv[0] = "cc";
+  argv[1] = STARTUP_PATH;
+  argv[2] = BUILTIN_PATH;
+  argv[3] = "-o";
+  argv[4] = output_file;
+
+  for (size_t i = 0; i < num_object_files; i++) {
+    const char *object_file = object_files[i];
+    assert(!is_empty_string(object_file));
+    argv[5 + i] = object_file;
   }
-  int status = 0;
-  if (waitpid(pid, &status, 0) == -1) {
-    panicf("Failed to wait for system C compiler to finish linking.");
+  eprintf("Linker command:");
+  for (size_t i = 0; i < argc; i++) {
+    eprintf(" %s", argv[i]);
   }
-  if (WEXITSTATUS(status) != 0) {
-    if (WIFSIGNALED(status)) {
-      eprintf("Failed to link to binary. System C compiler was terminated by "
-              "signal: %d\n",
-              WTERMSIG(status));
-    } else {
-      eprintf("Failed to link to binary. System C compiler exit status: %d\n",
-              WEXITSTATUS(status));
-    }
+  eprintf("\n");
+
+  int status = run_command(argv);
+  free(argv);
+  if (status != 0) {
+    eprintf("Failed to link using system C compiler. Exit status: %d\n",
+            status);
     return false;
   }
-  eprintf("Successfully linked to binary.\n");
   return true;
 }

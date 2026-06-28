@@ -4,6 +4,7 @@
 #ifdef __linux__
 
 #include <execinfo.h> // for backtrace
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define MAX_FRAMES 64
@@ -97,4 +98,50 @@ char *ssprintf(const char *fmt, ...) {
 
 bool str_eq(const char *left, const char *right) {
   return strcmp(left, right) == 0;
+}
+
+bool str_ends_with(const char *s, const char *suffix) {
+  size_t s_len = strlen(s);
+  size_t suffix_len = strlen(suffix);
+  if (s_len < suffix_len)
+    return false;
+  return str_eq(&s[s_len - suffix_len], suffix);
+}
+
+void str_array_remove(const char **array, size_t *length, size_t rm_index) {
+  assert(*length > 0);
+  *length -= 1;
+  for (size_t i = rm_index; i < *length; i++) {
+    array[i] = array[i + 1];
+  }
+}
+
+bool create_temp_file(char *file_name_template) {
+  // TODO: cross-platform
+  const char *xxxxxx = strstr(file_name_template, "XXXXXX");
+  assert(xxxxxx != NULL);
+  size_t suffix_len = strchr(file_name_template, '\0') - (xxxxxx + 6);
+  int file_descriptor = mkstemps(file_name_template, suffix_len);
+  if (file_descriptor == -1) {
+    pprintf("Failed to create temporary file.");
+    return false;
+  }
+  close(file_descriptor); // file still exists after closing
+  return true;
+}
+
+int run_command(const char *const argv[]) {
+  // TODO: cross-platform
+  pid_t pid = fork();
+  if (pid == 0) {
+    execvp(argv[0], (char **)argv); // can fail if cc is not in PATH
+    pprintf("Failed to execute command.");
+    exit(1); // kill child process
+  }
+  int status = 0;
+  if (waitpid(pid, &status, 0) == -1) {
+    pprintf("Failed to wait for command execution to finish.");
+    return 1;
+  }
+  return WEXITSTATUS(status);
 }

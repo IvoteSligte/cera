@@ -42,6 +42,21 @@ char *ssprintf(const char *fmt, ...);
 // Compares strings for equality.
 bool str_eq(const char *left, const char *right);
 
+// Returns true if string S ends with SUFFIX.
+bool str_ends_with(const char *s, const char *suffix);
+
+// Removes an element from an array of strings, preserving order.
+void str_array_remove(const char **array, size_t *length, size_t rm_index);
+
+// Creates a temporary file with a random name following FILE_NAME_TEMPLATE.
+// FILE_NAME_TEMPLATE must be of the form "prefixXXXXXXsuffix".
+// The X's are replaced by this function.
+bool create_temp_file(char* file_name_template);
+
+// Runs a command, waiting for completion and returning its status.
+// Example argv: { "ls", "-l", "NULL" }
+int run_command(const char* const argv[]);
+
 #define UNUSED(x) (void)(x)
 
 #define _GET_MACRO(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, NAME,    \

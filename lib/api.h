@@ -5,12 +5,14 @@
 
 bool parse_and_analyze(const char *source, AST *out_ast,
                        CompileErrors *out_errors);
-CompileErrors compile_and_run(const char *source);
 CompileErrors compile_to_object_file(const char *source,
                                      const char *output_file);
+CompileErrors compile_and_run(const char *source);
 
 // Parse and analyze the given code, but do not return the AST.
 CompileErrors diagnose(const char *source);
 
-// Links an object file with the standard library and libc, producing a binary.
-bool link_to_binary(const char *object_file, const char *output_file);
+// Links object files with the standard library and libc, producing an
+// executable binary file.
+bool link_to_executable(const char **object_files, size_t num_object_files,
+                        const char *output_file);

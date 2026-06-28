@@ -15,100 +15,128 @@
 
 // --- end CLI args ---
 
-#define CLEAN_OBJECT_FILE                                                      \
-  if (object_file_desc != 0) {                                                 \
-    close(object_file_desc);                                                   \
-    remove(object_file);                                                       \
-  }
-
 static const char *const USAGES[] = {"cerac [options] [[--] args]",
                                      "cerac [options]", NULL};
 
 typedef struct {
-  bool run;
+  bool compile_only;
   const char *output_file;
-  const char *package_type;
-  const char **input_files;
-  int num_input_files;
+  const char *code_file; // nullable
+  const char **linker_files;
+  size_t num_linker_files;
 } Args;
 
+// Modifies argv.
 Args parse_args(int argc, const char *argv[]) {
   Args args = {0};
   // short_name, long_name, value, help, callback, data, flags
   struct argparse_option options[] = {
       OPT_HELP(),
-      OPT_BOOLEAN('r', "run", &args.run,
-                  "Run the code instead of emitting an object file.", NULL, 0,
-                  0),
+      OPT_BOOLEAN(
+          'c', "compile-only", &args.compile_only,
+          "Only compile to an object file instead of to an executable binary.",
+          NULL, 0, 0),
       OPT_STRING('o', "output", &args.output_file, "Output file.", NULL, 0, 0),
-      OPT_STRING('t', "package-type", &args.package_type,
-                 "The type of package the compiler should emit. Either bin or "
-                 "lib. (default: lib)",
-                 NULL, 0, 0),
       OPT_END(),
   };
   struct argparse argparse;
   argparse_init(&argparse, options, USAGES, 0);
   argparse_describe(&argparse, "Compiler for the Cera programming language.",
                     "");
-  args.num_input_files = argparse_parse(&argparse, argc, argv);
-  args.input_files = argv;
+
+  args.num_linker_files = argparse_parse(&argparse, argc, argv);
+  args.linker_files = argv;
+  if (args.num_linker_files == 0) {
+    eprintf("Missing input files. Use --help for more information.\n");
+    exit(1);
+  }
+  for (size_t i = 0; i < args.num_linker_files;) {
+    const char *file = args.linker_files[i];
+
+    if (str_ends_with(file, FILE_EXTENSION)) {
+      if (args.code_file != NULL) {
+        // The compiler automatically discovers (implementation) files in a
+        // project, unlike C compilers.
+        // The compiler should be invoked once using --compile-only per library
+        // to compile, which allows linking the object files with another Cera
+        // package to produce a final binary.
+        eprintf("Only one Cera file may be provided as input.\n");
+        exit(1);
+      }
+      args.code_file = file;
+
+      // remove code_file from linker_files
+      str_array_remove(args.linker_files, &args.num_linker_files, i);
+      // do not increment i here because the next file to inspect was moved 1
+      // down the list
+      continue;
+    }
+    if (!str_ends_with(file, ".o") &&
+        !str_ends_with(file, ".obj")) { // object file extensions
+      // TODO: detect other common file extensions, such as for static
+      // libraries.
+      eprintf("%s: Unknown file extension. Forwarding file to linker instead "
+              "of compiling.\n",
+              file);
+    }
+    i++;
+  }
+  if (args.output_file == NULL) {
+    eprintf("Missing output file. Use --help for more information.\n");
+    exit(1);
+  }
+  // TODO: check if input files exist
   return args;
 }
+
+#define REMOVE_TEMP_FILE                                                       \
+  if (object_file == temp_object_file) {                                       \
+    remove(object_file);                                                       \
+  }
 
 int main(int argc, const char *argv[]) {
   Args args = parse_args(argc, argv);
 
-  if (!args.run && strcmp(args.output_file, "") == 0) {
-    eprintf("--run requires argument: --output <output file>\n");
-    return 1;
-  }
-  bool is_binary = false;
-  if (strcmp(args.package_type, "lib") == 0) {
-  } else if (strcmp(args.package_type, "bin") == 0) {
-    is_binary = true;
-  } else {
-    eprintf("package-type should be either lib or bin.\n");
-    return 1;
-  }
-  if (args.num_input_files != 1) {
-    panicf("TODO: multiple input files and Cera / object file mix.");
-  }
-  char *source = read_file(args.input_files[0]);
-  if (source == NULL) {
-    return 1;
-  }
-  char object_file_template[] = "/tmp/cera-XXXXXX.o";
-  char *object_file = (char *)args.output_file;
-  int object_file_desc = 0;
-  if (is_binary) {
-    // mkstemps replaces XXXXXX in object_file with a unique ID for the file
-    // TODO: cross-platform
-    if ((object_file_desc = mkstemps(object_file_template, 2)) == -1) {
-      pprintf("Failed to create temporary file for compilation.");
-      free(object_file);
+  char temp_object_file[] = "/tmp/cera-XXXXXX.o";
+  const char *object_file = args.output_file;
+
+  if (args.code_file != NULL) {
+    char *source = read_file(args.code_file);
+    if (source == NULL) {
+      return 1;
+    }
+    if (!args.compile_only) {
+      object_file = temp_object_file;
+      if (!create_temp_file(temp_object_file)) {
+        free(source);
+        return 1;
+      }
+    }
+    CompileErrors errors = compile_to_object_file(source, object_file);
+    if (errors.length > 0) {
+      print_compile_errors(errors);
+      free_compile_errors(&errors);
+      REMOVE_TEMP_FILE;
       free(source);
       return 1;
     }
-    object_file = object_file_template;
-  }
-  CompileErrors errors = args.run ? compile_and_run(source)
-                                  : compile_to_object_file(source, object_file);
-  if (errors.length > 0) {
-    print_compile_errors(errors);
-    free_compile_errors(&errors);
-    CLEAN_OBJECT_FILE;
     free(source);
+  }
+  // never overflows because the code file was originally in the same char*
+  // buffer
+  args.linker_files[args.num_linker_files] = object_file;
+  args.num_linker_files += 1;
+
+  for (size_t i = 0; i < args.num_linker_files; i++) { // TEMP
+    eprintf("linker file[%zu] = %s\n", i, args.linker_files[i]);
+  }
+
+  if (!args.compile_only &&
+      !link_to_executable(args.linker_files, args.num_linker_files,
+                          args.output_file)) {
+    REMOVE_TEMP_FILE;
     return 1;
   }
-  if (is_binary) {
-    if (!link_to_binary(object_file, args.output_file)) {
-      CLEAN_OBJECT_FILE;
-      free(source);
-      return 1;
-    }
-  }
-  CLEAN_OBJECT_FILE;
-  free(source);
+  REMOVE_TEMP_FILE;
   return 0;
 }
