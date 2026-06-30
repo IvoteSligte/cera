@@ -3,6 +3,7 @@ codebase:
     null (pointer)
     explicit variable declaration types
     string slices
+    debug info in object and assembly files
     integer type inference based on declared type (similar to `untyped integer` in Go)
     enums (without payloads)
     arrays
@@ -35,3 +36,6 @@ tooling:
     standard library
     build system / package manager
     formatter
+
+bugs:
+    undefined symbol causes compiler panic in get_type_value

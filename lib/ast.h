@@ -286,6 +286,8 @@ typedef struct ASTNode {
     struct {
       ASTNode *name;
       ASTNode *expr;
+      // Index of the field in the struct declaration.
+      size_t index;
     } field_inst;
     struct {
       ASTNode *type;
@@ -335,6 +337,8 @@ typedef struct {
 
 Span token_span(Token token);
 Span join_spans(Span left, Span right);
+
+char* name_dup_to_string(Name name);
 
 bool name_eq(Name left, Name right);
 bool name_eq_string(Name name, const char *string);

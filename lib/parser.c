@@ -120,6 +120,10 @@ int log_indent = 0;
 #define PARSER_SIGNATURE($name)                                                \
   bool parse_##$name(State *state, size_t *token_index, Node **out)
 
+#define SUFFIX_PARSER_SIGNATURE($name)                                         \
+  bool parse_suffix_##$name(State *state, size_t *token_index, Node *prefix,   \
+                            Node **out)
+
 #define BEGIN($name)                                                           \
   BEGIN_LOG($name);                                                            \
   size_t start_token_index = *token_index;                                     \
@@ -136,6 +140,12 @@ int log_indent = 0;
     return true;                                                               \
   }
 
+#define OK_SUFFIX                                                              \
+  {                                                                            \
+    LOG_EXIT("OK");                                                            \
+    continue;                                                                  \
+  }
+
 #define FAIL                                                                   \
   {                                                                            \
     *token_index = start_token_index;                                          \
@@ -146,7 +156,13 @@ int log_indent = 0;
 
 #define PARSER($name, ...)                                                     \
   PARSER_SIGNATURE($name) {                                                    \
-    BEGIN(name);                                                               \
+    BEGIN($name);                                                              \
+    __VA_ARGS__;                                                               \
+  }
+
+#define SUFFIX_PARSER($name, ...)                                              \
+  SUFFIX_PARSER_SIGNATURE($name) {                                             \
+    BEGIN($name##_suffix);                                                     \
     __VA_ARGS__;                                                               \
   }
 
@@ -205,6 +221,10 @@ int log_indent = 0;
   if (!PARSE($parser, &$node))                                                 \
     FAIL;
 
+#define MUST_PREFIX($parser)                                                   \
+  if (!PARSE($parser, out))                                                    \
+    FAIL;
+
 // Try to parse and continue regardless of failure or success.
 #define MAY_PARSE($parser, $node)                                              \
   Node *$node = NULL;                                                          \
@@ -214,6 +234,11 @@ int log_indent = 0;
 #define TRY_PARSE($parser)                                                     \
   if (PARSE($parser, out))                                                     \
     OK;
+
+// Try to parse a suffix and continue on success.
+#define TRY_SUFFIX($parser)                                                    \
+  if (parse_suffix_##$parser(state, token_index, *out, out))                   \
+    OK_SUFFIX;
 
 #define ZERO_OR_MORE($element, $nodes)                                         \
   NodeArray $nodes = {0};                                                      \
@@ -230,7 +255,7 @@ int log_indent = 0;
       EXTEND_SPAN($nodes.data[$nodes.length - 1]->span);                       \
   }
 
-// allows trailing comma
+// Allows trailing separator
 #define ZERO_OR_MORE_SEPARATED($element, $nodes, $separators...)               \
   NodeArray $nodes = {0};                                                      \
   {                                                                            \
@@ -355,34 +380,33 @@ PARSER(primary, {
   FAIL;
 });
 
-PARSER(member, {
-  MAY_PARSE(primary, expr);
+SUFFIX_PARSER(member, {
+  EXPECT(tDOT);
+  MUST_PARSE(name, name);
+  RETURN(member, {.expr = prefix, .name = name});
+});
 
-  // TODO: nested member access `a.b.c` interpreted as `(a.b).c`
-  TRY_TOKEN(
-      {
-        if (expr == NULL) {
-          FAIL;
-        } else {
-          *out = expr;
-          OK;
-        }
-      },
-      tDOT);
-  MAY_PARSE(name, name);
+SUFFIX_PARSER(ptr_deref, {
+  EXPECT(tDOT);
+  RETURN(ptr_deref, {.expr = prefix});
+});
 
-  // ptr_deref syntax is `ptr.`
-  if (name == NULL) {
-    RETURN(ptr_deref, {.expr = expr});
+PARSER(secondary, {
+  MUST_PREFIX(primary);
+  while (true) {
+    TRY_SUFFIX(member);
+    TRY_SUFFIX(ptr_deref);
+    // TRY_SUFFIX(index);
+    break;
   }
-  RETURN(member, {.expr = expr, .name = name});
+  OK;
 });
 
 PARSER(unary, {
-  TRY_PARSE(member);
+  TRY_PARSE(secondary);
 
   EXPECT_OP(tMINUS, tBANG);
-  MUST_PARSE(member, expr);
+  MUST_PARSE(secondary, expr);
   RETURN(unary, {.op = op, .expr = expr});
 });
 
@@ -397,13 +421,13 @@ PARSER(unary, {
 // maps it to the desired `[[a * b] + c] == d`.
 void fix_precedence(Node *node) {
   assert(node->kind == aBINARY);
-  __auto_type binary = &node->binary;
+  auto binary = &node->binary;
   assert(binary->left->kind != aBINARY);
 
   if (binary->right->kind != aBINARY) {
     return;
   }
-  __auto_type right = &binary->right->binary;
+  auto right = &binary->right->binary;
   if (right->has_parens ||
       token_precedence(right->op) > token_precedence(binary->op)) {
     return;
@@ -552,7 +576,6 @@ PARSER(field, {
   MUST_PARSE(name, name);
   EXPECT(tCOL);
   MUST_PARSE(type, type);
-  SKIP(tSEMI);
   RETURN(field, {.name = name, .type = type});
 });
 
@@ -560,7 +583,7 @@ PARSER(struct_decl, {
   EXPECT(tSTRUCT);
   MUST_PARSE(name, name);
   EXPECT(tLBRACE);
-  ZERO_OR_MORE(field, fields);
+  ZERO_OR_MORE_SEPARATED(field, fields, tCOMMA);
   EXPECT(tRBRACE);
   RETURN(struct_decl, {.name = name, .fields = fields});
 });

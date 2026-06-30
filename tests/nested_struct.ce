@@ -1,0 +1,26 @@
+// OUTPUT: "99 123 false"
+
+struct Car {
+    speed: int,
+    mileage: int,
+}
+
+struct Vehicle {
+    car: Car,
+    can_fly: bool,
+}
+
+func main() {
+    vehicle := Vehicle.{
+        can_fly: false,
+        car: Car.{
+            speed: 99,
+            mileage: 123,
+        },
+    };
+    print_int(vehicle.car.speed);
+    print_string(" ");
+    print_int(vehicle.car.mileage);
+    print_string(" ");
+    print_bool(vehicle.can_fly);
+}

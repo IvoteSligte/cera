@@ -53,9 +53,9 @@ void str_array_remove(const char **array, size_t *length, size_t rm_index);
 // The X's are replaced by this function.
 bool create_temp_file(char* file_name_template);
 
-// Runs a command, waiting for completion and returning its status.
+// Runs a command, waiting for completion and returning true if it completed successfully.
 // Example argv: { "ls", "-l", "NULL" }
-int run_command(const char* const argv[]);
+bool run_command(const char* const argv[]);
 
 #define UNUSED(x) (void)(x)
 

@@ -115,7 +115,7 @@ typedef enum {
 
 #define ANALYZER($name, ...)                                                   \
   ANALYZER_SIGNATURE($name) {                                                  \
-    __auto_type $name = &node->$name;                                          \
+    auto $name = &node->$name;                                                 \
     bool blocked = false;                                                      \
     __VA_ARGS__;                                                               \
     UNUSED(table);                                                             \
@@ -324,7 +324,7 @@ ANALYZER(func_call, {
   EXPECT((function_type.kind == tyFUNCTION), func_call->function,
          strdup("not a function"));
 
-  __auto_type function = function_type.function;
+  auto function = function_type.function;
   if (function._return != NULL) {
     node->type = *function._return;
   }
@@ -417,20 +417,21 @@ ANALYZER(struct_inst, {
          ssprintf("expected struct type, but found %s",
                   type_name(struct_type.kind)));
   assert(struct_type._struct->kind == aSTRUCT_DECL);
-  __auto_type _struct = &struct_type._struct->struct_decl;
+  auto _struct = &struct_type._struct->struct_decl;
 
   bool used[MAX(_struct->fields.length, 1)];
   memset(used, 0, sizeof(used));
 
   ITER_ARRAY(struct_inst->fields, field_inst_node, {
-    __auto_type field_inst = &field_inst_node->field_inst;
+    auto field_inst = &field_inst_node->field_inst;
     Type expected_type = {0};
 
     ITER_ARRAY(_struct->fields, field_node, {
-      __auto_type field = &field_node->field;
+      auto field = &field_node->field;
       if (name_eq(field->name->name.name, field_inst->name->name.name)) {
         EXPECT(!used[i], field_inst_node, strdup("duplicate field"));
         used[i] = true;
+        field_inst->index = i;
         expected_type = GET_TYPE_VALUE(field->type);
         break;
       }

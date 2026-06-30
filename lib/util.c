@@ -130,12 +130,13 @@ bool create_temp_file(char *file_name_template) {
   return true;
 }
 
-int run_command(const char *const argv[]) {
+bool run_command(const char *const argv[]) {
   // TODO: cross-platform
   pid_t pid = fork();
   if (pid == 0) {
     execvp(argv[0], (char **)argv); // can fail if cc is not in PATH
     pprintf("Failed to execute command.");
+    panicf("WAWAHWA\n");
     exit(1); // kill child process
   }
   int status = 0;
@@ -143,5 +144,5 @@ int run_command(const char *const argv[]) {
     pprintf("Failed to wait for command execution to finish.");
     return 1;
   }
-  return WEXITSTATUS(status);
+  return WIFEXITED(status) && (WEXITSTATUS(status) == 0);
 }

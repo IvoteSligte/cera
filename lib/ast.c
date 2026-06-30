@@ -14,6 +14,8 @@ Span join_spans(Span left, Span right) {
   };
 }
 
+char *name_dup_to_string(Name name) { return strndup(name.text, name.length); }
+
 bool name_eq(Name left, Name right) {
   return left.length == right.length &&
          memcmp(left.text, right.text, left.length) == 0;

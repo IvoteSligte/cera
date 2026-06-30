@@ -1,9 +1,9 @@
 // OUTPUT: "true\n10\nthree\n"
 
 struct Config {
-    one: bool;
-    two: int;
-    three: string;
+    one: bool,
+    two: int,
+    three: string,
 }
 func main() {
     config := Config.{

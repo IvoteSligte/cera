@@ -244,10 +244,11 @@ int main(int argc, const char *argv[]) {
       // Run the test as a separate process.
       // Only capture stdout, leaving stderr as log file in /tmp/cm-test-<name>
       // FIXME: when options.show_logs is true the status code is always 0?
-      char *cmd = options.show_logs
-                      ? ssprintf("timeout 1 %s --file %s", argv[0], path)
-                      : ssprintf("timeout 1 %s --file %s 2>/tmp/cera-test-%s.log",
-                                 argv[0], path, name);
+      char *cmd =
+          options.show_logs
+              ? ssprintf("timeout 1 %s --file %s", argv[0], path)
+              : ssprintf("timeout 1 %s --file %s 2>/tmp/cera-test-%s.log",
+                         argv[0], path, name);
       FILE *stdout = popen(cmd, "r"); // TODO: cross-platform
       free(cmd);
       char *stdout_string = read_stream(stdout);

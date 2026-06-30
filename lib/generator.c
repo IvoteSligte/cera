@@ -75,7 +75,7 @@ LLVMValueRef declare_function(State *state, ASTNode *decl_node) {
   auto type = TO_LLVM_TYPE(decl_node->type);
 
   char *type_string = LLVMPrintTypeToString(type);
-  eprintf("Generating function decl `%s`: %s\n", name, type_string);
+  eprintf("Generating function decl %s: %s\n", name, type_string);
   LLVMDisposeMessage(type_string);
 
   auto fn = LLVMAddFunction(state->mod, name, type);
@@ -109,6 +109,13 @@ void append_block_stmts(State *state, LLVMBasicBlockRef block,
     auto new_value = BUILD($instr, target_value, expr_value, "");              \
     BUILD(Store, new_value, target_ptr);                                       \
     break;                                                                     \
+  }
+
+#define PRINT_TYPE_STRING($type, $format, ...)                                 \
+  {                                                                            \
+    char *type_string = LLVMPrintTypeToString($type);                          \
+    eprintf($format, __VA_ARGS__);                                             \
+    LLVMDisposeMessage(type_string);                                           \
   }
 
 void generate_node(State *state, Node *node) {
@@ -376,11 +383,17 @@ void generate_node(State *state, Node *node) {
     CASE(field, { panicf("field should not be analyzed directly"); });
     CASE(struct_decl, {
       auto struct_type = llvm_declare_struct(state->ctx, node);
+
       LLVMTypeRef element_types[MAX(struct_decl->fields.length, 1)];
       ITER_ARRAY(struct_decl->fields, field_node,
                  { element_types[i] = TO_LLVM_TYPE(field_node->type); });
       LLVMStructSetBody(struct_type, element_types, struct_decl->fields.length,
                         false);
+
+      char *struct_name = name_dup_to_string(struct_decl->name->name.name);
+      PRINT_TYPE_STRING(struct_type, "Generating struct_decl %s\n",
+                        type_string);
+      free(struct_name);
     });
     CASE(field_inst, { panicf("field_inst should not be analyzed directly"); });
     CASE(struct_inst, {
@@ -388,27 +401,28 @@ void generate_node(State *state, Node *node) {
       auto value_ptr = BUILD(Alloca, type, "");
 
       ITER_ARRAY(struct_inst->fields, field_node, {
-        auto field_ptr = BUILD(StructGEP2, type, value_ptr, i, "");
+        auto field_ptr = BUILD(StructGEP2, type, value_ptr,
+                               field_node->field_inst.index, "");
         GEN(field_node->field_inst.expr, field_value);
         BUILD(Store, field_value, field_ptr);
       });
       node->llvm_value = BUILD(Load2, type, value_ptr, "");
     });
     CASE(member, {
-      GEN(member->expr, expr_value);
+      GEN(member->expr, struct_value);
       auto name = member->name->name.name;
       auto name_string = strndup(name.text, name.length);
       node->llvm_value =
-          BUILD(ExtractValue, expr_value, member->field_index, name_string);
+          BUILD(ExtractValue, struct_value, member->field_index, name_string);
       free(name_string);
     });
     CASE(var_decl, {
       char *name = strndup(var_decl->name->name.name.text,
                            var_decl->name->name.name.length);
       auto type = TO_LLVM_TYPE(var_decl->expr->type);
-      char *type_string = LLVMPrintTypeToString(type);
-      eprintf("Generating var_decl `%s`: %s\n", name, type_string);
-      LLVMDisposeMessage(type_string);
+
+      PRINT_TYPE_STRING(type, "Generating var_decl %s: %s\n", name,
+                        type_string);
 
       if (var_decl->is_global) {
         node->llvm_value = LLVMAddGlobal(mod, type, name);
@@ -502,6 +516,8 @@ LLVMModuleRef generate_llvm(LLVMContextRef ctx, AST *ast) {
 
   eprintf("Verifying LLVM module.\n");
   LLVMVerifyModule(mod, LLVMAbortProcessAction, NULL);
+
+  LLVMDumpModule(mod); // TEMP
 
   LLVMDisposeBuilder(builder);
   eprintf("Finished LLVM module generation.\n");

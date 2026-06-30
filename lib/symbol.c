@@ -42,7 +42,7 @@ bool get_builtin(Name name, Type *out_type, BuiltinID *out_builtin) {
   MATCH("print_bool", PRINT_BOOL, PRINT_BOOL_TYPE);
   MATCH("print_int", PRINT_INT, PRINT_INT_TYPE);
   MATCH("print_string", PRINT_STRING, PRINT_STRING_TYPE);
-  MATCH("print_char", PRINT_CHAR, PRINT_CHAR_TYPE);  
+  MATCH("print_char", PRINT_CHAR, PRINT_CHAR_TYPE);
   MATCH_TYPE("void", VOID);
   // signed integers
   MATCH_TYPE("i8", I8);

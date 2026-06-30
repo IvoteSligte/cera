@@ -48,7 +48,7 @@
 
 #define CASE($name, ...)                                                       \
   case NODE_##$name: {                                                         \
-    __auto_type $name = &__node->$name;                                        \
+    auto $name = &__node->$name;                                        \
     UNUSED($name);                                                             \
     {                                                                          \
       __VA_ARGS__;                                                             \
@@ -58,7 +58,7 @@
 
 #define ITER_ARRAY($array, $element, ...)                                      \
   for (size_t i = 0; i < ($array).length; i++) {                               \
-    __auto_type $element = ($array).data[i];                                   \
+    auto $element = ($array).data[i];                                   \
     {                                                                          \
       __VA_ARGS__;                                                             \
     }                                                                          \

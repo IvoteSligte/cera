@@ -37,7 +37,7 @@ void print_bool(bool b) { printf("%s", b ? "true" : "false"); }
 void print_int(int64_t n) { printf("%ld", n); }
 
 void print_string(CeamString string) {
-  printf("%.*s", (int)string.length, string.text);
+  fwrite(string.text, 1, string.length, stdout);
 }
 
 void print_char(uint32_t c) {

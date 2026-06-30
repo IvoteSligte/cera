@@ -43,8 +43,7 @@ LLVMTypeRef llvm_declare_struct(LLVMContextRef ctx, ASTNode *decl_node) {
   if (decl->llvm_type != NULL) {
     return decl->llvm_type;
   }
-  char *name =
-      strndup(decl->name->name.name.text, decl->name->name.name.length);
+  char *name = name_dup_to_string(decl->name->name.name);
   decl->llvm_type = LLVMStructCreateNamed(ctx, name);
 
   free(name);

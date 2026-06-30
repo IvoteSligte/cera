@@ -95,6 +95,7 @@ Errors compile_and_run(const char *source) {
     REMOVE_TEMP_FILES;
     return (Errors){0};
   }
+  eprintf("Generated executable: %s\n", exec_file);
   // Give user read|write|execute permissions.
   if (chmod(exec_file, S_IRUSR | S_IWUSR | S_IXUSR) != 0) {
     REMOVE_TEMP_FILES;
@@ -102,11 +103,14 @@ Errors compile_and_run(const char *source) {
     // NOTE: should this just crash because of how unlikely it is?
     panicf("TODO: handle file chmod failure");
   }
+  eprintf("Running...\n");
   const char *argv[] = {exec_file, NULL};
   // NOTE: should command status be handled? maybe returned so the running
   // program can give the same status?
-  run_command(argv);
-  REMOVE_TEMP_FILES;
+  if (!run_command(argv)) {
+    panicf("TODO: handle command failure");
+  }
+  /* REMOVE_TEMP_FILES; */ // DEBUG/TODO: uncomment
   return (Errors){0};
 }
 
@@ -131,18 +135,22 @@ bool link_to_executable(const char **object_files, size_t num_object_files,
   eprintf("Linking to binary.\n");
   assert(!is_empty_string(output_file));
 
-  size_t argc = 5 + num_object_files;
+  const size_t NUM_FIXED = 7; // TEMP: normally 5
+  size_t argc = NUM_FIXED + num_object_files;
   const char **argv = calloc(argc + 1, sizeof(char *)); // +1 for trailing NULL
   argv[0] = "cc";
   argv[1] = STARTUP_PATH;
   argv[2] = BUILTIN_PATH;
   argv[3] = "-o";
   argv[4] = output_file;
+  // TEMP
+  argv[5] = "-g";
+  argv[6] = "-O0";
 
   for (size_t i = 0; i < num_object_files; i++) {
     const char *object_file = object_files[i];
     assert(!is_empty_string(object_file));
-    argv[5 + i] = object_file;
+    argv[NUM_FIXED + i] = object_file;
   }
   eprintf("Linker command:");
   for (size_t i = 0; i < argc; i++) {
@@ -150,11 +158,10 @@ bool link_to_executable(const char **object_files, size_t num_object_files,
   }
   eprintf("\n");
 
-  int status = run_command(argv);
+  bool result = run_command(argv);
   free(argv);
-  if (status != 0) {
-    eprintf("Failed to link using system C compiler. Exit status: %d\n",
-            status);
+  if (!result) {
+    eprintf("Failed to link using system C compiler.\n");
     return false;
   }
   return true;
