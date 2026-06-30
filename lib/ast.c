@@ -76,11 +76,11 @@ const char *type_name(TypeKind kind) {
     // other
     N(STRING);
     N(CHAR);
-    N(OPAQUE_PTR);
     N(PTR);
     N(FUNCTION);
     N(STRUCT);
     N(UNION);
+    N(ARRAY);
     N(TYPE);
   }
   panicf("Unknown type kind: %d", kind);
@@ -129,6 +129,10 @@ void ast_visit(ASTNode *node, size_t depth, void *callback_data,
     PCASE(ptr_create, { VISIT(ptr_create->expr); });
     PCASE(ptr_deref, { VISIT(ptr_deref->expr); });
     PCASE(ptr_type, { VISIT(ptr_type->expr); });
+    PCASE(index_op, {
+      VISIT(index_op->expr);
+      VISIT(index_op->index);
+    });
     PCASE(func_decl, {
       VISIT(func_decl->name);
       VISIT_ARRAY(func_decl->params);
@@ -211,6 +215,7 @@ static void print_node(ASTNode *node, size_t depth, void *data) {
     PCASE(ptr_create, eprintf("ptr_create:\n"));
     PCASE(ptr_deref, eprintf("ptr_deref:\n"));
     PCASE(ptr_type, eprintf("ptr_type:\n"));
+    PCASE(index_op, eprintf("index_op:\n"));
     PCASE(func_decl, eprintf("func_decl:\n"));
     PCASE(param, eprintf("param:\n"));
     PCASE(if_stmt, eprintf("if_stmt:\n"));
@@ -251,6 +256,7 @@ const char *ast_node_name(ASTNodeKind kind) {
     N(PTR_CREATE);
     N(PTR_DEREF);
     N(PTR_TYPE);
+    N(INDEX_OP);
     N(FUNC_DECL);
     N(PARAM);
     N(IF_STMT);
@@ -272,10 +278,12 @@ const char *ast_node_name(ASTNodeKind kind) {
 }
 #undef N
 
-bool is_numeric(TypeKind type) {
+bool is_integer(TypeKind type) {
   return IS_ONE_OF(type, tyI8, tyI16, tyI32, tyI64, tyINT, tyU8, tyU16, tyU32,
                    tyU64, tyUINT);
 }
+
+bool is_numeric(TypeKind type) { return is_integer(type); }
 
 bool is_comparable(TypeKind type) {
   return !IS_ONE_OF(type, tySTRUCT, tyFUNCTION, tyUNION, tyTYPE, tyVOID);

@@ -391,12 +391,19 @@ SUFFIX_PARSER(ptr_deref, {
   RETURN(ptr_deref, {.expr = prefix});
 });
 
+SUFFIX_PARSER(index_op, {
+  EXPECT(tLBRACKET);
+  MUST_PARSE(expr, index);
+  EXPECT(tRBRACKET);
+  RETURN(index_op, {.expr = prefix, .index = index});
+});
+
 PARSER(secondary, {
   MUST_PREFIX(primary);
   while (true) {
     TRY_SUFFIX(member);
     TRY_SUFFIX(ptr_deref);
-    // TRY_SUFFIX(index);
+    TRY_SUFFIX(index_op);
     break;
   }
   OK;

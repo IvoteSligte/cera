@@ -25,6 +25,7 @@ typedef enum {
   aPTR_CREATE,
   aPTR_DEREF,
   aPTR_TYPE,
+  aINDEX_OP,
   aFUNC_DECL,
   aPARAM,
   aIF_STMT,
@@ -75,10 +76,10 @@ typedef enum {
   tySTRING,
   tyCHAR, // 32-bit unicode character
   tyPTR,
-  tyOPAQUE_PTR, // for compatibility with LLVM
   tyFUNCTION,
   tySTRUCT,
   tyUNION,
+  tyARRAY,
   tyTYPE,
 } TypeKind;
 
@@ -106,7 +107,8 @@ typedef enum {
   bPRINT_BOOL,
   bPRINT_INT,
   bPRINT_STRING,
-  bPRINT_CHAR,  
+  bPRINT_CHAR,
+  bPRINT_BYTE,  
 } BuiltinID;
 
 typedef struct Type Type;
@@ -121,13 +123,14 @@ typedef struct Type {
   bool is_constant;
   union {
     // TODO: .int_width?
-    Type *pointee_type;
+    Type *pointee_type; // kind == tyPOINTER
     struct {
       TypeArray params;
       Type *_return;
     } function;
     // Pointer to the struct declaration (aDECL).
     ASTNode *_struct;
+    Type* element_type; // kind == tyARRAY
   };
 } Type;
 
@@ -231,6 +234,10 @@ typedef struct ASTNode {
     struct {
       ASTNode *expr;
     } ptr_type;
+    struct {
+      ASTNode *expr;
+      ASTNode *index;
+    } index_op;
     struct {
       ASTNode *name;
       ASTNode *type;
@@ -338,7 +345,7 @@ typedef struct {
 Span token_span(Token token);
 Span join_spans(Span left, Span right);
 
-char* name_dup_to_string(Name name);
+char *name_dup_to_string(Name name);
 
 bool name_eq(Name left, Name right);
 bool name_eq_string(Name name, const char *string);
@@ -369,9 +376,11 @@ extern Type PRINT_BOOL_TYPE;
 extern Type PRINT_INT_TYPE;
 extern Type PRINT_STRING_TYPE;
 extern Type PRINT_CHAR_TYPE;
+extern Type PRINT_BYTE_TYPE;
 // intrinsic
 extern Type STRING_EQ_TYPE;
 
+bool is_integer(TypeKind type);
 bool is_numeric(TypeKind type);
 bool is_comparable(TypeKind type);
 bool is_signed(TypeKind type);

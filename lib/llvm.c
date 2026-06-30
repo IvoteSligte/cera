@@ -76,9 +76,8 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, LLVMPrimitives prim, Type type) {
     return prim._bool;
   case tySTRING:
     return prim.string;
-  case tyOPAQUE_PTR:
-    return prim.ptr;
   case tyPTR:
+  case tyARRAY:
     return LLVMPointerType(to_llvm_type(ctx, prim, *type.pointee_type), 0);
   case tyFUNCTION: {
     auto function = type.function;

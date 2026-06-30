@@ -10,6 +10,7 @@ DEF_PRIM_TYPE(INT);
 DEF_PRIM_TYPE(BOOL);
 DEF_PRIM_TYPE(STRING);
 DEF_PRIM_TYPE(CHAR);
+DEF_PRIM_TYPE(U8);
 
 #define DEF_FUNCTION_TYPE($NAME, $type...)                                     \
   Type $NAME = {.kind = tyFUNCTION, .is_constant = true, .function = $type}
@@ -22,6 +23,8 @@ DEF_FUNCTION_TYPE(PRINT_STRING_TYPE,
                   {.params = {.data = &STRING_TYPE, .length = 1},
                    ._return = &VOID_TYPE});
 DEF_FUNCTION_TYPE(PRINT_CHAR_TYPE, {.params = {.data = &CHAR_TYPE, .length = 1},
+                                    ._return = &VOID_TYPE});
+DEF_FUNCTION_TYPE(PRINT_BYTE_TYPE, {.params = {.data = &U8_TYPE, .length = 1},
                                     ._return = &VOID_TYPE});
 static Type TWO_STRINGS[2] = {PRIM_TYPE(STRING), PRIM_TYPE(STRING)};
 DEF_FUNCTION_TYPE(STRING_EQ_TYPE, {.params = {.data = TWO_STRINGS, .length = 2},
@@ -43,6 +46,7 @@ bool get_builtin(Name name, Type *out_type, BuiltinID *out_builtin) {
   MATCH("print_int", PRINT_INT, PRINT_INT_TYPE);
   MATCH("print_string", PRINT_STRING, PRINT_STRING_TYPE);
   MATCH("print_char", PRINT_CHAR, PRINT_CHAR_TYPE);
+  MATCH("print_byte", PRINT_BYTE, PRINT_BYTE_TYPE);
   MATCH_TYPE("void", VOID);
   // signed integers
   MATCH_TYPE("i8", I8);

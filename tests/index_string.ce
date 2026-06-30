@@ -1,0 +1,15 @@
+// OUTPUT: ",He!\nYello, World!"
+
+func main() {
+    s := "Hello, World!";
+
+    print_byte(s[5]);
+    print_byte(s[0]);
+    print_byte(s[1]);
+    print_byte(s[12]);
+    
+    print_string("\n");
+
+    s[0] = 'Y';
+    print_string(s);
+}

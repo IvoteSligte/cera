@@ -14,6 +14,7 @@
 #define NODE_ptr_create aPTR_CREATE
 #define NODE_ptr_deref aPTR_DEREF
 #define NODE_ptr_type aPTR_TYPE
+#define NODE_index_op aINDEX_OP
 #define NODE_func_decl aFUNC_DECL
 #define NODE_param aPARAM
 #define NODE_if_stmt aIF_STMT

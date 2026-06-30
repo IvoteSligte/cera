@@ -373,6 +373,23 @@ ANALYZER(ptr_type, {
   OK;
 });
 
+ANALYZER(index_op, {
+  ANALYZE(index_op->expr, expr);
+  EXPECT(IS_ONE_OF(expr_type.kind, tySTRING, tyARRAY), index_op->expr,
+         ssprintf("cannot index type %s", type_name(expr_type.kind)));
+  ANALYZE(index_op->index, index);
+  EXPECT(is_integer(index_type.kind), index_op->index,
+         ssprintf("can only use integer type as index, not %s",
+                  type_name(index_type.kind)));
+  if (expr_type.kind == tySTRING) {
+    node->type = PRIM_TYPE(U8);
+  } else {
+    assert(expr_type.kind == tyARRAY);
+    node->type = *expr_type.element_type;
+  }
+  OK;
+});
+
 #define GET_TYPE_VALUE($node) get_type_value(state, $node)
 
 // Returns the value of a type expression.
@@ -570,8 +587,8 @@ ANALYZER(assign, {
   ANALYZE(assign->target, target);
   ANALYZE(assign->expr, expr);
 
-  EXPECT(IS_ONE_OF(assign->target->kind, aNAME, aPTR_DEREF), assign->target,
-         strdup("cannot assign to temporary value"));
+  EXPECT(IS_ONE_OF(assign->target->kind, aNAME, aPTR_DEREF, aINDEX_OP),
+         assign->target, strdup("cannot assign to temporary value"));
 
   if (assign->op == tEQ) {
   } else if (IS_ONE_OF(assign->op, tPLUS_EQ, tMINUS_EQ, tSTAR_EQ, tSLASH_EQ)) {
@@ -669,6 +686,7 @@ ANALYZER_SIGNATURE(node) {
     ACASE(ptr_create);
     ACASE(ptr_deref);
     ACASE(ptr_type);
+    ACASE(index_op);
     ACASE(func_decl);
     ACASE(param);
     ACASE(if_stmt);

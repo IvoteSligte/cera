@@ -26,6 +26,7 @@ typedef struct {
   LLVMValueRef print_int;
   LLVMValueRef print_string;
   LLVMValueRef print_char;
+  LLVMValueRef print_byte;
   LLVMValueRef __string_eq;
 } LLVMBuiltins;
 
@@ -117,6 +118,39 @@ void append_block_stmts(State *state, LLVMBasicBlockRef block,
     eprintf($format, __VA_ARGS__);                                             \
     LLVMDisposeMessage(type_string);                                           \
   }
+
+LLVMValueRef generate_pointer(State *state, Node *node) {
+  auto builder = state->builder;
+  if (node->kind == aPTR_DEREF) {
+    GEN(node->ptr_deref.expr, ptr);
+    return ptr;
+  } else if (node->kind == aINDEX_OP) {
+    auto index_op = &node->index_op;
+    GEN(index_op->expr, expr_value);
+    GEN(index_op->index, index_value);
+    Type expr_type = index_op->expr->type;
+    LLVMValueRef array_ptr = NULL;
+    if (expr_type.kind == tySTRING) {
+      array_ptr = BUILD(ExtractValue, expr_value, 0, "");
+    } else {
+      assert(expr_type.kind == tyARRAY);
+      assert(index_op->expr->type.kind == tyPTR);
+      array_ptr = expr_value;
+    }
+    // TODO: bounds check (LLVMBuildInBoundsGEP2)
+    auto elem_type = TO_LLVM_TYPE(node->type);
+    return BUILD(GEP2, elem_type, array_ptr, &index_value, 1, "");
+  } else {
+    assert(node->kind == aNAME);
+    auto name = &node->name;
+    // assignable targets are always declarations
+    assert(name->decl != NULL);
+    if (name->decl->llvm_value == NULL) {
+      panicf("unimplemented: forward declaration of assignment target");
+    }
+    return name->decl->llvm_value;
+  }
+}
 
 void generate_node(State *state, Node *node) {
   auto ctx = state->ctx;
@@ -228,6 +262,9 @@ void generate_node(State *state, Node *node) {
         case bPRINT_CHAR:
           fn = state->builtin.print_char;
           break;
+        case bPRINT_BYTE:
+          fn = state->builtin.print_byte;
+          break;
         default:
           panicf("Unknown builtin %d.", function->name.builtin);
         }
@@ -258,6 +295,11 @@ void generate_node(State *state, Node *node) {
       node->llvm_value = BUILD(Load2, TO_LLVM_TYPE(node->type), ptr_value, "");
     });
     CASE(ptr_type, { panicf("unreachable"); });
+    CASE(index_op, {
+      auto elem_type = TO_LLVM_TYPE(node->type);
+      node->llvm_value =
+          BUILD(Load2, elem_type, generate_pointer(state, node), "");
+    });
     // Functions are generated through decl so that they can be declared with a
     // name in LLVM.
     CASE(func_decl, {
@@ -339,20 +381,7 @@ void generate_node(State *state, Node *node) {
       state->loop = (LoopBlocks){0};
     });
     CASE(assign, {
-      LLVMValueRef target_ptr = NULL;
-      if (assign->target->kind == aPTR_DEREF) {
-        GEN(assign->target->ptr_deref.expr, _target_ptr);
-        target_ptr = _target_ptr;
-      } else {
-        assert(assign->target->kind == aNAME);
-        auto target_name = &assign->target->name;
-        // assignable targets are always declarations
-        assert(target_name->decl != NULL);
-        if (target_name->decl->llvm_value == NULL) {
-          panicf("unimplemented: forward declaration of assignment target");
-        }
-        target_ptr = target_name->decl->llvm_value;
-      }
+      auto target_ptr = generate_pointer(state, assign->target);
       GEN(assign->expr, expr_value);
       if (assign->op == tEQ) {
         BUILD(Store, expr_value, target_ptr);
@@ -453,6 +482,7 @@ LLVMBuiltins add_builtins(LLVMContextRef ctx, LLVMModuleRef mod,
   ADD_BUILTIN_FUNCTION(print_int, PRINT_INT_TYPE);
   ADD_BUILTIN_FUNCTION(print_string, PRINT_STRING_TYPE);
   ADD_BUILTIN_FUNCTION(print_char, PRINT_CHAR_TYPE);
+  ADD_BUILTIN_FUNCTION(print_byte, PRINT_BYTE_TYPE);
   ADD_BUILTIN_FUNCTION(__string_eq, STRING_EQ_TYPE);
   return builtin;
 }
@@ -514,10 +544,10 @@ LLVMModuleRef generate_llvm(LLVMContextRef ctx, AST *ast) {
   add_extern_decls(extern_mod, &state);
   generate_node(&state, node);
 
+  LLVMDumpModule(mod); // TEMP
+
   eprintf("Verifying LLVM module.\n");
   LLVMVerifyModule(mod, LLVMAbortProcessAction, NULL);
-
-  LLVMDumpModule(mod); // TEMP
 
   LLVMDisposeBuilder(builder);
   eprintf("Finished LLVM module generation.\n");

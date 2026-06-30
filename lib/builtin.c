@@ -46,6 +46,11 @@ void print_char(uint32_t c) {
   fwrite(utf8, 1, length, stdout);
 }
 
+void print_byte(uint8_t b) {
+  fprintf(stderr, "byte: 0x%02x\n", b);
+  fputc(b, stdout);
+}
+
 bool __string_eq(CeamString left, CeamString right) {
   return left.length == right.length &&
          (memcmp(left.text, right.text, left.length) == 0);

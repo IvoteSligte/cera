@@ -39,3 +39,4 @@ tooling:
 
 bugs:
     undefined symbol causes compiler panic in get_type_value
+    lex/parse error messages are truncated
