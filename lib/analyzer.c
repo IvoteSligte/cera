@@ -56,7 +56,7 @@ static Type MAIN_FUNCTION_TYPE = {.kind = tyFUNCTION,
   Type $name##_type = {0};                                                     \
   {                                                                            \
     ANALYZE($node, $name##_type);                                              \
-    EXPECT(($name##_type_type.kind == tyTYPE), $node,                          \
+    EXPECT(($name##_type_type.kind == tyPRIM_TYPE), $node,                          \
            ssprintf("not a type: %s", type_name($name##_type_type.kind)));     \
     $name##_type = GET_TYPE_VALUE($node);                                      \
     assert($name##_type.kind != tyUNKNOWN);                                    \
@@ -362,7 +362,7 @@ ANALYZER(func_call, {
 
 ANALYZER(ptr_create, {
   ANALYZE(ptr_create->expr, expr);
-  EXPECT(expr_type.kind != tyTYPE, node,
+  EXPECT(expr_type.kind != tyPRIM_TYPE, node,
          strdup("cannot create pointer to type"));
   EXPECT(ptr_create->expr->kind == aNAME, node,
          strdup("cannot create pointer to temporary value "));
@@ -383,7 +383,7 @@ ANALYZER(ptr_deref, {
 ANALYZER(ptr_type, {
   ANALYZE(ptr_type->expr, expr);
   UNUSED(expr_type);
-  node->type = PRIM_TYPE(TYPE);
+  node->type = PRIM_TYPE(PRIM_TYPE);
   OK;
 });
 
@@ -408,8 +408,8 @@ ANALYZER(index_op, {
 
 // Returns the value of a type expression.
 Type get_type_value(State *state, ASTNode *node) {
-  if (node->type.kind != tyTYPE) {
-    panicf("get_type_value called with non-type %s (expected tyTYPE)\n",
+  if (node->type.kind != tyPRIM_TYPE) {
+    panicf("get_type_value called with non-type %s (expected PRIM_TYPE)\n",
            type_name(node->type.kind));
   }
   // Type expressions can currently only be names and pointers.
@@ -657,7 +657,7 @@ ANALYZER(struct_decl, {
   EXPECT(is_static, node, strdup("structs can only be defined as constants"));
 
   DECLARE(struct_decl);
-  node->type = PRIM_TYPE(TYPE);
+  node->type = PRIM_TYPE(PRIM_TYPE);
   ITER_ARRAY(struct_decl->fields, field_node, ANALYZE(field_node, field));
   OK;
 });

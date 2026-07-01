@@ -99,7 +99,7 @@ LLVMTypeRef to_llvm_type(LLVMContextRef ctx, LLVMPrimitives prim, Type type) {
   }
   case tyUNION:
     panicf("unimplemented: to_llvm_type for unions");
-  case tyTYPE:
+  case tyPRIM_TYPE:
     panicf("unreachable");
     break;
   }

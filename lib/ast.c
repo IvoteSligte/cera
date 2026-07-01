@@ -81,7 +81,7 @@ const char *type_name(TypeKind kind) {
     N(STRUCT);
     N(UNION);
     N(ARRAY);
-    N(TYPE);
+    N(PRIM_TYPE);
   }
   panicf("Unknown type kind: %d", kind);
 }
@@ -286,7 +286,7 @@ bool is_integer(TypeKind type) {
 bool is_numeric(TypeKind type) { return is_integer(type); }
 
 bool is_comparable(TypeKind type) {
-  return !IS_ONE_OF(type, tySTRUCT, tyFUNCTION, tyUNION, tyTYPE, tyVOID);
+  return !IS_ONE_OF(type, tySTRUCT, tyFUNCTION, tyUNION, tyPRIM_TYPE, tyVOID);
 }
 
 bool is_signed(TypeKind type) {

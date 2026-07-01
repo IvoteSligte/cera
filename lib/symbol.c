@@ -4,7 +4,7 @@
 
 #define DEF_PRIM_TYPE($NAME) static Type $NAME##_TYPE = PRIM_TYPE($NAME)
 
-DEF_PRIM_TYPE(TYPE);
+DEF_PRIM_TYPE(PRIM_TYPE);
 DEF_PRIM_TYPE(VOID);
 DEF_PRIM_TYPE(INT);
 DEF_PRIM_TYPE(BOOL);
@@ -38,7 +38,7 @@ DEF_FUNCTION_TYPE(STR_EQ_TYPE, {.params = {.data = TWO_STRS, .length = 2},
     return true;                                                               \
   }
 
-#define MATCH_TYPE($name, $NAME) MATCH($name, $NAME, TYPE_TYPE)
+#define MATCH_TYPE($name, $NAME) MATCH($name, $NAME, PRIM_TYPE_TYPE)
 
 bool get_builtin(Name name, Type *out_type, BuiltinID *out_builtin) {
   MATCH("print_bool", PRINT_BOOL, PRINT_BOOL_TYPE);

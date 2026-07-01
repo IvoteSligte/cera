@@ -80,7 +80,7 @@ typedef enum {
   tySTRUCT,
   tyUNION,
   tyARRAY,
-  tyTYPE,
+  tyPRIM_TYPE, // primitive type
 } TypeKind;
 
 // Builtins that can be referenced by name.
