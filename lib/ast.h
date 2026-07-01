@@ -108,7 +108,7 @@ typedef enum {
   bPRINT_INT,
   bPRINT_STR,
   bPRINT_CHAR,
-  bPRINT_BYTE,  
+  bPRINT_BYTE,
 } BuiltinID;
 
 typedef struct Type Type;
@@ -130,7 +130,7 @@ typedef struct Type {
     } function;
     // Pointer to the struct declaration (aDECL).
     ASTNode *_struct;
-    Type* element_type; // kind == tyARRAY
+    Type *element_type; // kind == tyARRAY
   };
 } Type;
 
@@ -194,7 +194,7 @@ typedef struct ASTNode {
     struct {
       const char *text;
       size_t length;
-      ssize_t value;
+      uint64_t value;
     } integer;
     struct {
       const char *text;
@@ -209,6 +209,7 @@ typedef struct ASTNode {
     struct {
       const char *text;
       size_t length;
+      TypeKind suffix; // tyUNKNOWN if there is no suffix
       uint32_t value;
     } character;
     struct {

@@ -87,6 +87,20 @@ static size_t lex_char(const char *text) {
   return length;
 }
 
+#define LEX_WITH_SUFFIX($prefix, $suffix)                                      \
+  static size_t lex_##$prefix##_##$suffix(const char *text) {                  \
+    const size_t SUFFIX_LENGTH = sizeof(#$suffix) - 1;                         \
+    size_t prefix_length = lex_char(text);                                     \
+    if (prefix_length == 0 ||                                                  \
+        strncmp(text + prefix_length, #$suffix, SUFFIX_LENGTH) != 0)           \
+      return 0;                                                                \
+    else                                                                       \
+      return prefix_length + SUFFIX_LENGTH;                                    \
+  }
+
+LEX_WITH_SUFFIX(char, i8);
+LEX_WITH_SUFFIX(char, u8);
+
 static size_t lex_keyword(const char *text, const char *keyword) {
   size_t length = strlen(keyword);
   if (strncmp(text, keyword, length) == 0)
@@ -114,6 +128,8 @@ const Matcher MATCHERS[] = {
     CM(NUMBER, "number", lex_number),
     CM(STRING, "string", lex_string),
     CM(CHAR, "char", lex_char),
+    CM(CHAR_I8, "char_i8", lex_char_i8),
+    CM(CHAR_U8, "char_u8", lex_char_u8),
     // symbols
     M(LPAREN, "("),
     M(RPAREN, ")"),

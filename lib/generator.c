@@ -192,7 +192,8 @@ void generate_node(State *state, Node *node) {
       node->llvm_value = LLVMConstNamedStruct(state->prim.str, value, 2);
     });
     CASE(character, {
-      node->llvm_value = LLVMConstInt(state->prim.i32, character->value, false);
+      node->llvm_value =
+          LLVMConstInt(TO_LLVM_TYPE(node->type), character->value, false);
     });
     CASE(unary, {
       GEN(unary->expr, expr_value);

@@ -11,7 +11,9 @@ typedef enum {
   tIDENT,
   tNUMBER,
   tSTRING,
-  tCHAR,  
+  tCHAR,
+  tCHAR_I8, // character with i8 suffix
+  tCHAR_U8, // character with u8 suffix
   // delimiters
   tLPAREN,
   tRPAREN,
@@ -89,7 +91,7 @@ LexResult lex(const char *source, size_t *offset, Token *out,
               LexError *error_data);
 
 void print_lex_error(LexError error);
-void get_lex_error_info(LexError error, CompileError* out);
+void get_lex_error_info(LexError error, CompileError *out);
 
 typedef struct {
   const char *source;

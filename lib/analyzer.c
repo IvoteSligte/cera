@@ -249,7 +249,21 @@ ANALYZER(character, {
   } else if (character->length > 1) {
     panicf("TODO: unescaped unicode characters");
   }
-  node->type = PRIM_TYPE(CHAR);
+  switch (character->suffix) {
+  case tyI8:
+    EXPECT(character->value < 128, node,
+           strdup("character does not fit in an i8"));
+    node->type = PRIM_TYPE(I8);
+    break;
+  case tyU8:
+    EXPECT(character->value < 256, node,
+           strdup("character does not fit in a u8"));
+    node->type = PRIM_TYPE(U8);
+    break;
+  default:
+    node->type = PRIM_TYPE(CHAR);
+    break;
+  }
   OK;
 });
 
@@ -603,8 +617,10 @@ ANALYZER(assign, {
   } else {
     panicf("Unexpected assignment operator: %s", token_name(assign->op));
   }
-  EXPECT(type_eq(target_type, expr_type), node,
-         strdup("assigment type mismatch"));
+  EXPECT(
+      type_eq(target_type, expr_type), node,
+      ssprintf("assignment type mismatch: target is %s, but expression is %s",
+               type_name(target_type.kind), type_name(expr_type.kind)));
   EXPECT(target_type.is_constant, node, strdup("cannot assign to constant"));
   OK;
 });

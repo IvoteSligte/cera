@@ -313,8 +313,18 @@ PARSER(string, {
 });
 
 PARSER(character, {
-  EXPECT(tCHAR);
-  RETURN(character, {.text = token.text + 1, .length = token.length - 2});
+  EXPECT(tCHAR, tCHAR_I8, tCHAR_U8);
+  size_t length = token.length - 2;
+  TypeKind suffix = tyUNKNOWN;
+  if (token.kind == tCHAR_I8) {
+    suffix = tyI8;
+    length -= sizeof("i8") - 1;
+  } else if (token.kind == tCHAR_U8) {
+    suffix = tyU8;
+    length -= sizeof("u8") - 1;
+  }
+  RETURN(character,
+         {.text = token.text + 1, .length = length, .suffix = suffix});
 });
 
 PARSER(type, {

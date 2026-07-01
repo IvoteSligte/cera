@@ -8,8 +8,8 @@ func main() {
     print_byte(s[1]);
     print_byte(s[12]);
     
-    print_string("\n");
+    print_str("\n");
 
-    s[0] = 'Y';
-    print_string(s);
+    s[0] = 'Y'u8;
+    print_str(s);
 }
